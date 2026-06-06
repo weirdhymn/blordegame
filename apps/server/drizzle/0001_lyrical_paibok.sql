@@ -1,0 +1,1 @@
+ALTER TABLE "horses" ADD COLUMN "last_bred_at" timestamp with time zone;

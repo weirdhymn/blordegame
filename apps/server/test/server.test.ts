@@ -3,11 +3,14 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
+import { breedFoal, type Genotype } from '@blorse/genetics';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
+import { breedHorses } from '../src/services/breeding.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
+import { mulberry32 } from '../src/util/rng.js';
 
 let pass = 0;
 let fail = 0;
@@ -135,6 +138,116 @@ async function main(): Promise<void> {
   eq('great-grandparent blocked (transitive)', await shareLineage(db, d.id, a.id), true);
   eq('other grandparent blocked', await shareLineage(db, d.id, b.id), true);
   eq('unrelated may breed', await shareLineage(db, a.id, e.id), false);
+
+  // --- Phase 4: breeding ---
+  const herdId = me.json<{ herd: { id: string } }>().herd.id;
+  const mateRes = await inject({
+    method: 'POST',
+    url: '/horses',
+    headers: { cookie },
+    payload: { genotype: { E: 'ee', A: 'aa' }, lifeStage: 'adult' },
+  });
+  const mateId = mateRes.json<{ id: string }>().id;
+
+  // foal-odds preview (punnett)
+  const odds = await inject({ method: 'GET', url: `/breed/odds?a=${id}&b=${mateId}` });
+  eq('odds → 200', odds.statusCode, 200);
+  check(
+    'odds has a color distribution',
+    odds.json<{ distribution: unknown[] }>().distribution.length > 0,
+  );
+
+  // breed two disjoint adults → a white foal with both parents
+  const breed = await inject({
+    method: 'POST',
+    url: '/breed',
+    headers: { cookie },
+    payload: { parentA: id, parentB: mateId },
+  });
+  eq('breed disjoint adults → 201', breed.statusCode, 201);
+  const foal = breed.json<{
+    foal: { id: string; lifeStage: string; parentA: string | null; parentB: string | null };
+  }>().foal;
+  eq('foal is a foal', foal.lifeStage, 'foal');
+  check('foal has both parents', !!foal.parentA && !!foal.parentB);
+
+  // pedigree
+  const ped = await inject({ method: 'GET', url: `/horses/${foal.id}/pedigree` });
+  eq('pedigree → 200', ped.statusCode, 200);
+  eq('pedigree shows 2 parents', ped.json<{ parents: unknown[] }>().parents.length, 2);
+
+  // gates
+  const reBreed = await inject({
+    method: 'POST',
+    url: '/breed',
+    headers: { cookie },
+    payload: { parentA: id, parentB: mateId },
+  });
+  eq('re-breed on cooldown → 429', reBreed.statusCode, 429);
+  const selfBreed = await inject({
+    method: 'POST',
+    url: '/breed',
+    headers: { cookie },
+    payload: { parentA: id, parentB: id },
+  });
+  eq('self-breed → 400', selfBreed.statusCode, 400);
+  const foalBreed = await inject({
+    method: 'POST',
+    url: '/breed',
+    headers: { cookie },
+    payload: { parentA: foal.id, parentB: mateId },
+  });
+  eq('breeding a foal → 409 (not adult)', foalBreed.statusCode, 409);
+
+  // related gate (siblings share both parents)
+  const gp1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+  });
+  const gp2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee', A: 'aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+  });
+  const sib1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'bred',
+    lifeStage: 'adult',
+    parentA: gp1.id,
+    parentB: gp2.id,
+  });
+  const sib2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'bred',
+    lifeStage: 'adult',
+    parentA: gp1.id,
+    parentB: gp2.id,
+  });
+  const rel = await breedHorses(db, herdId, sib1.id, sib2.id);
+  eq('siblings rejected as related', rel.ok === false ? rel.code : 'ok', 'related');
+
+  // non-viable cross: "…but nothing happened." — and it must NOT burn cooldown
+  const wwGeno: Genotype = { E: 'Ee', A: 'Aa', W: 'Ww' };
+  let viableSeed = -1;
+  let lethalSeed = -1;
+  for (let s = 1; s < 300 && (viableSeed < 0 || lethalSeed < 0); s++) {
+    const r = breedFoal(wwGeno, wwGeno, mulberry32(s));
+    if (r.viable && viableSeed < 0) viableSeed = s;
+    if (!r.viable && lethalSeed < 0) lethalSeed = s;
+  }
+  check('Ww×Ww can be non-viable', lethalSeed >= 0);
+  check('Ww×Ww can be viable', viableSeed >= 0);
+  const w1 = await mintHorse(db, { herdId, genotype: wwGeno, origin: 'wild', lifeStage: 'adult' });
+  const w2 = await mintHorse(db, { herdId, genotype: wwGeno, origin: 'wild', lifeStage: 'adult' });
+  const nv = await breedHorses(db, herdId, w1.id, w2.id, { seed: lethalSeed });
+  check('non-viable → ok, nothing happened', nv.ok && !nv.viable);
+  const afterNv = await breedHorses(db, herdId, w1.id, w2.id, { seed: viableSeed });
+  check('viable breed after non-viable (no cooldown burned)', afterNv.ok && afterNv.viable);
 
   await app.close();
 

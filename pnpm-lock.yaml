@@ -35,6 +35,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@blorse/balance':
+        specifier: workspace:*
+        version: link:../../packages/balance
       '@blorse/genetics':
         specifier: workspace:*
         version: link:../../packages/genetics
@@ -88,6 +91,8 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.19.19)(tsx@4.22.4)
+
+  packages/balance: {}
 
   packages/genetics: {}
 

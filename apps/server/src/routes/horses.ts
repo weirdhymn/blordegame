@@ -7,7 +7,7 @@ import type { HorseRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getHorse, horseRenderSpec, listHerdHorses, mintHorse } from '../services/horse.js';
 
-function publicHorse(h: HorseRow) {
+export function publicHorse(h: HorseRow) {
   return {
     id: h.id,
     herdId: h.herdId,

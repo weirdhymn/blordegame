@@ -1,0 +1,13 @@
+{
+  "name": "@blorse/balance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "All tunable game-balance constants in one place (BLORSE_PLAN.md §14). No magic numbers in logic.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

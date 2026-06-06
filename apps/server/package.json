@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@blorse/balance": "workspace:*",
     "@blorse/genetics": "workspace:*",
     "@blorse/render-core": "workspace:*",
     "@electric-sql/pglite": "^0.2.17",

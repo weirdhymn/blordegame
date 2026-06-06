@@ -63,6 +63,8 @@ export const horses = pgTable(
     parentB: uuid('parent_b').references((): AnyPgColumn => horses.id),
     origin: horseOrigin('origin').notNull(),
     bornAt: timestamp('born_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Per-parent breeding cooldown cursor (§7); null = never bred. */
+    lastBredAt: timestamp('last_bred_at', { withTimezone: true }),
   },
   (t) => [index('horses_herd_idx').on(t.herdId)],
 );

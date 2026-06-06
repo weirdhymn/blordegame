@@ -8,6 +8,13 @@
       "when": 1780711223333,
       "tag": "0000_simple_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780713099491,
+      "tag": "0001_lyrical_paibok",
+      "breakpoints": true
     }
   ]
 }

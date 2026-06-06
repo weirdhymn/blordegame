@@ -13,3 +13,8 @@ export function gameDay(ms: number): number {
 export function nextRollover(ms: number): number {
   return (gameDay(ms) + 1) * DAY_MS - UTC_OFFSET_MS;
 }
+
+/** Inverse of {@link gameDay}: a UTC timestamp inside game-day `day` (its start). */
+export function dayToMs(day: number): number {
+  return day * DAY_MS - UTC_OFFSET_MS;
+}

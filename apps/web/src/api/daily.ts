@@ -10,7 +10,3 @@ export interface DailyResult {
 }
 
 export const checkIn = (): Promise<DailyResult> => api.post<DailyResult>('/daily');
-
-/** Dev-only (local): fast-forward the clock to exercise the tick. 403 in production. */
-export const simulate = (days: number): Promise<DailyResult> =>
-  api.post<DailyResult>('/daily/simulate', { days });

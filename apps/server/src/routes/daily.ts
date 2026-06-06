@@ -13,28 +13,13 @@ async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | nu
   return getHerdForUser(db, user.id);
 }
 
-export function registerDailyRoutes(
-  app: FastifyInstance,
-  db: DB,
-  cfg: { allowDevTools: boolean },
-): void {
+export function registerDailyRoutes(app: FastifyInstance, db: DB): void {
   // Manual check-in (reveal foals + accrue daily Cubes). Login does this automatically.
+  // Fast-forwarding the clock now lives in the admin debug toolkit (POST /api/debug/advance-days).
   app.post('/daily', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     return reply.send(await advanceHerd(db, herd.id, Date.now()));
-  });
-
-  // Dev-only: fast-forward the herd's clock to exercise the daily tick / autonomy without
-  // waiting real days (journal beats, relationships, clubs, job income). Off in production.
-  app.post('/daily/simulate', async (req, reply) => {
-    if (!cfg.allowDevTools) {
-      return reply.code(403).send({ error: 'dev tools are disabled', code: 'dev_disabled' });
-    }
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const days = Math.max(1, Math.min(30, Math.floor((req.body as { days?: number })?.days ?? 1)));
-    return reply.send(await advanceHerd(db, herd.id, Date.now() + days * 86_400_000));
   });
 
   app.get('/field-guide', async (req, reply) => {

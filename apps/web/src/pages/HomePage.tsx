@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
-import { checkIn, simulate, type DailyResult } from '../api/daily.js';
+import { checkIn, type DailyResult } from '../api/daily.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { HorseCard } from '../components/HorseCard.js';
 import { useSession } from '../session.js';
@@ -64,14 +64,6 @@ export function HomePage(): ReactElement {
         <Link to="/breed" className="btn-link">
           Breed →
         </Link>
-        <button
-          className="dev"
-          disabled={busy}
-          title="dev only — fast-forward the clock 6 days"
-          onClick={() => void run(() => simulate(6))}
-        >
-          ⏩ +6 days (dev)
-        </button>
       </div>
       {note && <div className="note">{note}</div>}
       {error && (

@@ -10,7 +10,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { adventureRuns, users } from '../src/db/schema.js';
+import { adventureRuns, herds, users } from '../src/db/schema.js';
 import { ADVENTURE_BY_ID, ADVENTURE_POOLS, type Choice } from '../src/content/adventures.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
@@ -26,7 +26,7 @@ import {
 import { getAudit } from '../src/services/audit.js';
 import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
-import { listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
+import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
 import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
@@ -1455,81 +1455,221 @@ async function main(): Promise<void> {
     await gapp.close();
   }
 
-  // 4) Dev tools — gated off by default.
+  // 4) Admin debug toolkit (§dev) — gating + each command. Mounted only when allowDebug is on,
+  //    and then only for admins; consolidates the old /daily/simulate dev affordance.
   {
-    const gdb = createPgliteDb();
-    await runMigrations(gdb);
-    const gapp = buildApp(gdb, { rateLimitMax: 100_000, authRateLimitMax: 100_000 });
-    await gapp.ready();
-    const reg = await gapp.inject({
+    // 4a) Prod-style build (allowDebug off) → the routes aren't mounted: 404 for everyone.
+    const pdb = createPgliteDb();
+    await runMigrations(pdb);
+    const papp = buildApp(pdb, { rateLimitMax: 100_000, authRateLimitMax: 100_000 });
+    await papp.ready();
+    const preg = await papp.inject({
       method: 'POST',
       url: '/api/auth/register',
-      payload: { username: 'devless', password: 'horsehorse1' },
+      payload: { username: 'prodless', password: 'horsehorse1' },
     });
     eq(
-      'dev simulate is gated off → 403',
+      'debug routes are unmounted in a prod-style build → 404',
       (
-        await gapp.inject({
+        await papp.inject({
           method: 'POST',
-          url: '/api/daily/simulate',
-          headers: { cookie: cookieOf(reg) },
-          payload: { days: 5 },
+          url: '/api/debug/grant',
+          headers: { cookie: cookieOf(preg) },
+          payload: { cubes: 100 },
+        })
+      ).statusCode,
+      404,
+    );
+    await papp.close();
+
+    // 4b) Dev build (allowDebug on) — a non-admin is denied (403); an admin can use every command.
+    const ddb = createPgliteDb();
+    await runMigrations(ddb);
+    const dapp = buildApp(ddb, {
+      rateLimitMax: 100_000,
+      authRateLimitMax: 100_000,
+      allowDebug: true,
+    });
+    await dapp.ready();
+    const dinject = (opts: InjectOptions) =>
+      dapp.inject({ ...opts, url: `/api${typeof opts.url === 'string' ? opts.url : ''}` });
+
+    const reg = await dinject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'debugadmin', password: 'horsehorse1' },
+    });
+    const dcookie = cookieOf(reg);
+    const who = reg.json<{ user: { id: string }; herd: { id: string } }>();
+    const dHerdId = who.herd.id;
+
+    eq(
+      'debug as a non-admin → 403',
+      (
+        await dinject({
+          method: 'POST',
+          url: '/debug/grant',
+          headers: { cookie: dcookie },
+          payload: { cubes: 100 },
         })
       ).statusCode,
       403,
     );
-    await gapp.close();
-  }
 
-  // 5) Dev tools on — /daily/simulate advances the clock so the autonomy tick produces journal
-  //    beats (the live-API proof that the tick runs end to end, not just in the unit harness).
-  {
-    const gdb = createPgliteDb();
-    await runMigrations(gdb);
-    const gapp = buildApp(gdb, {
-      rateLimitMax: 100_000,
-      authRateLimitMax: 100_000,
-      allowDevTools: true,
-    });
-    await gapp.ready();
-    const reg = await gapp.inject({
-      method: 'POST',
-      url: '/api/auth/register',
-      payload: { username: 'devon', password: 'horsehorse1' },
-    });
-    const devHerd = reg.json<{ herd: { id: string } }>().herd.id;
-    const social = { o: 50, c: 50, e: 85, a: 85, n: 15 };
-    await mintHorse(gdb, {
-      herdId: devHerd,
-      genotype: { E: 'Ee', A: 'Aa' },
-      origin: 'wild',
-      lifeStage: 'adult',
-      personality: social,
-      name: 'Sage',
-    });
-    await mintHorse(gdb, {
-      herdId: devHerd,
-      genotype: { E: 'ee', A: 'aa' },
-      origin: 'wild',
-      lifeStage: 'adult',
-      personality: social,
-      name: 'Thyme',
-    });
-    await gapp.inject({
-      method: 'POST',
-      url: '/api/daily/simulate',
-      headers: { cookie: cookieOf(reg) },
-      payload: { days: 6 },
-    });
-    const journal = (
-      await gapp.inject({
-        method: 'GET',
-        url: '/api/journal',
-        headers: { cookie: cookieOf(reg) },
+    // Promote to admin — the same session cookie now resolves to an admin user.
+    await ddb.update(users).set({ role: 'admin' }).where(drizzleEq(users.id, who.user.id));
+
+    // GRANT
+    const beforeCubes = (
+      await dinject({ method: 'GET', url: '/me', headers: { cookie: dcookie } })
+    ).json<{ herd: { cubes: number } }>().herd.cubes;
+    const grantBody = (
+      await dinject({
+        method: 'POST',
+        url: '/debug/grant',
+        headers: { cookie: dcookie },
+        payload: { cubes: 500, items: [{ id: 'marsh-sage', qty: 7 }] },
       })
+    ).json<{ cubes: number; inventory: { id: string; qty: number }[] }>();
+    check('debug grant adds Cubes', grantBody.cubes === beforeCubes + 500);
+    check(
+      'debug grant adds the item by id',
+      (grantBody.inventory.find((i) => i.id === 'marsh-sage')?.qty ?? 0) >= 7,
+    );
+
+    // MINT — a Conscientiousness-60 horse that unlocks the herb-hunt sneak gate.
+    const mintRes = await dinject({
+      method: 'POST',
+      url: '/debug/mint',
+      headers: { cookie: dcookie },
+      payload: { personality: { c: 60 }, stats: { dex: 14 }, lifeStage: 'adult', name: 'Careful' },
+    });
+    eq('debug mint → 201', mintRes.statusCode, 201);
+    const minted = mintRes.json<{
+      id: string;
+      personality: Record<string, number>;
+      luck: number;
+    }>();
+    eq('minted horse has the requested Conscientiousness', minted.personality.c, 60);
+    eq('minted horse defaults the rest of OCEAN to 50', minted.personality.o, 50);
+    const mintedRow = await getHorse(ddb, minted.id);
+    const fen = ADVENTURE_BY_ID.get('herb-hunt')?.scenes['fen'];
+    check(
+      'the minted C-60 horse unlocks the herb-hunt sneak gate',
+      !!fen && !!mintedRow && availableChoices(fen, [mintedRow]).some((c) => c.id === 'sneak'),
+    );
+
+    // TIME — advance days drives the autonomy tick (journal fills); single tick = exactly one day.
+    const social = { o: 50, c: 50, e: 85, a: 85, n: 15 };
+    for (const name of ['Sage', 'Thyme']) {
+      await dinject({
+        method: 'POST',
+        url: '/debug/mint',
+        headers: { cookie: dcookie },
+        payload: { personality: social, name },
+      });
+    }
+    const adv = (
+      await dinject({
+        method: 'POST',
+        url: '/debug/advance-days',
+        headers: { cookie: dcookie },
+        payload: { days: 6 },
+      })
+    ).json<{ daysAdvanced: number }>();
+    check('debug advance-days moves the clock', adv.daysAdvanced >= 6);
+    const journal = (
+      await dinject({ method: 'GET', url: '/journal', headers: { cookie: dcookie } })
     ).json<unknown[]>();
-    check('dev simulate advances the tick → journal fills', journal.length > 0);
-    await gapp.close();
+    check('debug advance-days drives the autonomy tick → journal fills', journal.length > 0);
+
+    const beforeTick = (await ddb.query.herds.findFirst({ where: drizzleEq(herds.id, dHerdId) }))
+      ?.lastSimTick;
+    await dinject({
+      method: 'POST',
+      url: '/debug/tick',
+      headers: { cookie: dcookie },
+      payload: {},
+    });
+    const afterTick = (await ddb.query.herds.findFirst({ where: drizzleEq(herds.id, dHerdId) }))
+      ?.lastSimTick;
+    eq('a single tick advances exactly one day', (afterTick ?? 0) - (beforeTick ?? 0), 1);
+
+    // MATURE a foal on demand → adult (the coat reveal).
+    const foal = await mintHorse(ddb, {
+      herdId: dHerdId,
+      genotype: { E: 'Ee' },
+      origin: 'wild',
+      lifeStage: 'foal',
+    });
+    eq(
+      'debug mature a foal → 200',
+      (
+        await dinject({
+          method: 'POST',
+          url: `/debug/mature/${foal.id}`,
+          headers: { cookie: dcookie },
+          payload: {},
+        })
+      ).statusCode,
+      200,
+    );
+    check(
+      'the matured foal is now an adult',
+      (await getHorse(ddb, foal.id))?.lifeStage === 'adult',
+    );
+
+    // INSPECT — the full hidden truth (luck + full OCEAN + genotype) + raw runs.
+    const dump = (
+      await dinject({
+        method: 'GET',
+        url: `/debug/horse/${minted.id}`,
+        headers: { cookie: dcookie },
+      })
+    ).json<{
+      horse: { luck: number; personality: Record<string, number>; genotype: unknown };
+      relationships: unknown[];
+    }>();
+    check(
+      'inspect exposes hidden luck + full OCEAN + genotype',
+      typeof dump.horse.luck === 'number' &&
+        dump.horse.personality.c === 60 &&
+        !!dump.horse.genotype,
+    );
+    check(
+      'inspect runs returns an array',
+      Array.isArray(
+        (await dinject({ method: 'GET', url: '/debug/runs', headers: { cookie: dcookie } })).json(),
+      ),
+    );
+
+    // RESET — back to a clean starter state (2 founder adults + the cold-start purse, stash cleared).
+    await dinject({
+      method: 'POST',
+      url: '/debug/reset',
+      headers: { cookie: dcookie },
+      payload: {},
+    });
+    const afterReset = await listHerdHorses(ddb, dHerdId);
+    eq('reset restores exactly two starter horses', afterReset.length, 2);
+    check(
+      'reset starters are adults',
+      afterReset.every((h) => h.lifeStage === 'adult'),
+    );
+    eq(
+      'reset restores the cold-start Cubes purse',
+      (await ddb.query.herds.findFirst({ where: drizzleEq(herds.id, dHerdId) }))?.cubes,
+      STARTING_CUBES,
+    );
+    eq(
+      'reset clears the stash',
+      (await dinject({ method: 'GET', url: '/inventory', headers: { cookie: dcookie } })).json<
+        unknown[]
+      >().length,
+      0,
+    );
+
+    await dapp.close();
   }
 
   await app.close();

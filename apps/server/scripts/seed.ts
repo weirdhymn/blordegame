@@ -46,6 +46,11 @@ async function main(): Promise<void> {
       : `• created account "${SEED_USER}"  (herd ${herd.id})`,
   );
 
+  // Promote the tester to admin so the in-game debug toolkit (POST /api/debug/*) is usable the
+  // moment the server launches against this DB — no manual set-admin step needed (idempotent).
+  await db.update(users).set({ role: 'admin' }).where(eq(users.username, SEED_USER));
+  console.log(`• "${SEED_USER}" is an admin (debug toolkit enabled)`);
+
   // Top up starters even if this herd predates the cold-start grant (idempotent — no-op if present).
   await grantStarterHorses(db, herd.id);
   const mine = await listHerdHorses(db, herd.id);

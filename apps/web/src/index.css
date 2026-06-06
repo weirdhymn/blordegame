@@ -640,3 +640,36 @@ code {
   font-style: italic;
   margin: 0;
 }
+
+/* ── Admin debug panel ── */
+.debug .card {
+  margin-bottom: 0.9rem;
+}
+.debug-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+}
+.debug-grid .field span {
+  font-size: 0.72rem;
+}
+.debug-out {
+  margin-top: 0.6rem;
+  max-height: 22rem;
+  overflow: auto;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+button.danger {
+  background: #f3e1e1;
+  border-color: #8a3a3a;
+  color: #6a2a2a;
+  font-weight: 700;
+}

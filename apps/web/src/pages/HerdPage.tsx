@@ -97,8 +97,8 @@ export function HerdPage(): ReactElement {
         <h2 className="section-h">Journal</h2>
         {journal.length === 0 ? (
           <p className="muted">
-            Quiet so far — the story fills in as days pass (use the daily check-in, or the dev
-            fast-forward, on the Pasture).
+            Quiet so far — the story fills in as days pass (use the daily check-in on the Pasture,
+            or the time controls in the admin Debug panel).
           </p>
         ) : (
           <ul className="journal-list">

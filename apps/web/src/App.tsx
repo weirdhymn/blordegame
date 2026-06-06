@@ -2,6 +2,7 @@ import { type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.js';
 import { BreedPage } from './pages/BreedPage.js';
+import { DebugPage } from './pages/DebugPage.js';
 import { ExplorePage } from './pages/ExplorePage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
 import { HomePage } from './pages/HomePage.js';
@@ -47,6 +48,7 @@ export function App(): ReactElement {
         <Route path="/herd" element={<HerdPage />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/guide" element={<FieldGuidePage />} />
+        <Route path="/debug" element={<DebugPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

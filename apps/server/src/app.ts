@@ -9,6 +9,7 @@ import { registerAuthRoutes, type AuthConfig } from './routes/auth.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
 import { registerDailyRoutes } from './routes/daily.js';
+import { registerDebugRoutes } from './routes/debug.js';
 import { registerExplorationRoutes } from './routes/exploration.js';
 import { registerHorseRoutes } from './routes/horses.js';
 import { registerModerationRoutes } from './routes/moderation.js';
@@ -36,9 +37,10 @@ export interface AppOptions {
   /** Absolute path to the built web client (apps/web/dist). When set, the server serves it
    *  same-origin with an SPA fallback. Unset (tests/dev) → API only. */
   webDir?: string;
-  /** Expose dev-only tools (e.g. POST /daily/simulate to advance the clock). Default false;
-   *  index.ts enables it outside production so the daily tick / autonomy can be exercised. */
-  allowDevTools?: boolean;
+  /** Mount the admin debug toolkit (POST /api/debug/*, time control, inspect, reset). Default
+   *  false; index.ts enables it outside production. Even when on, every debug route additionally
+   *  requires role 'admin' — so a non-admin gets 403 and a prod build 404 (routes unmounted). */
+  allowDebug?: boolean;
 }
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
@@ -52,7 +54,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
     secureCookie: opts.secureCookie ?? false,
     trustProxy: opts.trustProxy ?? false,
     webDir: opts.webDir,
-    allowDevTools: opts.allowDevTools ?? false,
+    allowDebug: opts.allowDebug ?? false,
   };
 
   const app = Fastify({ logger: false, trustProxy: cfg.trustProxy });
@@ -112,12 +114,15 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerHorseRoutes(instance, db, { allowMint: cfg.allowMint });
       registerBreedingRoutes(instance, db);
       registerExplorationRoutes(instance, db);
-      registerDailyRoutes(instance, db, { allowDevTools: cfg.allowDevTools });
+      registerDailyRoutes(instance, db);
       registerPastureRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerSocialRoutes(instance, db);
       registerEconomyRoutes(instance, db);
       registerModerationRoutes(instance, db);
+      // Admin debug toolkit — mounted only on dev instances (prod ⇒ routes 404). Each route
+      // still requires an admin. Consolidates the old /daily/simulate dev affordance.
+      if (cfg.allowDebug) registerDebugRoutes(instance, db);
     },
     { prefix: '/api' },
   );

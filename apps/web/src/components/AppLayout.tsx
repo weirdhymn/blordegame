@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSession } from '../session.js';
 
 export function AppLayout(): ReactElement {
-  const { herd, signOut } = useSession();
+  const { user, herd, signOut } = useSession();
   return (
     <div className="app">
       <header className="topbar">
@@ -21,6 +21,7 @@ export function AppLayout(): ReactElement {
           <NavLink to="/market">Market</NavLink>
           <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>
+          {user?.role === 'admin' && <NavLink to="/debug">🛠 Debug</NavLink>}
         </nav>
         <button onClick={() => void signOut()}>Log out</button>
       </header>

@@ -673,3 +673,27 @@ button.danger {
   color: #6a2a2a;
   font-weight: 700;
 }
+
+/* ── Modal (upload confirmation / send-off) ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(29, 41, 23, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+.modal {
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  max-width: 30rem;
+  width: 100%;
+}
+.send-off .story-scene {
+  font-size: 1rem;
+  line-height: 1.5;
+}

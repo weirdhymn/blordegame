@@ -45,6 +45,29 @@ export const RARITY_SCORE = {
   unnatural: 1.0,
 } as const;
 
+// ── §14.3a Uploading to The Cloud — a permanent horse sink; the parting gift is Cubes ───────
+// reward = UPLOAD_BASE + UPLOAD_RARITY_BONUS·rarity + UPLOAD_TRAINING_BONUS·training  (adult)
+// foal   = round(UPLOAD_BASE · UPLOAD_FOAL_FACTOR)  — coat unrevealed + untrained → minimal.
+// It's a fond send-off, not a sale: rewards sit well under recruitment fees on purpose. Tune here.
+export const UPLOAD_BASE = 20; // Cubes floor for any revealed (adult) horse
+export const UPLOAD_RARITY_BONUS = 150; // max Cubes a rare coat adds (× rarity score 0..1)
+export const UPLOAD_TRAINING_BONUS = 100; // max Cubes training adds (× training score 0..1)
+export const UPLOAD_FOAL_FACTOR = 0.4; // a foal pays UPLOAD_BASE × this
+/**
+ * Rarity is DERIVED from the engine's phenotype features — it surfaces rare flags/patterns/
+ * modifiers, NOT a continuous probability (§14.7) — so rarer features earn a bigger gift. 0..1.
+ */
+export const UPLOAD_RARITY_WEIGHTS = {
+  grayOrWhite: 0.6, // isGray / isWhiteMasked — the rarest
+  leopardOrSabino: 0.3, // isLeopard / sabinoWhite
+  roan: 0.2, // hasRoan
+  perModifier: 0.12, // each dilution / sooty / champagne / …
+  perPattern: 0.08, // each named pattern (tobiano, …)
+} as const;
+export const UPLOAD_TRAINING_SKILL_DIV = 40; // Σ skill levels ÷ this, capped at 1
+export const UPLOAD_TRAINING_STAT_DIV = 30; // Σ stat points above base-10 ÷ this, capped at 1
+export const UPLOAD_TRAINING_SKILL_WEIGHT = 0.7; // skills vs. trained stats in the training score
+
 // ── §14.4 Party & wild-accept ───────────────────────────────────────────────
 export const PARTY_MAX = 4;
 

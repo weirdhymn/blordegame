@@ -3,14 +3,29 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
-import { FOAL_TO_ADULT_MS, STARTING_CUBES, STAT_KEYS } from '@blorse/balance';
+import {
+  FOAL_TO_ADULT_MS,
+  SKILL_KEYS,
+  STARTING_CUBES,
+  STAT_KEYS,
+  UPLOAD_BASE,
+  UPLOAD_FOAL_FACTOR,
+} from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import { eq as drizzleEq } from 'drizzle-orm';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { adventureRuns, herds, users } from '../src/db/schema.js';
+import {
+  adventureRuns,
+  herds,
+  horseAncestors,
+  jobAssignments,
+  marketListings,
+  relationships,
+  users,
+} from '../src/db/schema.js';
 import { ADVENTURE_BY_ID, ADVENTURE_POOLS, type Choice } from '../src/content/adventures.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
@@ -30,6 +45,12 @@ import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/servic
 import { grantItems } from '../src/services/inventory.js';
 import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
+import {
+  coatRarityScore,
+  computeUploadReward,
+  uploadHorse,
+  uploadQuote,
+} from '../src/services/upload.js';
 import { mulberry32 } from '../src/util/rng.js';
 
 let pass = 0;
@@ -1029,6 +1050,200 @@ async function main(): Promise<void> {
       banked.ok && banked.ended && banked.summary.loot.some((l) => l.id === 'healing-potion'),
     );
   }
+
+  // --- Uploading to The Cloud (§14.3a): reward scaling, guards, FK-clean deletion ---
+  const flat6 = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const maxedSkills: Record<string, { level: number; xp: number }> = {};
+  for (const k of SKILL_KEYS) maxedSkills[k] = { level: 8, xp: 0 };
+  const maxedStats = { str: 18, dex: 18, con: 18, int: 18, wis: 18, cha: 18 };
+
+  const bayUntrained = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    stats: flat6,
+  });
+  const grayUntrained = await mintHorse(db, {
+    herdId,
+    genotype: { G: 'Gg', E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    stats: flat6,
+  });
+  const bayTrained = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    stats: maxedStats,
+    skills: maxedSkills,
+  });
+  const uploadFoal = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'foal',
+    stats: flat6,
+  });
+  const rBay = computeUploadReward(bayUntrained).reward;
+  const rGray = computeUploadReward(grayUntrained).reward;
+  const rTrained = computeUploadReward(bayTrained).reward;
+  const rFoal = computeUploadReward(uploadFoal).reward;
+  check('upload reward scales with rarity (Gray > Bay)', rGray > rBay);
+  check(
+    'coat rarity is derived from the engine (Gray rarer than Bay)',
+    coatRarityScore(grayUntrained.genotype) > coatRarityScore(bayUntrained.genotype),
+  );
+  check('upload reward scales with training (maxed > untrained)', rTrained > rBay);
+  check('a foal pays minimal (less than a common adult)', rFoal < rBay);
+  eq('a foal pays exactly the foal floor', rFoal, Math.round(UPLOAD_BASE * UPLOAD_FOAL_FACTOR));
+
+  // The quote endpoint names the horse + shows the server-computed reward (client never computes).
+  const upQ = await inject({
+    method: 'GET',
+    url: `/horses/${grayUntrained.id}/upload-quote`,
+    headers: { cookie },
+  });
+  eq('upload quote → 200', upQ.statusCode, 200);
+  const upQBody = upQ.json<{ horse: { name: string }; reward: number }>();
+  check('the quote names the horse', upQBody.horse.name.length > 0);
+  eq('the quote reward matches the server computation', upQBody.reward, rGray);
+
+  // Relationships surface as a warning (not a block).
+  const friendA = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+  });
+  const friendB = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    name: 'Buddy',
+  });
+  await db
+    .insert(relationships)
+    .values({ herdId, horseA: friendA.id, horseB: friendB.id, affinity: 40, type: 'friend' });
+  const relQuote = await uploadQuote(db, herdId, friendA.id);
+  check(
+    'the quote surfaces a bonded herdmate (warn, not block)',
+    relQuote.ok && relQuote.relationships.some((b) => b.name === 'Buddy'),
+  );
+
+  // Guard: a horse out on an active adventure cannot be uploaded.
+  const advUp = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+  });
+  await startRun(db, herdId, 'green-grass', [advUp.id], { scriptId: 'sunny-hollow' });
+  const blocked = await uploadHorse(db, herdId, advUp.id);
+  check(
+    'cannot upload a horse on an active adventure',
+    !blocked.ok && blocked.code === 'on_adventure',
+  );
+
+  // FK-clean deletion: a parent with a child link, a relationship, ancestry, a job, and a listing.
+  const upParent = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+  });
+  const upChild = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'bred',
+    parentA: upParent.id,
+    parentB: id,
+    lifeStage: 'adult',
+  });
+  const upMate = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+  });
+  await db
+    .insert(relationships)
+    .values({ herdId, horseA: upParent.id, horseB: upMate.id, affinity: 20, type: 'friend' });
+  await db.insert(jobAssignments).values({
+    horseId: upParent.id,
+    herdId,
+    structureType: 'library',
+    skill: 'reading',
+    stat: 'int',
+  });
+  await db.insert(marketListings).values({ herdId, horseId: upParent.id, price: 100 });
+  const cubesBeforeUpload = (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))
+    ?.cubes;
+  const upRes = await uploadHorse(db, herdId, upParent.id);
+  check('uploading a parent succeeds (no FK violation)', upRes.ok);
+  check('the uploaded horse is gone', (await getHorse(db, upParent.id)) === null);
+  eq(
+    "the child's parent link is nulled (no dangling ref)",
+    (await getHorse(db, upChild.id))?.parentA ?? null,
+    null,
+  );
+  eq(
+    'the relationship row is cascade-deleted',
+    (await db.select().from(relationships).where(drizzleEq(relationships.horseA, upParent.id)))
+      .length,
+    0,
+  );
+  eq(
+    'the job row is cascade-deleted',
+    (await db.select().from(jobAssignments).where(drizzleEq(jobAssignments.horseId, upParent.id)))
+      .length,
+    0,
+  );
+  eq(
+    'the market listing is cascade-deleted',
+    (await db.select().from(marketListings).where(drizzleEq(marketListings.horseId, upParent.id)))
+      .length,
+    0,
+  );
+  eq(
+    'ancestry rows for the uploaded horse are gone',
+    (
+      await db
+        .select()
+        .from(horseAncestors)
+        .where(drizzleEq(horseAncestors.ancestorId, upParent.id))
+    ).length,
+    0,
+  );
+  if (upRes.ok) {
+    eq(
+      'the parting gift reached the purse',
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))?.cubes,
+      (cubesBeforeUpload ?? 0) + upRes.reward,
+    );
+  }
+
+  // The upload endpoint performs the send-off end to end.
+  const httpUp = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+  });
+  const upPost = await inject({
+    method: 'POST',
+    url: `/horses/${httpUp.id}/upload`,
+    headers: { cookie },
+  });
+  eq('POST upload → 200', upPost.statusCode, 200);
+  check('the endpoint returns a reward', upPost.json<{ reward: number }>().reward > 0);
+  eq(
+    'the uploaded horse is gone (404)',
+    (await inject({ method: 'GET', url: `/horses/${httpUp.id}` })).statusCode,
+    404,
+  );
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

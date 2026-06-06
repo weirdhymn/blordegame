@@ -7,6 +7,7 @@ import type { HorseRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getHorse, horseRenderSpec, listHerdHorses, mintHorse } from '../services/horse.js';
 import { assignJob, getJob, unassignJob } from '../services/jobs.js';
+import { uploadHorse, uploadQuote } from '../services/upload.js';
 
 export function publicHorse(h: HorseRow) {
   return {
@@ -126,5 +127,34 @@ export function registerHorseRoutes(
   app.get('/horses/:id/job', async (req, reply) => {
     const { id } = req.params as { id: string };
     return reply.send({ job: await getJob(db, id) });
+  });
+
+  // Upload to The Cloud (§14.3a) — the first permanent action. The quote is a read-only preview
+  // that feeds the client's confirmation (names the horse, shows the exact reward + warnings);
+  // the POST does the irreversible send-off. Both are server-authoritative.
+  app.get('/horses/:id/upload-quote', async (req, reply) => {
+    const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
+    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+    const herd = await getHerdForUser(db, user.id);
+    if (!herd) return reply.code(404).send({ error: 'no herd' });
+    const { id } = req.params as { id: string };
+    const quote = await uploadQuote(db, herd.id, id);
+    if (!quote.ok) return reply.code(404).send({ error: 'not found' });
+    return reply.send(quote);
+  });
+
+  app.post('/horses/:id/upload', async (req, reply) => {
+    const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
+    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+    const herd = await getHerdForUser(db, user.id);
+    if (!herd) return reply.code(404).send({ error: 'no herd' });
+    const { id } = req.params as { id: string };
+    const result = await uploadHorse(db, herd.id, id);
+    if (!result.ok) {
+      return reply
+        .code(result.code === 'not_found' ? 404 : 409)
+        .send({ error: result.message, code: result.code });
+    }
+    return reply.send(result);
   });
 }

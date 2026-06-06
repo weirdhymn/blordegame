@@ -5,8 +5,10 @@ import { buildRenderSpec } from '@blorse/render-core';
 import { ApiError } from '../api/client.js';
 import { care, getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
 import { assignJob, getJob, unassignJob, type JobAssignment } from '../api/jobs.js';
+import { getUploadQuote, uploadHorse, type UploadQuote } from '../api/upload.js';
 import { getPasture, type Buildable } from '../api/workshop.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
+import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
 const PERSONALITY_LABELS: Record<string, string> = {
@@ -44,6 +46,13 @@ export function HorseDetailPage(): ReactElement {
   const [jobStructures, setJobStructures] = useState<Buildable[]>([]);
   const [pick, setPick] = useState('');
   const [jobBusy, setJobBusy] = useState(false);
+  const { refresh } = useSession();
+  const [quote, setQuote] = useState<UploadQuote | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [sentOff, setSentOff] = useState<{ name: string; coat: string; reward: number } | null>(
+    null,
+  );
 
   const loadJob = useCallback(() => {
     if (!id) return;
@@ -133,6 +142,32 @@ export function HorseDetailPage(): ReactElement {
     }
   }
 
+  async function openQuote(): Promise<void> {
+    if (!id) return;
+    setUploadErr(null);
+    try {
+      setQuote(await getUploadQuote(id));
+    } catch (e) {
+      setUploadErr(e instanceof ApiError ? e.message : 'Could not reach The Cloud.');
+    }
+  }
+  async function doUpload(): Promise<void> {
+    if (!id) return;
+    setUploading(true);
+    setUploadErr(null);
+    try {
+      const r = await uploadHorse(id);
+      setQuote(null);
+      setSentOff({ name: r.name, coat: r.coat, reward: r.reward });
+      await refresh();
+    } catch (e) {
+      setUploadErr(e instanceof ApiError ? e.message : 'The send-off did not go through.');
+      setQuote(null);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (error)
     return (
       <div className="error" role="alert">
@@ -140,6 +175,26 @@ export function HorseDetailPage(): ReactElement {
       </div>
     );
   if (!horse) return <div className="loading">Loading…</div>;
+
+  if (sentOff) {
+    return (
+      <div className="detail send-off">
+        <h1>Off into The Cloud 🌥</h1>
+        <p className="story-scene">
+          You open the gate and {sentOff.name} — your {sentOff.coat} — steps through, off to run
+          free on the internet and keep some stranger company. It looks back once. Then it&apos;s
+          gone, and somewhere out there it&apos;s about to be someone else&apos;s good day.
+        </p>
+        <p className="note">
+          A parting gift arrives on the wind: <strong>+{sentOff.reward} ⬡</strong>. Thanks for
+          raising it.
+        </p>
+        <p>
+          <Link to="/">← back to the Pasture</Link>
+        </p>
+      </div>
+    );
+  }
 
   const spec = buildRenderSpec(resolve(horse.genotype), {
     seed: horse.seed,
@@ -248,6 +303,67 @@ export function HorseDetailPage(): ReactElement {
             ))}
           </ul>
         </>
+      )}
+
+      <h2 className="section-h">The Cloud</h2>
+      <p className="muted">
+        Send {horse.name ?? 'this one'} off to run free on the internet, helping other herds — a
+        permanent goodbye, with a Cube parting gift in thanks. It won&apos;t come back.
+      </p>
+      <button className="link-btn" onClick={() => void openQuote()}>
+        ☁ Upload {horse.name ?? 'this horse'} to The Cloud…
+      </button>
+      {uploadErr && (
+        <div className="error" role="alert">
+          {uploadErr}
+        </div>
+      )}
+
+      {quote && (
+        <div className="modal-backdrop" onClick={() => !uploading && setQuote(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="section-h">Send {quote.horse.name} off?</h2>
+            {quote.onAdventure ? (
+              <>
+                <p>
+                  {quote.horse.name} is out on an adventure right now. Bring the party home before
+                  you say goodbye.
+                </p>
+                <div className="row-actions">
+                  <button onClick={() => setQuote(null)}>Close</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="story-scene">
+                  {quote.horse.name} (
+                  {quote.isFoal ? 'a foal — its coat not yet shown' : quote.horse.coat}) will go
+                  free into The Cloud, off to keep some other herd company. This is permanent —
+                  there&apos;s no calling it back.
+                </p>
+                <p className="note">
+                  Parting gift: <strong>+{quote.reward} ⬡</strong>
+                  {quote.isFoal ? ' — foals leave so young the thanks is small.' : '.'}
+                </p>
+                {quote.relationships.length > 0 && (
+                  <p className="wild">
+                    💛 {quote.horse.name} is close with{' '}
+                    {quote.relationships.map((b) => b.name).join(', ')}. They&apos;ll feel the gap —
+                    say goodbye on purpose.
+                  </p>
+                )}
+                <div className="row-actions">
+                  <button className="danger" disabled={uploading} onClick={() => void doUpload()}>
+                    {uploading ? 'Opening the gate…' : `Send ${quote.horse.name} off forever`}
+                  </button>
+                  <button disabled={uploading} onClick={() => setQuote(null)}>
+                    Keep {quote.horse.name}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

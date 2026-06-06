@@ -17,6 +17,7 @@ const app = buildApp(db, {
     .map((s) => s.trim())
     .filter(Boolean),
   allowMint: process.env.ALLOW_MINT === 'true', // default false ⇒ admin-only
+  allowDevTools: !isProd, // /daily/simulate etc. — local only, never in production
 });
 const port = Number(process.env.PORT ?? 3001);
 

@@ -1077,6 +1077,83 @@ async function main(): Promise<void> {
     await gapp.close();
   }
 
+  // 4) Dev tools — gated off by default.
+  {
+    const gdb = createPgliteDb();
+    await runMigrations(gdb);
+    const gapp = buildApp(gdb, { rateLimitMax: 100_000, authRateLimitMax: 100_000 });
+    await gapp.ready();
+    const reg = await gapp.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'devless', password: 'horsehorse1' },
+    });
+    eq(
+      'dev simulate is gated off → 403',
+      (
+        await gapp.inject({
+          method: 'POST',
+          url: '/api/daily/simulate',
+          headers: { cookie: cookieOf(reg) },
+          payload: { days: 5 },
+        })
+      ).statusCode,
+      403,
+    );
+    await gapp.close();
+  }
+
+  // 5) Dev tools on — /daily/simulate advances the clock so the autonomy tick produces journal
+  //    beats (the live-API proof that the tick runs end to end, not just in the unit harness).
+  {
+    const gdb = createPgliteDb();
+    await runMigrations(gdb);
+    const gapp = buildApp(gdb, {
+      rateLimitMax: 100_000,
+      authRateLimitMax: 100_000,
+      allowDevTools: true,
+    });
+    await gapp.ready();
+    const reg = await gapp.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'devon', password: 'horsehorse1' },
+    });
+    const devHerd = reg.json<{ herd: { id: string } }>().herd.id;
+    const social = { o: 50, c: 50, e: 85, a: 85, n: 15 };
+    await mintHorse(gdb, {
+      herdId: devHerd,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      personality: social,
+      name: 'Sage',
+    });
+    await mintHorse(gdb, {
+      herdId: devHerd,
+      genotype: { E: 'ee', A: 'aa' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      personality: social,
+      name: 'Thyme',
+    });
+    await gapp.inject({
+      method: 'POST',
+      url: '/api/daily/simulate',
+      headers: { cookie: cookieOf(reg) },
+      payload: { days: 6 },
+    });
+    const journal = (
+      await gapp.inject({
+        method: 'GET',
+        url: '/api/journal',
+        headers: { cookie: cookieOf(reg) },
+      })
+    ).json<unknown[]>();
+    check('dev simulate advances the tick → journal fills', journal.length > 0);
+    await gapp.close();
+  }
+
   await app.close();
 
   console.log(

@@ -16,9 +16,10 @@ import { resolve } from '@blorse/genetics';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { users } from '../src/db/schema.js';
+import { horses, users } from '../src/db/schema.js';
 import { getHerdForUser, grantStarterHorses, registerUser } from '../src/services/auth.js';
-import { listHerdHorses } from '../src/services/horse.js';
+import { listHerdHorses, mintHorse } from '../src/services/horse.js';
+import { computeTavernFee, listTavern } from '../src/services/tavern.js';
 
 const SEED_USER = 'tester';
 const SEED_PASS = 'horsehorse1'; // ≥8 chars — valid per the /auth rules
@@ -49,6 +50,29 @@ async function main(): Promise<void> {
   await grantStarterHorses(db, herd.id);
   const mine = await listHerdHorses(db, herd.id);
   const coats = mine.map((h) => `${resolve(h.genotype).displayName} (${h.lifeStage})`).join(', ');
+
+  // Stock the shared Tavern so recruiting is playable immediately (idempotent).
+  if ((await listTavern(db)).length === 0) {
+    const stock = [
+      { genotype: { E: 'Ee', A: 'aa' }, seed: 0xa11 }, // Black
+      { genotype: { E: 'Ee', A: 'At' }, seed: 0xb22 }, // Seal Brown
+      { genotype: { G: 'Gg', E: 'Ee', A: 'Aa' }, seed: 0xc33 }, // Gray (rarer → pricier)
+    ];
+    for (const s of stock) {
+      const h = await mintHorse(db, {
+        herdId: null,
+        genotype: s.genotype,
+        origin: 'wild',
+        seed: s.seed,
+        lifeStage: 'adult',
+      });
+      await db
+        .update(horses)
+        .set({ tavernFee: computeTavernFee(h) })
+        .where(eq(horses.id, h.id));
+    }
+    console.log(`• stocked the Tavern with ${stock.length} horses`);
+  }
 
   console.log('\n=== seed complete ===');
   console.log(`  login       : ${SEED_USER} / ${SEED_PASS}`);

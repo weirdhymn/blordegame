@@ -36,6 +36,9 @@ export interface AppOptions {
   /** Absolute path to the built web client (apps/web/dist). When set, the server serves it
    *  same-origin with an SPA fallback. Unset (tests/dev) → API only. */
   webDir?: string;
+  /** Expose dev-only tools (e.g. POST /daily/simulate to advance the clock). Default false;
+   *  index.ts enables it outside production so the daily tick / autonomy can be exercised. */
+  allowDevTools?: boolean;
 }
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
@@ -49,6 +52,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
     secureCookie: opts.secureCookie ?? false,
     trustProxy: opts.trustProxy ?? false,
     webDir: opts.webDir,
+    allowDevTools: opts.allowDevTools ?? false,
   };
 
   const app = Fastify({ logger: false, trustProxy: cfg.trustProxy });
@@ -108,7 +112,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerHorseRoutes(instance, db, { allowMint: cfg.allowMint });
       registerBreedingRoutes(instance, db);
       registerExplorationRoutes(instance, db);
-      registerDailyRoutes(instance, db);
+      registerDailyRoutes(instance, db, { allowDevTools: cfg.allowDevTools });
       registerPastureRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerSocialRoutes(instance, db);

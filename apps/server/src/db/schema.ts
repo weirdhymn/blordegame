@@ -156,6 +156,21 @@ export const fieldGuide = pgTable(
   (t) => [primaryKey({ columns: [t.herdId, t.colorSlug] })],
 );
 
+/** Placed Pasture structures (Library, Forge, …). One per type per herd (§6/§7). */
+export const structures = pgTable(
+  'structures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    level: integer('level').notNull().default(1),
+    placedAt: timestamp('placed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('structures_herd_type_idx').on(t.herdId, t.type)],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type HerdRow = typeof herds.$inferSelect;
 export type HorseRow = typeof horses.$inferSelect;

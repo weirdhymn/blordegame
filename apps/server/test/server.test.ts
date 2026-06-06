@@ -12,6 +12,7 @@ import { runMigrations } from '../src/db/migrate.js';
 import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
+import { grantItems } from '../src/services/inventory.js';
 import { mulberry32 } from '../src/util/rng.js';
 
 let pass = 0;
@@ -385,6 +386,94 @@ async function main(): Promise<void> {
   // POST /daily on the real clock (already caught up → no-op, 200)
   const daily = await inject({ method: 'POST', url: '/daily', headers: { cookie } });
   eq('POST /daily → 200', daily.statusCode, 200);
+
+  // --- Phase 7: Pasture, gathering & crafting ---
+  // stock raw materials (as if from roaming)
+  await grantItems(db, herdId, [
+    { id: 'odd-acorn', qty: 20 },
+    { id: 'smooth-pebble', qty: 20 },
+    { id: 'dust-shard', qty: 10 },
+    { id: 'clover', qty: 10 },
+    { id: 'grass-tuft', qty: 10 },
+  ]);
+
+  const recipes = await inject({ method: 'GET', url: '/recipes' });
+  check('recipes listed', recipes.json<unknown[]>().length > 0);
+
+  // craft building materials
+  const craftPlank = await inject({
+    method: 'POST',
+    url: '/craft',
+    headers: { cookie },
+    payload: { recipeId: 'plank', qty: 8 },
+  });
+  eq('craft 8 planks → 200', craftPlank.statusCode, 200);
+  eq('craft outputs 8 planks', craftPlank.json<{ output: { qty: number } }>().output.qty, 8);
+  const craftBrick = await inject({
+    method: 'POST',
+    url: '/craft',
+    headers: { cookie },
+    payload: { recipeId: 'brick', qty: 4 },
+  });
+  eq('craft 4 bricks → 200', craftBrick.statusCode, 200);
+
+  const inv2 = (await inject({ method: 'GET', url: '/inventory', headers: { cookie } })).json<
+    { id: string; qty: number }[]
+  >();
+  check(
+    'inventory has crafted planks',
+    inv2.some((s) => s.id === 'plank' && s.qty >= 7),
+  );
+  check(
+    'inventory has crafted bricks',
+    inv2.some((s) => s.id === 'brick' && s.qty >= 3),
+  );
+
+  // crafting beyond available materials → insufficient
+  const craftFail = await inject({
+    method: 'POST',
+    url: '/craft',
+    headers: { cookie },
+    payload: { recipeId: 'plank', qty: 999 },
+  });
+  eq('craft without materials → 409', craftFail.statusCode, 409);
+
+  // build structures (consume building materials + Cubes), up to capacity
+  for (const type of ['library', 'foragers-hut', 'track', 'kitchen']) {
+    const b = await inject({
+      method: 'POST',
+      url: '/pasture/build',
+      headers: { cookie },
+      payload: { type },
+    });
+    eq(`build ${type} → 201`, b.statusCode, 201);
+  }
+  const dupBuild = await inject({
+    method: 'POST',
+    url: '/pasture/build',
+    headers: { cookie },
+    payload: { type: 'library' },
+  });
+  eq('build duplicate → 409', dupBuild.statusCode, 409);
+  const fullBuild = await inject({
+    method: 'POST',
+    url: '/pasture/build',
+    headers: { cookie },
+    payload: { type: 'forge' },
+  });
+  eq('build beyond capacity → 409', fullBuild.statusCode, 409);
+
+  const pasture = (await inject({ method: 'GET', url: '/pasture', headers: { cookie } })).json<{
+    used: number;
+    capacity: number;
+    structures: { type: string }[];
+  }>();
+  eq('pasture used 4 slots', pasture.used, 4);
+  eq('pasture capacity is 4', pasture.capacity, 4);
+  check(
+    'Library is placed',
+    pasture.structures.some((s) => s.type === 'library'),
+  );
 
   await app.close();
 

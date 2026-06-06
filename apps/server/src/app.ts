@@ -6,6 +6,7 @@ import { registerBreedingRoutes } from './routes/breeding.js';
 import { registerDailyRoutes } from './routes/daily.js';
 import { registerExplorationRoutes } from './routes/exploration.js';
 import { registerHorseRoutes } from './routes/horses.js';
+import { registerPastureRoutes } from './routes/pasture.js';
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
 export function buildApp(db: DB): FastifyInstance {
@@ -19,6 +20,7 @@ export function buildApp(db: DB): FastifyInstance {
   registerBreedingRoutes(app, db);
   registerExplorationRoutes(app, db);
   registerDailyRoutes(app, db);
+  registerPastureRoutes(app, db);
 
   return app;
 }

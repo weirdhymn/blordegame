@@ -36,3 +36,19 @@ export async function itemQty(db: DB, herdId: string, itemId: string): Promise<n
     .where(and(eq(inventory.herdId, herdId), eq(inventory.itemId, itemId)));
   return rows[0]?.qty ?? 0;
 }
+
+/** Remove items only if the herd has enough of every one; returns false (no change) otherwise. */
+export async function consumeItems(db: DB, herdId: string, items: ItemStack[]): Promise<boolean> {
+  for (const need of items) {
+    if (need.qty <= 0) continue;
+    if ((await itemQty(db, herdId, need.id)) < need.qty) return false;
+  }
+  for (const need of items) {
+    if (need.qty <= 0) continue;
+    await db
+      .update(inventory)
+      .set({ qty: sql`${inventory.qty} - ${need.qty}` })
+      .where(and(eq(inventory.herdId, herdId), eq(inventory.itemId, need.id)));
+  }
+  return true;
+}

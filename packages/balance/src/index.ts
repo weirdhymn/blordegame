@@ -66,3 +66,8 @@ export const ROAM_DROPS_MAX = 3;
 // ── Daily rhythm (Phase 6) ──────────────────────────────────────────────────
 /** Cubes granted per daily rollover (login-catchup accrues one per missed day). */
 export const DAILY_CUBES = 50;
+
+// ── The Pasture (Phase 7) ───────────────────────────────────────────────────
+/** Structure slots in a fresh Pasture; grows with herd level. */
+export const PASTURE_BASE_SLOTS = 4;
+export const PASTURE_SLOTS_PER_LEVEL = 1;

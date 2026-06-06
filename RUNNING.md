@@ -70,14 +70,19 @@ daily tick.
 
 ---
 
-## Optional — the renderer dev page (Phase 2, standalone)
+## The web client
 
 ```powershell
-# Starts Vite. Expect: "Local: http://localhost:5173/". Open it to generate genotypes and
-# render horses. This page is NOT yet wired to the :3001 API — it runs genetics + rendering
-# entirely in the browser (the API integration is the next milestone).
+# Starts Vite. Expect: "Local: http://localhost:5173/".
+# With the server (Terminal 1) running, open it and LOG IN — e.g. the seeded tester /
+# horsehorse1 — to land on your herd home (name, Cubes, Level). The client proxies /api → the
+# server (same-origin, so the session cookie works); override the target with VITE_API_TARGET.
+# The Phase 2 renderer dev page is still here at /render.
 corepack pnpm --filter @blorse/web dev
 ```
+
+> Client wiring is in progress (phase C0 of the client plan — auth + herd home done; horse
+> list, breeding, adventures, and journal land in later phases).
 
 ---
 

@@ -1,10 +1,13 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import { ApiError } from '../api/client.js';
-import { getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
+import { care, getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
+import { assignJob, getJob, unassignJob, type JobAssignment } from '../api/jobs.js';
+import { getPasture, type Buildable } from '../api/workshop.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
+import { pretty } from '../util/format.js';
 
 const PERSONALITY_LABELS: Record<string, string> = {
   o: 'Openness',
@@ -35,6 +38,21 @@ export function HorseDetailPage(): ReactElement {
   const [horse, setHorse] = useState<Horse | null>(null);
   const [ped, setPed] = useState<Pedigree | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [careNote, setCareNote] = useState<string | null>(null);
+  const [careBusy, setCareBusy] = useState(false);
+  const [job, setJob] = useState<JobAssignment | null>(null);
+  const [jobStructures, setJobStructures] = useState<Buildable[]>([]);
+  const [pick, setPick] = useState('');
+  const [jobBusy, setJobBusy] = useState(false);
+
+  const loadJob = useCallback(() => {
+    if (!id) return;
+    getJob(id)
+      .then((r) => setJob(r.job))
+      .catch(() => {
+        /* ignore */
+      });
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -54,12 +72,66 @@ export function HorseDetailPage(): ReactElement {
         if (!cancelled) setPed(p);
       })
       .catch(() => {
-        /* pedigree is optional */
+        /* optional */
+      });
+    getJob(id)
+      .then((r) => {
+        if (!cancelled) setJob(r.job);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    getPasture()
+      .then((p) => {
+        if (!cancelled) setJobStructures(p.buildable.filter((b) => b.built && b.job));
+      })
+      .catch(() => {
+        /* ignore */
       });
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  async function doCare(action: 'feed' | 'groom'): Promise<void> {
+    if (!id) return;
+    setCareBusy(true);
+    setCareNote(null);
+    try {
+      setCareNote((await care(id, action)).message);
+    } catch (e) {
+      setCareNote(e instanceof ApiError ? e.message : 'Could not care for it.');
+    } finally {
+      setCareBusy(false);
+    }
+  }
+
+  async function assign(): Promise<void> {
+    if (!id || !pick) return;
+    setJobBusy(true);
+    try {
+      await assignJob(id, pick);
+      setPick('');
+      loadJob();
+    } catch {
+      /* ignore */
+    } finally {
+      setJobBusy(false);
+    }
+  }
+
+  async function unassign(): Promise<void> {
+    if (!id) return;
+    setJobBusy(true);
+    try {
+      await unassignJob(id);
+      loadJob();
+    } catch {
+      /* ignore */
+    } finally {
+      setJobBusy(false);
+    }
+  }
 
   if (error)
     return (
@@ -90,6 +162,49 @@ export function HorseDetailPage(): ReactElement {
           </p>
         </div>
       </div>
+
+      <h2 className="section-h">Care</h2>
+      <div className="row-actions">
+        <button disabled={careBusy} onClick={() => void doCare('feed')}>
+          🍎 Feed
+        </button>
+        <button disabled={careBusy} onClick={() => void doCare('groom')}>
+          🧽 Groom
+        </button>
+        {careNote && <span className="muted">{careNote}</span>}
+      </div>
+
+      {horse.lifeStage === 'adult' && (
+        <>
+          <h2 className="section-h">Job</h2>
+          {job ? (
+            <div className="row-actions">
+              <span>
+                Working the {pretty(job.structureType)} ({job.skill}) — earns Cubes each day.
+              </span>
+              <button disabled={jobBusy} onClick={() => void unassign()}>
+                Unassign
+              </button>
+            </div>
+          ) : jobStructures.length === 0 ? (
+            <p className="muted">Build a Workshop structure with a job first.</p>
+          ) : (
+            <div className="row-actions">
+              <select value={pick} onChange={(e) => setPick(e.target.value)}>
+                <option value="">— assign to a structure —</option>
+                {jobStructures.map((s) => (
+                  <option key={s.type} value={s.type}>
+                    {s.name} ({s.skill})
+                  </option>
+                ))}
+              </select>
+              <button className="primary" disabled={!pick || jobBusy} onClick={() => void assign()}>
+                Assign
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
       <h2 className="section-h">Stats</h2>
       <div className="kv-grid">

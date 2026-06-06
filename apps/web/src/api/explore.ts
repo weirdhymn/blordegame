@@ -36,3 +36,30 @@ export const getRegions = (): Promise<RegionView[]> => api.get<RegionView[]>('/r
 
 export const adventure = (regionId: string, party: string[]): Promise<AdventureResult> =>
   api.post<AdventureResult>('/adventure', { regionId, party });
+
+export interface ItemStack {
+  id: string;
+  qty: number;
+}
+
+export interface RoamResult {
+  ok: boolean;
+  regionId: string;
+  found: ItemStack[];
+  questCompletions: { questId: string; reward: { cubes?: number; items?: ItemStack[] } }[];
+}
+
+export interface QuestView {
+  questId: string;
+  title: string;
+  status: 'active' | 'completed';
+  objectives: { label: string; have: number; need: number }[];
+  reward: { cubes?: number; items?: ItemStack[] };
+}
+
+export const roam = (regionId: string): Promise<RoamResult> =>
+  api.post<RoamResult>(`/regions/${regionId}/roam`);
+
+export const getQuests = (): Promise<QuestView[]> => api.get<QuestView[]>('/quests');
+
+export const getInventory = (): Promise<ItemStack[]> => api.get<ItemStack[]>('/inventory');

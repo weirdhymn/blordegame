@@ -15,9 +15,11 @@ export function AppLayout(): ReactElement {
           <NavLink to="/" end>
             Pasture
           </NavLink>
-          <NavLink to="/breed">Breed</NavLink>
+          <NavLink to="/tavern">Tavern</NavLink>
           <NavLink to="/explore">Explore</NavLink>
-          <NavLink to="/journal">Journal</NavLink>
+          <NavLink to="/workshop">Workshop</NavLink>
+          <NavLink to="/market">Market</NavLink>
+          <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>
         </nav>
         <button onClick={() => void signOut()}>Log out</button>

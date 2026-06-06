@@ -8,6 +8,10 @@ import { HomePage } from './pages/HomePage.js';
 import { HorseDetailPage } from './pages/HorseDetailPage.js';
 import { JournalPage } from './pages/JournalPage.js';
 import { LoginPage } from './pages/LoginPage.js';
+import { TavernPage } from './pages/TavernPage.js';
+import { WorkshopPage } from './pages/WorkshopPage.js';
+import { MarketPage } from './pages/MarketPage.js';
+import { HerdPage } from './pages/HerdPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { useSession } from './session.js';
@@ -36,7 +40,11 @@ export function App(): ReactElement {
         <Route path="/" element={<HomePage />} />
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
+        <Route path="/tavern" element={<TavernPage />} />
         <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/market" element={<MarketPage />} />
+        <Route path="/herd" element={<HerdPage />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/guide" element={<FieldGuidePage />} />
       </Route>

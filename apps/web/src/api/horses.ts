@@ -35,3 +35,9 @@ export interface Pedigree {
 
 export const getPedigree = (id: string): Promise<Pedigree> =>
   api.get<Pedigree>(`/horses/${id}/pedigree`);
+
+export const care = (
+  id: string,
+  action: 'feed' | 'groom',
+): Promise<{ ok: boolean; message: string; careCount: number }> =>
+  api.post<{ ok: boolean; message: string; careCount: number }>(`/horses/${id}/care`, { action });

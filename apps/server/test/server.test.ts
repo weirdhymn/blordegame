@@ -46,11 +46,15 @@ function cookieOf(res: InjectResult): string {
 async function main(): Promise<void> {
   const db = createPgliteDb();
   await runMigrations(db);
-  // High global cap so the fast inject() burst below isn't throttled; the tight
-  // per-route /report limit (max 5) is exercised on its own in the §11 section.
-  const app = buildApp(db, { rateLimitMax: 100_000 });
+  // High caps so the fast inject() burst below isn't throttled; the tight per-route limits
+  // (/report 5/min, auth 8/min) are exercised on their own. allowMint:true keeps the founder
+  // faucet open for the suite (prod locks it to admins — see the gate tests below).
+  const app = buildApp(db, { rateLimitMax: 100_000, authRateLimitMax: 100_000, allowMint: true });
   await app.ready();
-  const inject = (opts: InjectOptions) => app.inject(opts);
+  // The API is mounted under /api (prod serves the SPA at the root); prefix every call so the
+  // assertions below read unchanged. (/health, the only root route, isn't exercised here.)
+  const inject = (opts: InjectOptions) =>
+    app.inject({ ...opts, url: `/api${typeof opts.url === 'string' ? opts.url : ''}` });
 
   // --- register: creates User + 1:1 Herd, issues a session ---
   const reg = await inject({
@@ -993,6 +997,85 @@ async function main(): Promise<void> {
     if (r.statusCode === 429) sawRateLimit = true;
   }
   check('the report endpoint rate-limits a burst (429)', sawRateLimit);
+
+  // ───────────────────────── prod-hardening gates ─────────────────────────
+  // Fresh app instances exercise the production gates (the main suite runs with them open).
+
+  // 1) Auth rate limit — a burst of logins from one IP gets throttled.
+  {
+    const gdb = createPgliteDb();
+    await runMigrations(gdb);
+    const gapp = buildApp(gdb, { rateLimitMax: 100_000, authRateLimitMax: 3 });
+    await gapp.ready();
+    let throttled = false;
+    for (let i = 0; i < 6; i++) {
+      const r = await gapp.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'nobody', password: 'whatever8' },
+      });
+      if (r.statusCode === 429) throttled = true;
+    }
+    check('auth routes rate-limit a burst (429)', throttled);
+    await gapp.close();
+  }
+
+  // 2) Invite gate — closed without a code, open with a valid one.
+  {
+    const gdb = createPgliteDb();
+    await runMigrations(gdb);
+    const gapp = buildApp(gdb, {
+      rateLimitMax: 100_000,
+      authRateLimitMax: 100_000,
+      requireInvite: true,
+      inviteCodes: ['WAVE1'],
+    });
+    await gapp.ready();
+    eq(
+      'register without an invite → 403',
+      (
+        await gapp.inject({
+          method: 'POST',
+          url: '/api/auth/register',
+          payload: { username: 'gatekept', password: 'horsehorse1' },
+        })
+      ).statusCode,
+      403,
+    );
+    eq(
+      'register with a valid invite → 201',
+      (
+        await gapp.inject({
+          method: 'POST',
+          url: '/api/auth/register',
+          payload: { username: 'invited', password: 'horsehorse1', inviteCode: 'WAVE1' },
+        })
+      ).statusCode,
+      201,
+    );
+    await gapp.close();
+  }
+
+  // 3) Mint lock — a non-admin can't use POST /horses when allowMint is off (the prod default).
+  {
+    const gdb = createPgliteDb();
+    await runMigrations(gdb);
+    const gapp = buildApp(gdb, { rateLimitMax: 100_000, authRateLimitMax: 100_000 });
+    await gapp.ready();
+    const reg = await gapp.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'minter', password: 'horsehorse1' },
+    });
+    const mint = await gapp.inject({
+      method: 'POST',
+      url: '/api/horses',
+      headers: { cookie: cookieOf(reg) },
+      payload: { genotype: { E: 'Ee' }, lifeStage: 'adult' },
+    });
+    eq('non-admin mint is locked → 403', mint.statusCode, 403);
+    await gapp.close();
+  }
 
   await app.close();
 

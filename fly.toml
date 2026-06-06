@@ -1,0 +1,41 @@
+# Fly.io config for BLORSE — one same-origin machine + a persistent volume for PGlite.
+# Prepared, NOT deployed. `fly launch` will reconcile app name + region; review before deploy.
+# Open a wave AFTER the persistence-proof passes:  fly secrets set INVITE_CODES=wave1-xxxx
+app = "blorsegame"
+primary_region = "iad" # change to your nearest Fly region
+
+[build]
+  dockerfile = "apps/server/Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+  TRUST_PROXY = "true"
+  WEB_DIR = "/app/apps/web/dist"
+  DATABASE_URL = "file:/data/blorse"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  # Always-on (one machine) keeps the volume attachment + canary test predictable.
+  # Cost optimisation later: auto_stop_machines = "stop" + min_machines_running = 0.
+  auto_stop_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "25s"
+    method = "GET"
+    path = "/health"
+
+# The persistent disk. PGlite writes to /data/blorse; this volume survives restarts AND
+# redeploys (verified by the §C canary test before anyone is invited).
+[mounts]
+  source = "blorse_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

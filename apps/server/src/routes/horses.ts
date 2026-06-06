@@ -35,12 +35,19 @@ interface MintBody {
   seed?: number;
 }
 
-export function registerHorseRoutes(app: FastifyInstance, db: DB): void {
-  // Mint a horse into the caller's herd. A dev/founder faucet — in the live game,
-  // horses arrive via breeding (Phase 4) and wild encounters (Phase 8).
+export function registerHorseRoutes(
+  app: FastifyInstance,
+  db: DB,
+  cfg: { allowMint: boolean },
+): void {
+  // Mint a horse into the caller's herd. A dev/founder faucet — gated to admins in prod
+  // (allowMint=false) so a tester can't spawn horses and break the breeding economy.
   app.post('/horses', async (req, reply) => {
     const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
+    if (!cfg.allowMint && user.role !== 'admin') {
+      return reply.code(403).send({ error: 'minting is disabled', code: 'mint_disabled' });
+    }
     const herd = await getHerdForUser(db, user.id);
     if (!herd) return reply.code(404).send({ error: 'no herd' });
 

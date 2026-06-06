@@ -20,8 +20,12 @@ export interface AuthResult {
 
 export const getMe = (): Promise<AuthResult> => api.get<AuthResult>('/me');
 
-export const register = (username: string, password: string): Promise<AuthResult> =>
-  api.post<AuthResult>('/auth/register', { username, password });
+export const register = (
+  username: string,
+  password: string,
+  inviteCode?: string,
+): Promise<AuthResult> =>
+  api.post<AuthResult>('/auth/register', { username, password, inviteCode });
 
 export const login = (username: string, password: string): Promise<AuthResult> =>
   api.post<AuthResult>('/auth/login', { username, password });

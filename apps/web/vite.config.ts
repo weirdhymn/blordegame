@@ -18,11 +18,8 @@ export default defineConfig({
     // the httpOnly session cookie rides automatically (no CORS). Prod should serve the
     // built client same-origin with the API (static-serve or a reverse proxy).
     proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ''),
-      },
+      // Pass /api straight through — the server mounts its API under /api (same path as prod).
+      '/api': { target: apiTarget, changeOrigin: true },
     },
   },
 });

@@ -9,6 +9,7 @@ export function RegisterPage(): ReactElement {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +18,7 @@ export function RegisterPage(): ReactElement {
     setBusy(true);
     setError(null);
     try {
-      const res = await register(username.trim(), password);
+      const res = await register(username.trim(), password, inviteCode.trim() || undefined);
       setSession(res.user, res.herd);
       navigate('/');
     } catch (err) {
@@ -50,7 +51,15 @@ export function RegisterPage(): ReactElement {
             autoComplete="new-password"
           />
         </label>
-        <p className="hint">Username 3–24 characters · password at least 8.</p>
+        <label className="field">
+          <span>Invite code</span>
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            autoComplete="off"
+          />
+        </label>
+        <p className="hint">Username 3–24 characters · password 8+ · invite code required.</p>
         {error && (
           <div className="error" role="alert">
             {error}

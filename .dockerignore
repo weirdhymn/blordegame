@@ -8,16 +8,12 @@ node_modules
 .vscode
 .idea
 
-# Build/output + logs
+# Build output (the web client is rebuilt inside the image) + local PGlite data + logs
 **/dist
 **/.cache
+**/.data
 **/*.log
 **/*.local
-
-# The web client isn't part of the server image — but keep its manifest so the
-# pnpm workspace graph still resolves during the filtered install.
-apps/web/*
-!apps/web/package.json
 
 # OS cruft
 .DS_Store

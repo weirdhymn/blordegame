@@ -1,10 +1,11 @@
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from './auth/tokens.js';
 import type { DB } from './db/client.js';
 import { registerAdventureRoutes } from './routes/adventure.js';
-import { registerAuthRoutes } from './routes/auth.js';
+import { registerAuthRoutes, type AuthConfig } from './routes/auth.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
 import { registerDailyRoutes } from './routes/daily.js';
@@ -16,18 +17,45 @@ import { registerSocialRoutes } from './routes/social.js';
 import { resolveSessionUser } from './services/auth.js';
 
 export interface AppOptions {
-  /** Global per-IP request ceiling per minute (§11). Tests that aren't exercising the
-   *  limiter pass a high value so a fast burst of inject() calls isn't throttled. */
+  /** Global per-IP request ceiling per minute (§11). Tests pass a high value so a fast
+   *  burst of inject() calls isn't throttled. */
   rateLimitMax?: number;
+  /** Tight per-IP cap on /api/auth/login + /register per minute (default 8). */
+  authRateLimitMax?: number;
+  /** Require a valid invite code at registration (default false → open signups). */
+  requireInvite?: boolean;
+  /** Accepted invite codes — a wave is one code. */
+  inviteCodes?: string[];
+  /** Allow any authed user to mint via POST /horses (default false → admin-only). */
+  allowMint?: boolean;
+  /** Set the Secure flag on the session cookie (prod over HTTPS). */
+  secureCookie?: boolean;
+  /** Trust X-Forwarded-* headers — true behind a platform proxy (Fly) so rate-limit keys on
+   *  the real client IP, not the proxy. */
+  trustProxy?: boolean;
+  /** Absolute path to the built web client (apps/web/dist). When set, the server serves it
+   *  same-origin with an SPA fallback. Unset (tests/dev) → API only. */
+  webDir?: string;
 }
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
 export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const cfg = {
+    rateLimitMax: opts.rateLimitMax ?? 600,
+    authRateLimitMax: opts.authRateLimitMax ?? 8,
+    requireInvite: opts.requireInvite ?? false,
+    inviteCodes: opts.inviteCodes ?? [],
+    allowMint: opts.allowMint ?? false,
+    secureCookie: opts.secureCookie ?? false,
+    trustProxy: opts.trustProxy ?? false,
+    webDir: opts.webDir,
+  };
+
+  const app = Fastify({ logger: false, trustProxy: cfg.trustProxy });
   app.register(cookie);
-  // Anti-abuse rate limiting (§11). Generous global ceiling; sensitive routes set
-  // a tighter per-route `config.rateLimit`. Keyed by client IP, in-memory store.
-  app.register(rateLimit, { global: true, max: opts.rateLimitMax ?? 600, timeWindow: '1 minute' });
+  // Anti-abuse rate limiting (§11). Generous global ceiling; sensitive routes set a tighter
+  // per-route `config.rateLimit`. Keyed by client IP (real IP when trustProxy is on).
+  app.register(rateLimit, { global: true, max: cfg.rateLimitMax, timeWindow: '1 minute' });
 
   // Consistent JSON error envelopes (§11) so the client never sees a raw stack.
   app.setErrorHandler((err: FastifyError, _req, reply) => {
@@ -35,38 +63,60 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
     const message = status >= 500 ? 'internal server error' : (err.message ?? 'error');
     reply.code(status).send({ error: message, code: err.code });
   });
-  app.setNotFoundHandler((_req, reply) => {
-    reply.code(404).send({ error: 'not found', code: 'not_found' });
+  // SPA fallback (prod): serve index.html for browser navigations to client routes (deep
+  // links / refresh); everything else stays a 404 JSON. Off when no web build is served.
+  app.setNotFoundHandler((req, reply) => {
+    if (cfg.webDir && req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')) {
+      return reply.sendFile('index.html');
+    }
+    return reply.code(404).send({ error: 'not found', code: 'not_found' });
   });
 
-  // Moderation freeze (§11): a frozen account may read, but every state-changing
-  // request (non-GET, outside /auth) is refused. Centralised so no route can forget it.
+  // Moderation freeze (§11): a frozen account may read, but every state-changing request
+  // (non-GET, outside /api/auth) is refused. Centralised so no route can forget it.
   app.addHook('preHandler', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
-    if (req.url.startsWith('/auth/')) return;
+    if (req.url.startsWith('/api/auth/')) return;
     const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
     if (user?.frozen) {
       return reply.code(403).send({ error: 'account frozen', code: 'frozen' });
     }
   });
 
+  // Health stays at the root for the platform/Docker healthcheck (no prefix, no auth).
   app.get('/health', () => ({ status: 'ok' }));
 
-  // Routes live in a child plugin registered AFTER rate-limit so that avvio loads the
-  // limiter first — its `onRoute` listener must be attached before these routes are
-  // added, or per-route `config.rateLimit` (e.g. /report) is silently ignored.
-  app.register(async (instance) => {
-    registerAuthRoutes(instance, db);
-    registerHorseRoutes(instance, db);
-    registerBreedingRoutes(instance, db);
-    registerExplorationRoutes(instance, db);
-    registerDailyRoutes(instance, db);
-    registerPastureRoutes(instance, db);
-    registerAdventureRoutes(instance, db);
-    registerSocialRoutes(instance, db);
-    registerEconomyRoutes(instance, db);
-    registerModerationRoutes(instance, db);
-  });
+  // Same-origin static serving of the built client (prod). wildcard:false → unmatched paths
+  // fall through to the SPA notFound handler above.
+  if (cfg.webDir) {
+    app.register(fastifyStatic, { root: cfg.webDir, wildcard: false });
+  }
+
+  const authCfg: AuthConfig = {
+    requireInvite: cfg.requireInvite,
+    inviteCodes: cfg.inviteCodes,
+    secureCookie: cfg.secureCookie,
+    authRateLimitMax: cfg.authRateLimitMax,
+  };
+
+  // API under /api so client routes (/, /horses/:id, /breed, …) never collide with endpoints.
+  // Registered AFTER rate-limit so per-route `config.rateLimit` is honoured (the avvio
+  // onRoute-ordering fix, §11).
+  app.register(
+    async (instance) => {
+      registerAuthRoutes(instance, db, authCfg);
+      registerHorseRoutes(instance, db, { allowMint: cfg.allowMint });
+      registerBreedingRoutes(instance, db);
+      registerExplorationRoutes(instance, db);
+      registerDailyRoutes(instance, db);
+      registerPastureRoutes(instance, db);
+      registerAdventureRoutes(instance, db);
+      registerSocialRoutes(instance, db);
+      registerEconomyRoutes(instance, db);
+      registerModerationRoutes(instance, db);
+    },
+    { prefix: '/api' },
+  );
 
   return app;
 }

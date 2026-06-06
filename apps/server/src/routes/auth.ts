@@ -28,10 +28,18 @@ function validateCreds(body: unknown): Credentials | null {
   return { username: u, password };
 }
 
-function setSessionCookie(reply: FastifyReply, token: string): void {
+export interface AuthConfig {
+  requireInvite: boolean;
+  inviteCodes: string[];
+  secureCookie: boolean;
+  authRateLimitMax: number;
+}
+
+function setSessionCookie(reply: FastifyReply, token: string, secure: boolean): void {
   reply.setCookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
+    secure,
     path: '/',
     maxAge: Math.floor(SESSION_TTL_MS / 1000),
   });
@@ -41,13 +49,27 @@ function publicHerd(herd: HerdRow) {
   return { id: herd.id, name: herd.name, cubes: herd.cubes, level: herd.level };
 }
 
-export function registerAuthRoutes(app: FastifyInstance, db: DB): void {
-  app.post('/auth/register', async (req, reply) => {
+export function registerAuthRoutes(app: FastifyInstance, db: DB, cfg: AuthConfig): void {
+  // Tight per-IP cap on the credential endpoints (anti brute-force). Keyed on the real client
+  // IP when trustProxy is on, so distinct testers land in distinct buckets.
+  const authLimit = {
+    config: { rateLimit: { max: cfg.authRateLimitMax, timeWindow: '1 minute' } },
+  };
+
+  app.post('/auth/register', authLimit, async (req, reply) => {
+    if (cfg.requireInvite) {
+      const code = ((req.body as { inviteCode?: string } | undefined)?.inviteCode ?? '').trim();
+      if (!code || !cfg.inviteCodes.includes(code)) {
+        return reply
+          .code(403)
+          .send({ error: 'a valid invite code is required', code: 'invite_required' });
+      }
+    }
     const creds = validateCreds(req.body);
     if (!creds) return reply.code(400).send({ error: 'invalid username or password' });
     try {
       const { user, herd } = await registerUser(db, creds.username, creds.password);
-      setSessionCookie(reply, await createSession(db, user.id));
+      setSessionCookie(reply, await createSession(db, user.id), cfg.secureCookie);
       return reply
         .code(201)
         .send({ user: { id: user.id, username: user.username }, herd: publicHerd(herd) });
@@ -57,12 +79,12 @@ export function registerAuthRoutes(app: FastifyInstance, db: DB): void {
     }
   });
 
-  app.post('/auth/login', async (req, reply) => {
+  app.post('/auth/login', authLimit, async (req, reply) => {
     const creds = validateCreds(req.body);
     if (!creds) return reply.code(400).send({ error: 'invalid credentials' });
     const res = await login(db, creds.username, creds.password);
     if (!res) return reply.code(401).send({ error: 'invalid credentials' });
-    setSessionCookie(reply, await createSession(db, res.user.id));
+    setSessionCookie(reply, await createSession(db, res.user.id), cfg.secureCookie);
     const daily = await advanceHerd(db, res.herd.id, Date.now()); // catch up on login (§8.2)
     return reply.send({
       user: { id: res.user.id, username: res.user.username },

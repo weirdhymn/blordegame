@@ -22,3 +22,6 @@ coverage/
 # editor / OS
 .DS_Store
 *.log
+
+# local launchers (machine-specific paths, e.g. play-blorse.bat) — keep on disk, don't track
+*.bat

@@ -22,6 +22,8 @@ export const ITEMS: ItemDef[] = [
   { id: 'book', name: 'Book', kind: 'book' },
   { id: 'board-game', name: 'Board Game', kind: 'game' },
   { id: 'tool', name: 'Tool', kind: 'tool' },
+  // rare adventure drop
+  { id: 'rare-gem', name: 'Rare Gem', kind: 'material' },
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((i) => [i.id, i]));

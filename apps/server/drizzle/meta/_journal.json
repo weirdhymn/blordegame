@@ -43,6 +43,13 @@
       "when": 1780715982547,
       "tag": "0005_fancy_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780716412884,
+      "tag": "0006_woozy_gorilla_man",
+      "breakpoints": true
     }
   ]
 }

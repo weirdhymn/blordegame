@@ -9,6 +9,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
+import { adventure } from '../src/services/adventure.js';
 import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
@@ -560,6 +561,67 @@ async function main(): Promise<void> {
   }>();
   const reading = worked.skills.reading ?? { level: 0, xp: 0 };
   check('the worker gained Reading progress', reading.level + reading.xp > 0);
+
+  // --- Phase 8b: adventures & the Tavern ---
+  const advRun = await inject({
+    method: 'POST',
+    url: '/adventure',
+    headers: { cookie },
+    payload: { regionId: 'green-grass', party: [id, mateId, hs1.id] },
+  });
+  eq('adventure → 200', advRun.statusCode, 200);
+  const advBody = advRun.json<{ encounters: unknown[]; loot: unknown[] }>();
+  check('adventure ran an encounter chain', advBody.encounters.length >= 3);
+  check('adventure yielded loot', advBody.loot.length > 0);
+
+  const lockedAdv = await inject({
+    method: 'POST',
+    url: '/adventure',
+    headers: { cookie },
+    payload: { regionId: 'weird-woods', party: [id] },
+  });
+  eq('adventure into a locked region → 403', lockedAdv.statusCode, 403);
+
+  const bigParty = await inject({
+    method: 'POST',
+    url: '/adventure',
+    headers: { cookie },
+    payload: { regionId: 'green-grass', party: [id, mateId, hs1.id, hs2.id, gp1.id] },
+  });
+  eq('party larger than 4 → 400', bigParty.statusCode, 400);
+
+  // forced wild encounter with a FULL party → it walks to the Tavern (via the service)
+  const wildAdv = await adventure(db, herdId, 'green-grass', [id, mateId, hs1.id, hs2.id], {
+    forceWild: true,
+    seed: 12345,
+  });
+  check('a wild horse appeared', wildAdv.ok && wildAdv.wild !== null);
+  check('full party → wild walks to the Tavern', wildAdv.ok && wildAdv.wild?.toTavern === true);
+  const wildId = wildAdv.ok && wildAdv.wild ? wildAdv.wild.horseId : '';
+
+  const tavern = (await inject({ method: 'GET', url: '/tavern', headers: { cookie } })).json<
+    { id: string; fee: number }[]
+  >();
+  check('the Tavern lists strays with a fee', tavern.length > 0 && tavern.every((t) => t.fee > 0));
+
+  const recruit = await inject({
+    method: 'POST',
+    url: `/tavern/${wildId}/recruit`,
+    headers: { cookie },
+    payload: {},
+  });
+  eq('recruit from the Tavern → 201', recruit.statusCode, 201);
+  const owned = (await inject({ method: 'GET', url: `/horses/${wildId}` })).json<{
+    herdId: string | null;
+  }>();
+  eq('recruited horse is now owned', owned.herdId, herdId);
+  const recruit2 = await inject({
+    method: 'POST',
+    url: `/tavern/${wildId}/recruit`,
+    headers: { cookie },
+    payload: {},
+  });
+  check('re-recruiting a claimed horse fails (atomic)', recruit2.statusCode !== 201);
 
   await app.close();
 

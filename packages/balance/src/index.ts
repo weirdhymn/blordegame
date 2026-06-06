@@ -102,3 +102,19 @@ export const JOB_CUBES_BASE = 10;
 export const JOB_XP_BASE = 20;
 /** XP needed to go from level L to L+1 = SKILL_XP_PER_LEVEL × (L + 1). */
 export const SKILL_XP_PER_LEVEL = 100;
+
+// ── Adventures & the Tavern (Phase 8b, §9.3, §14.3–14.5) ────────────────────
+export const ADVENTURE_XP = 30;
+/** Per-adventure chance a wild horse appears — the main new-horse faucet (§9.3). */
+export const WILD_ENCOUNTER_CHANCE = 0.5;
+export const RARE_ITEM = 'rare-gem';
+
+/** Wild-horse accept odds (§14.4). The personality terms (A/N/E) join in Phase 9. */
+export function acceptChance(avgPartyCha: number): number {
+  return Math.max(0.1, Math.min(0.9, 0.5 + 0.25 * ((avgPartyCha - 10) / 10)));
+}
+
+/** Chance an encounter also drops a rare item (§14.5). */
+export function rareItemChance(tier: number, margin: number, crit: boolean): number {
+  return 0.02 + 0.025 * (tier - 1) + 0.01 * Math.max(0, Math.min(10, margin)) + (crit ? 0.15 : 0);
+}

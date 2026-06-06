@@ -78,6 +78,11 @@ export const horses = pgTable(
       .notNull()
       .default({}),
     accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
+    // Tavern (§10): set when an unrecruited wild horse walks to the shared pool.
+    tavernFee: integer('tavern_fee'),
+    firstEncounteredBy: uuid('first_encountered_by').references((): AnyPgColumn => herds.id, {
+      onDelete: 'set null',
+    }),
   },
   (t) => [index('horses_herd_idx').on(t.herdId)],
 );

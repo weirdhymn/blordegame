@@ -1,6 +1,7 @@
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { DB } from './db/client.js';
+import { registerAdventureRoutes } from './routes/adventure.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
 import { registerDailyRoutes } from './routes/daily.js';
@@ -21,6 +22,7 @@ export function buildApp(db: DB): FastifyInstance {
   registerExplorationRoutes(app, db);
   registerDailyRoutes(app, db);
   registerPastureRoutes(app, db);
+  registerAdventureRoutes(app, db);
 
   return app;
 }

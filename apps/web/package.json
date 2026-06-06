@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "BLORSE client — React + Vite + PixiJS (PixiJS arrives in Phase 2).",
+  "description": "BLORSE client — React + Vite. Phase 2 renderer dev page (Canvas 2D compositor).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@blorse/genetics": "workspace:*",
+    "@blorse/render-core": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -1,4 +1,4 @@
-import { hexToHsl, hslToHex } from '@blorse/genetics';
+import { hexToHsl, hslToHex, varySwatch } from '@blorse/genetics';
 import type { Phenotype } from '@blorse/genetics';
 import { transformHex } from './glitch.js';
 import * as PM from './palette-map.js';
@@ -70,7 +70,8 @@ export function buildRenderSpec(r: Phenotype, opts: BuildSpecOptions = {}): Rend
   const glitch = opts.glitch ?? null;
   const isFoal = lifeStage === 'foal';
 
-  const baseHex = isHex(r.swatch) ? r.swatch : PM.FALLBACK_SWATCH;
+  // Per-individual color: jitter the body swatch by the stored seed (§4.3, §5.4).
+  const baseHex = isHex(r.swatch) ? varySwatch(r, seed) : PM.FALLBACK_SWATCH;
   const isWhite = r.flags.isWhiteMasked || r.flags.sabinoWhite;
   const isGray = r.flags.isGray || r.flags.isGraying;
 

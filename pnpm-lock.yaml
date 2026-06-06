@@ -48,6 +48,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@blorse/genetics':
+        specifier: workspace:*
+        version: link:../../packages/genetics
+      '@blorse/render-core':
+        specifier: workspace:*
+        version: link:../../packages/render-core
       react:
         specifier: ^18.3.1
         version: 18.3.1

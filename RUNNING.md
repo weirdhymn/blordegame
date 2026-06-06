@@ -81,8 +81,9 @@ daily tick.
 corepack pnpm --filter @blorse/web dev
 ```
 
-> Client wiring is in progress (phase C0 of the client plan — auth + herd home done; horse
-> list, breeding, adventures, and journal land in later phases).
+> The client now covers the full core loop: sign in → browse your **Pasture** → open a horse
+> (stats, skills, personality, pedigree) → **Breed** (with punnett odds) → **Explore**/adventure
+> → **Journal** + **Field Guide**. The Phase 2 renderer dev page is still at `/render`.
 
 ---
 

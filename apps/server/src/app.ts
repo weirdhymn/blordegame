@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { DB } from './db/client.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
+import { registerDailyRoutes } from './routes/daily.js';
 import { registerExplorationRoutes } from './routes/exploration.js';
 import { registerHorseRoutes } from './routes/horses.js';
 
@@ -17,6 +18,7 @@ export function buildApp(db: DB): FastifyInstance {
   registerHorseRoutes(app, db);
   registerBreedingRoutes(app, db);
   registerExplorationRoutes(app, db);
+  registerDailyRoutes(app, db);
 
   return app;
 }

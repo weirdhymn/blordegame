@@ -67,6 +67,9 @@ export const horses = pgTable(
     bornAt: timestamp('born_at', { withTimezone: true }).notNull().defaultNow(),
     /** Per-parent breeding cooldown cursor (§7); null = never bred. */
     lastBredAt: timestamp('last_bred_at', { withTimezone: true }),
+    /** Light-care counter (§7) — a hook for small bonuses once stats land (Phase 8). */
+    careCount: integer('care_count').notNull().default(0),
+    lastCaredAt: timestamp('last_cared_at', { withTimezone: true }),
   },
   (t) => [index('horses_herd_idx').on(t.herdId)],
 );
@@ -134,6 +137,23 @@ export const questProgress = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (t) => [uniqueIndex('quest_progress_herd_quest_idx').on(t.herdId, t.questId)],
+);
+
+/** Per-herd record of discovered coats — the Field Guide (collection pillar, §6/§7). */
+export const fieldGuide = pgTable(
+  'field_guide',
+  {
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    colorSlug: text('color_slug').notNull(),
+    name: text('name').notNull(),
+    firstHorseId: uuid('first_horse_id').references((): AnyPgColumn => horses.id, {
+      onDelete: 'set null',
+    }),
+    discoveredAt: timestamp('discovered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.herdId, t.colorSlug] })],
 );
 
 export type UserRow = typeof users.$inferSelect;

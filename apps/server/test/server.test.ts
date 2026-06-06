@@ -3,12 +3,14 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
+import { FOAL_TO_ADULT_MS } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { breedHorses } from '../src/services/breeding.js';
+import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
 import { mulberry32 } from '../src/util/rng.js';
 
@@ -321,6 +323,68 @@ async function main(): Promise<void> {
     headers: { cookie },
   });
   eq('roam Dusty Dunes → 200', duneRoam.statusCode, 200);
+
+  // --- Phase 6: aging, care & daily rhythm ---
+  const DAY_MS = 86_400_000;
+  const baseNow = Date.now();
+
+  // login-catchup: a fresh herd, 3 days later → exactly 3 daily stipends (deterministic)
+  const reg2 = await inject({
+    method: 'POST',
+    url: '/auth/register',
+    payload: { username: 'pepper', password: 'hunter2horse' },
+  });
+  const herd2Id = reg2.json<{ herd: { id: string } }>().herd.id;
+  const adv = await advanceHerd(db, herd2Id, baseNow + 3 * DAY_MS);
+  eq('login-catchup advances 3 days', adv.daysAdvanced, 3);
+  eq('catch-up grants 3x the daily Cubes', adv.cubesGained, 150);
+
+  // maturation: the white foal reveals its coat at adulthood
+  const beforeSpec = await inject({ method: 'GET', url: `/horses/${foal.id}/spec` });
+  eq(
+    'foal renders white before maturity',
+    beforeSpec.json<{ foalWhite: boolean }>().foalWhite,
+    true,
+  );
+  const matured = await advanceHerd(db, herdId, baseNow + FOAL_TO_ADULT_MS + 60_000);
+  check('foal matured on check-in', matured.matured.includes(foal.id));
+  const grown = await inject({ method: 'GET', url: `/horses/${foal.id}` });
+  eq('matured foal is now adult', grown.json<{ lifeStage: string }>().lifeStage, 'adult');
+  const afterSpec = await inject({ method: 'GET', url: `/horses/${foal.id}/spec` });
+  eq('coat revealed at adulthood', afterSpec.json<{ foalWhite: boolean }>().foalWhite, false);
+
+  // Field Guide: the adult Bay was discovered at mint; the foal's reveal adds more
+  const fg = (await inject({ method: 'GET', url: '/field-guide', headers: { cookie } })).json<{
+    discovered: { slug: string }[];
+    discoveredCount: number;
+    catalogSize: number;
+  }>();
+  check('field guide has discoveries', fg.discoveredCount > 0);
+  check('field guide knows the catalog size', fg.catalogSize > 0);
+  check(
+    'Bay is in the field guide',
+    fg.discovered.some((d) => d.slug === 'bay'),
+  );
+
+  // care: cozy, once per day
+  const care1 = await inject({
+    method: 'POST',
+    url: `/horses/${id}/care`,
+    headers: { cookie },
+    payload: { action: 'feed' },
+  });
+  eq('care → 200', care1.statusCode, 200);
+  const care2 = await inject({
+    method: 'POST',
+    url: `/horses/${id}/care`,
+    headers: { cookie },
+    payload: { action: 'groom' },
+  });
+  eq('second care same day → 409', care2.statusCode, 409);
+
+  // POST /daily on the real clock (already caught up → no-op, 200)
+  const daily = await inject({ method: 'POST', url: '/daily', headers: { cookie } });
+  eq('POST /daily → 200', daily.statusCode, 200);
 
   await app.close();
 

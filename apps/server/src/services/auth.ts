@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword } from '../auth/password.js';
 import { generateSessionToken, hashToken, SESSION_TTL_MS } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import { herds, sessions, users, type HerdRow, type UserRow } from '../db/schema.js';
+import { gameDay } from '../util/clock.js';
 
 // Placeholder herd names (fruit/veg, like default horse names §6) until lore lands.
 const HERD_NAMES = ['Plum', 'Pepper', 'Turnip', 'Cherry', 'Parsnip', 'Mango', 'Radish', 'Fig'];
@@ -36,7 +37,12 @@ export async function registerUser(
     const name = `${HERD_NAMES[randomInt(HERD_NAMES.length)] ?? 'Wandering'} Herd`;
     const [herd] = await tx
       .insert(herds)
-      .values({ userId: user.id, name, simSeed: randomInt(1, 2 ** 31) })
+      .values({
+        userId: user.id,
+        name,
+        simSeed: randomInt(1, 2 ** 31),
+        lastSimTick: gameDay(Date.now()), // start the daily-rollover cursor at today
+      })
       .returning();
     if (!herd) throw new Error('failed to create herd');
     return { user, herd };

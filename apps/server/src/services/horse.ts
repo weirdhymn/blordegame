@@ -9,6 +9,7 @@ import {
 } from '@blorse/render-core';
 import type { DB } from '../db/client.js';
 import { horseAncestors, horses, type HorseRow } from '../db/schema.js';
+import { recordDiscovery } from './fieldguide.js';
 
 export interface MintInput {
   herdId: string | null;
@@ -41,6 +42,11 @@ export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
     .returning();
   if (!horse) throw new Error('failed to mint horse');
   await materializeAncestors(db, horse.id, [input.parentA, input.parentB]);
+  // Adults reveal their coat immediately → enter the Field Guide. Foals are white
+  // until they mature (the reveal is recorded then, by the daily check-in).
+  if (horse.herdId && horse.lifeStage === 'adult') {
+    await recordDiscovery(db, horse.herdId, horse);
+  }
   return horse;
 }
 

@@ -62,3 +62,7 @@ export const FOAL_TO_ADULT_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 // ── Exploration (Phase 5) — v0 dials ────────────────────────────────────────
 export const ROAM_DROPS_MIN = 1;
 export const ROAM_DROPS_MAX = 3;
+
+// ── Daily rhythm (Phase 6) ──────────────────────────────────────────────────
+/** Cubes granted per daily rollover (login-catchup accrues one per missed day). */
+export const DAILY_CUBES = 50;

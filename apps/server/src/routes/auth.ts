@@ -11,6 +11,7 @@ import {
   resolveSessionUser,
   UsernameTakenError,
 } from '../services/auth.js';
+import { advanceHerd } from '../services/daily.js';
 
 interface Credentials {
   username: string;
@@ -62,9 +63,11 @@ export function registerAuthRoutes(app: FastifyInstance, db: DB): void {
     const res = await login(db, creds.username, creds.password);
     if (!res) return reply.code(401).send({ error: 'invalid credentials' });
     setSessionCookie(reply, await createSession(db, res.user.id));
+    const daily = await advanceHerd(db, res.herd.id, Date.now()); // catch up on login (§8.2)
     return reply.send({
       user: { id: res.user.id, username: res.user.username },
       herd: publicHerd(res.herd),
+      daily,
     });
   });
 

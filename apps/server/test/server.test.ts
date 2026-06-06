@@ -4,10 +4,13 @@
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
 import {
+  ADVENTURE_HARMONY_MAX,
   ADVENTURE_MARK_THRESHOLD,
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
+  BONDED_THRESHOLD,
   FOAL_TO_ADULT_MS,
+  FRIEND_THRESHOLD,
   SKILL_KEYS,
   STARTING_CUBES,
   STAT_KEYS,
@@ -39,6 +42,7 @@ import {
   availableChoices,
   chooseInRun,
   partyHarmony,
+  partyHasBond,
   resolveChoice,
   startRun,
 } from '../src/services/adventure-run.js';
@@ -771,6 +775,75 @@ async function main(): Promise<void> {
     'a clashing party harmonizes worse than a compatible one',
     partyHarmony([clash1, clash2]) < harmonyBonus,
   );
+
+  // §bonds: the harmony buff reads the *stored relationship graph*, not just innate personality.
+  const calmBondKey = { horseA: calm1.id, horseB: calm2.id };
+  const freshHarmony = partyHarmony([calm1, calm2]); // no bonds → personality proxy
+  const bondedHarmony = partyHarmony(
+    [calm1, calm2],
+    [{ ...calmBondKey, affinity: BONDED_THRESHOLD, type: 'bonded' }],
+  );
+  check('a bonded pair out-harmonizes the same pair as strangers', bondedHarmony > freshHarmony);
+  check('a stored bond lifts harmony to the max', bondedHarmony === ADVENTURE_HARMONY_MAX);
+  check(
+    'a rival pair gives no harmony but never a penalty (cozy, buff-only)',
+    partyHarmony([calm1, calm2], [{ ...calmBondKey, affinity: -50, type: 'rival' }]) === 0,
+  );
+  check(
+    'partyHasBond flags a friendly/bonded pair',
+    partyHasBond(
+      [calm1, calm2],
+      [{ ...calmBondKey, affinity: FRIEND_THRESHOLD, type: 'friend' }],
+    ) && !partyHasBond([calm1, calm2], []),
+  );
+  const harmonyChoice: Choice = {
+    id: 'h',
+    text: 'h',
+    check: { stat: 'cha', dc: 20, harmony: true },
+    success: { text: 'win', next: 'end' },
+    failure: { text: 'lose', next: 'end' },
+  };
+  const freshRoll = resolveChoice([calm1, calm2], harmonyChoice, () => 0.5).roll;
+  const bondedRoll = resolveChoice([calm1, calm2], harmonyChoice, () => 0.5, [
+    { ...calmBondKey, affinity: BONDED_THRESHOLD, type: 'bonded' },
+  ]).roll;
+  check(
+    'a bonded party rolls a higher harmony bonus on a check',
+    (bondedRoll?.harmony ?? 0) > (freshRoll?.harmony ?? 0),
+  );
+
+  // Integration: chooseInRun reads the graph and surfaces `bonded` on a harmony check.
+  const bondA = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    personality: { o: 50, c: 50, e: 50, a: 80, n: 20 },
+  });
+  const bondB = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    personality: { o: 50, c: 50, e: 50, a: 80, n: 20 },
+  });
+  const [bh1, bh2] = bondA.id < bondB.id ? [bondA.id, bondB.id] : [bondB.id, bondA.id];
+  await db
+    .insert(relationships)
+    .values({ herdId, horseA: bh1, horseB: bh2, affinity: BONDED_THRESHOLD, type: 'bonded' });
+  const bondRun = await startRun(db, herdId, 'green-grass', [bondA.id, bondB.id], {
+    scriptId: 'sunny-hollow',
+    seed: 3,
+  });
+  if (bondRun.ok) {
+    await chooseInRun(db, herdId, bondRun.runId, 'forage-bank'); // → crossroads
+    await chooseInRun(db, herdId, bondRun.runId, 'push'); // → stranger
+    const approach = await chooseInRun(db, herdId, bondRun.runId, 'approach'); // a harmony check
+    check(
+      'chooseInRun surfaces `bonded` when a real bond helps a harmony check',
+      approach.ok && approach.bonded === true,
+    );
+  }
 
   // Personality gates a choice: the bold call needs Extraversion ≥ 60 in someone.
   const ggScript = ADVENTURE_BY_ID.get('sunny-hollow');

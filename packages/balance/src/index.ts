@@ -146,9 +146,16 @@ export const ADVENTURE_MARK_THRESHOLD = 3;
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';
 
-/** Interactive adventure scenes (§9.3): party harmony buffs `harmony` checks — cozy, buff-only. */
+/**
+ * Interactive adventure scenes (§9.3): party harmony buffs `harmony` checks — cozy, buff-only.
+ * Each pair's rapport (0..1) is the stored **bond** if they have one (affinity ÷ BONDED_THRESHOLD,
+ * capped at 1), else a *dimmer* personality-compatibility proxy (capped below a real bond). Avg
+ * pairwise rapport × MAX → the DC reduction. So horses that have genuinely bonded over time (§8)
+ * adventure better together than strangers who merely share a temperament; rivals just don't help.
+ */
 export const ADVENTURE_HARMONY_MAX = 4; // max DC reduction a tight-knit party grants a check
-export const ADVENTURE_HARMONY_SCALE = 3; // avg pairwise OCEAN compatibility ÷ this → the bonus
+export const ADVENTURE_HARMONY_FRESH_DIV = 20; // un-bonded pair: personality compatibility ÷ this
+export const ADVENTURE_HARMONY_FRESH_CAP = 0.55; // …and a fresh pair tops out below a true bond
 
 /** Wild-horse accept odds (§14.4): charisma persuades, agreeable/extravert horses join, anxious hesitate. */
 export function acceptChance(avgPartyCha: number, a: number, n: number, e: number): number {

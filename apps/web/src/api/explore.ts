@@ -121,6 +121,7 @@ export type ChooseStoryResult =
       ended: false;
       narration: string;
       roll: StoryRoll | null;
+      bonded: boolean;
       trained: StoryTrained | null;
       befriended: { id: string; name: string } | null;
       scene: SceneView;
@@ -131,6 +132,7 @@ export type ChooseStoryResult =
       ended: true;
       narration: string;
       roll: StoryRoll | null;
+      bonded: boolean;
       trained: StoryTrained | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };

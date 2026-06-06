@@ -1,10 +1,12 @@
 import { randomInt } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
+  ADVENTURE_HARMONY_FRESH_CAP,
+  ADVENTURE_HARMONY_FRESH_DIV,
   ADVENTURE_HARMONY_MAX,
-  ADVENTURE_HARMONY_SCALE,
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
+  BONDED_THRESHOLD,
   PARTY_MAX,
   type PersonalityKey,
   type SkillKey,
@@ -22,6 +24,7 @@ import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
+import { getRelationships } from './autonomy.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
@@ -51,9 +54,29 @@ function stepRng(seed: number, step: number, salt = 0x9e3779b9): () => number {
 const PICK_SALT = 0xc2b2ae35;
 
 // ── Harmony, gating, party selection (pure) ──────────────────────────────────
-/** Avg pairwise OCEAN compatibility → a small DC reduction (cozy: buff only, 0..MAX). */
-export function partyHarmony(party: HorseRow[]): number {
+/** A stored relationship between two horses (only the bits harmony needs). */
+export interface PartyBond {
+  horseA: string;
+  horseB: string;
+  affinity: number;
+  type: string | null;
+}
+
+const pairKey = (x: string, y: string): string => (x < y ? `${x}|${y}` : `${y}|${x}`);
+
+/**
+ * Party harmony → a small DC reduction (cozy: buff only, 0..MAX). Each pair's **rapport** (0..1) is
+ * their **stored bond** if they have one (affinity ÷ BONDED_THRESHOLD, capped at 1), else a *dimmer*
+ * personality-compatibility proxy (capped below a real bond). So horses that have genuinely bonded
+ * over time (§8) adventure better together than strangers who merely share a temperament; a rival
+ * pair just contributes nothing (no penalty). Pass `bonds` (from getRelationships) to engage the
+ * graph; omit it (tests / a fresh party with no relationships) and every pair uses the proxy.
+ */
+export function partyHarmony(party: HorseRow[], bonds: PartyBond[] = []): number {
   if (party.length < 2) return 0;
+  const affinityOf = new Map<string, number>();
+  for (const r of bonds) affinityOf.set(pairKey(r.horseA, r.horseB), r.affinity);
+
   let sum = 0;
   let pairs = 0;
   for (let i = 0; i < party.length; i++) {
@@ -61,13 +84,35 @@ export function partyHarmony(party: HorseRow[]): number {
       const a = party[i];
       const b = party[j];
       if (!a || !b) continue;
-      sum += compatibility(a.personality as Personality, b.personality as Personality);
+      const stored = affinityOf.get(pairKey(a.id, b.id));
+      const rapport =
+        stored !== undefined
+          ? Math.max(0, Math.min(1, stored / BONDED_THRESHOLD)) // the real bond
+          : Math.max(
+              0,
+              Math.min(
+                ADVENTURE_HARMONY_FRESH_CAP,
+                compatibility(a.personality as Personality, b.personality as Personality) /
+                  ADVENTURE_HARMONY_FRESH_DIV,
+              ),
+            ); // a dimmer personality proxy for an un-bonded pair
+      sum += rapport;
       pairs++;
     }
   }
   if (pairs === 0) return 0;
-  const bonus = Math.round(sum / pairs / ADVENTURE_HARMONY_SCALE);
-  return Math.max(0, Math.min(ADVENTURE_HARMONY_MAX, bonus));
+  return Math.max(
+    0,
+    Math.min(ADVENTURE_HARMONY_MAX, Math.round((sum / pairs) * ADVENTURE_HARMONY_MAX)),
+  );
+}
+
+/** Does the party include any genuinely friendly/bonded pair? (drives the surfaced 💞 + the buff) */
+export function partyHasBond(party: HorseRow[], bonds: PartyBond[]): boolean {
+  const ids = new Set(party.map((h) => h.id));
+  return bonds.some(
+    (r) => ids.has(r.horseA) && ids.has(r.horseB) && (r.type === 'friend' || r.type === 'bonded'),
+  );
 }
 
 /** Does any party member satisfy a personality gate? (no gate → always true) */
@@ -123,11 +168,12 @@ export function resolveChoice(
   party: HorseRow[],
   choice: Choice,
   rng: () => number,
+  bonds: PartyBond[] = [],
 ): ChoiceResolution {
   if (!choice.check) return { outcome: choice.success, roll: null, trained: null };
   const { stat, skill, dc, harmony } = choice.check;
   const who = bestForCheck(party, stat, skill);
-  const bonus = harmony ? partyHarmony(party) : 0;
+  const bonus = harmony ? partyHarmony(party, bonds) : 0;
   const check = skillCheck(who.statValue, who.skillLevel, who.luck, dc - bonus, rng);
   const outcome = check.success ? choice.success : (choice.failure ?? choice.success);
   return {
@@ -286,6 +332,7 @@ export type ChooseResult =
       ended: false;
       narration: string;
       roll: ChoiceResolution['roll'];
+      bonded: boolean;
       trained: TrainedView | null;
       befriended: { id: string; name: string } | null;
       scene: SceneView;
@@ -296,6 +343,7 @@ export type ChooseResult =
       ended: true;
       narration: string;
       roll: ChoiceResolution['roll'];
+      bonded: boolean;
       trained: TrainedView | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };
@@ -328,7 +376,15 @@ export async function chooseInRun(
     return { ok: false, code: 'locked_choice', message: 'No one in your party can do that.' };
   }
 
-  const { outcome, roll, trained } = resolveChoice(party, choice, stepRng(run.seed, run.step));
+  const bonds = await getRelationships(db, herdId);
+  const { outcome, roll, trained } = resolveChoice(
+    party,
+    choice,
+    stepRng(run.seed, run.step),
+    bonds,
+  );
+  // Did a real friendship/bond (not just a shared temperament) help this harmony check? (→ 💞)
+  const bonded = !!choice.check?.harmony && partyHasBond(party, bonds);
 
   // Accrue the haul into next-state locals (banked only when the run ends — push-vs-bank).
   const loot = { ...run.loot };
@@ -403,7 +459,16 @@ export async function chooseInRun(
       .update(horses)
       .set({ adventures: sql`${horses.adventures} + 1` })
       .where(inArray(horses.id, run.party));
-    return { ok: true, ended: true, narration, roll, trained: trainedView, befriended, summary };
+    return {
+      ok: true,
+      ended: true,
+      narration,
+      roll,
+      bonded,
+      trained: trainedView,
+      befriended,
+      summary,
+    };
   }
 
   await db
@@ -415,6 +480,7 @@ export async function chooseInRun(
     ended: false,
     narration,
     roll,
+    bonded,
     trained: trainedView,
     befriended,
     scene: sceneView(nextScene, party),

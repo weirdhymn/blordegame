@@ -1,12 +1,18 @@
 import { type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from './components/AppLayout.js';
+import { BreedPage } from './pages/BreedPage.js';
+import { ExplorePage } from './pages/ExplorePage.js';
+import { FieldGuidePage } from './pages/FieldGuidePage.js';
 import { HomePage } from './pages/HomePage.js';
+import { HorseDetailPage } from './pages/HorseDetailPage.js';
+import { JournalPage } from './pages/JournalPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { useSession } from './session.js';
 
-/** Gate a route on an authenticated session; bounce to /login otherwise. */
+/** Gate the authed area on a session; bounce to /login otherwise. */
 function RequireAuth({ children }: { children: ReactElement }): ReactElement {
   const { user, loading } = useSession();
   if (loading) return <div className="loading">Loading…</div>;
@@ -21,13 +27,19 @@ export function App(): ReactElement {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/render" element={<RenderDevPage />} />
       <Route
-        path="/"
         element={
           <RequireAuth>
-            <HomePage />
+            <AppLayout />
           </RequireAuth>
         }
-      />
+      >
+        <Route path="/" element={<HomePage />} />
+        <Route path="/horses/:id" element={<HorseDetailPage />} />
+        <Route path="/breed" element={<BreedPage />} />
+        <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/journal" element={<JournalPage />} />
+        <Route path="/guide" element={<FieldGuidePage />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,4 +1,5 @@
 import { useMemo, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import type { Horse } from '../api/horses.js';
@@ -18,10 +19,10 @@ export function HorseCard({ horse }: { horse: Horse }): ReactElement {
   );
 
   return (
-    <div className="horse-card">
+    <Link to={`/horses/${horse.id}`} className="horse-card">
       <HorseCanvas spec={spec} scale={2} />
       <div className="horse-name">{horse.name ?? 'Unnamed'}</div>
       <div className="horse-coat">{spec.foalWhite ? 'Foal · coat hidden' : spec.displayName}</div>
-    </div>
+    </Link>
   );
 }

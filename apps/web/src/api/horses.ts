@@ -23,3 +23,15 @@ export const listHerdHorses = (herdId: string): Promise<Horse[]> =>
   api.get<Horse[]>(`/herds/${herdId}/horses`);
 
 export const getHorse = (id: string): Promise<Horse> => api.get<Horse>(`/horses/${id}`);
+
+/** A node in the pedigree tree (GET /horses/:id/pedigree). */
+export interface Pedigree {
+  id: string;
+  name: string | null;
+  displayName: string;
+  lifeStage: string;
+  parents: Pedigree[];
+}
+
+export const getPedigree = (id: string): Promise<Pedigree> =>
+  api.get<Pedigree>(`/horses/${id}/pedigree`);

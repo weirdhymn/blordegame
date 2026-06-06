@@ -236,3 +236,247 @@ a {
 .footer-link {
   margin-top: 1.25rem;
 }
+
+/* ── App shell (authed) ── */
+.app {
+  width: 100%;
+  max-width: 680px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 3px solid var(--ink);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+}
+.cubes-badge {
+  background: var(--sage-deep);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.topnav {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.topnav a {
+  text-decoration: none;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.topnav a.active {
+  background: var(--sage-deep);
+  font-weight: 700;
+}
+.page {
+  max-width: none;
+  width: 100%;
+  padding: 1.25rem;
+}
+
+/* ── Horse card link ── */
+.horse-card {
+  text-decoration: none;
+  color: var(--ink);
+}
+.horse-card:hover {
+  border-color: var(--ink-soft);
+}
+.horse-card:active {
+  transform: translateY(1px);
+}
+
+/* ── Horse detail ── */
+.detail-head {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.5rem;
+}
+.kv {
+  display: flex;
+  justify-content: space-between;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.82rem;
+}
+.kv-k {
+  color: var(--ink-soft);
+}
+.kv-v {
+  font-weight: 700;
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+.bar-track {
+  height: 0.7rem;
+  background: var(--sage-deep);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--ink-soft);
+}
+.bar-v {
+  text-align: right;
+  font-weight: 700;
+}
+.pedigree,
+.pedigree ul {
+  list-style: none;
+  padding-left: 1rem;
+  margin: 0.25rem 0;
+}
+.pedigree {
+  padding-left: 0;
+  font-size: 0.82rem;
+}
+.ped-coat {
+  color: var(--ink-soft);
+}
+
+/* ── Breed ── */
+.picker {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.picker .field {
+  flex: 1;
+  min-width: 140px;
+}
+.swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.swatch-row {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr 3rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+.swatch {
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+}
+.swatch-p {
+  text-align: right;
+  font-weight: 700;
+}
+.warn {
+  color: #7c1d1d;
+  font-size: 0.8rem;
+}
+.foal-result {
+  align-items: center;
+  text-align: center;
+}
+
+/* ── Explore ── */
+.party-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.chip {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+}
+.chip.on {
+  background: var(--sage-deep);
+  font-weight: 700;
+}
+.dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.die {
+  background: var(--sage);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+.die.win {
+  background: var(--sage-deep);
+  font-weight: 700;
+}
+.rare {
+  font-weight: 700;
+}
+.wild {
+  font-style: italic;
+}
+
+/* ── Journal & Field Guide ── */
+.journal-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.journal-list li {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+.glyph {
+  margin-right: 0.3rem;
+}
+.guide-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.guide-chip {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+}
+.breed .primary,
+.explore .primary {
+  margin-top: 0.5rem;
+}

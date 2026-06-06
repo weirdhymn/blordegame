@@ -78,6 +78,13 @@
       "when": 1780765335877,
       "tag": "0010_gray_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780766809470,
+      "tag": "0011_strong_havok",
+      "breakpoints": true
     }
   ]
 }

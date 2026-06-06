@@ -47,6 +47,7 @@ export const REGIONS: Region[] = [
     loot: [
       { item: 'plant-fiber', weight: 6 },
       { item: 'timber', weight: 3 },
+      { item: 'marsh-sage', weight: 2 }, // fen herb — the Brew Healing Potion input (§9.3)
       { item: 'clay', weight: 1 },
     ],
   },

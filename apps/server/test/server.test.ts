@@ -11,7 +11,10 @@ import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { adventureRuns, users } from '../src/db/schema.js';
-import { ADVENTURE_BY_REGION, type Choice } from '../src/content/adventures.js';
+import { ADVENTURE_BY_ID, ADVENTURE_POOLS, type Choice } from '../src/content/adventures.js';
+import { ITEM_BY_ID } from '../src/content/items.js';
+import { RECIPE_BY_ID } from '../src/content/recipes.js';
+import { REGION_BY_ID } from '../src/content/regions.js';
 import { adventure } from '../src/services/adventure.js';
 import {
   availableChoices,
@@ -745,9 +748,9 @@ async function main(): Promise<void> {
   );
 
   // Personality gates a choice: the bold call needs Extraversion ≥ 60 in someone.
-  const ggScript = ADVENTURE_BY_REGION.get('green-grass');
+  const ggScript = ADVENTURE_BY_ID.get('sunny-hollow');
   const strangerScene = ggScript?.scenes['stranger'];
-  check('green-grass has a stranger scene', !!strangerScene);
+  check('sunny-hollow has a stranger scene', !!strangerScene);
   if (strangerScene) {
     const timidIds = availableChoices(strangerScene, calmParty).map((c) => c.id);
     check('a non-bold party cannot call out boldly', !timidIds.includes('call-bold'));
@@ -784,16 +787,23 @@ async function main(): Promise<void> {
     regionsView.find((r) => r.id === 'dusty-dunes')?.interactive === false,
   );
 
-  const startRes = await inject({
-    method: 'POST',
-    url: '/adventure/start',
-    headers: { cookie },
-    payload: { regionId: 'green-grass', party: [id] },
-  });
-  eq('POST /adventure/start → 200', startRes.statusCode, 200);
-  const startJson = startRes.json<{ runId: string; scene: { id: string } }>();
-  eq('the run opens on the meadow edge', startJson.scene.id, 'meadow-edge');
-  const storyRunId = startJson.runId;
+  // The route does the seeded pool draw (no script override), so retry until it serves Sunny
+  // Hollow — the fixed choice-path below assumes it. (The pool draw itself is covered separately.)
+  const startSunny = async () => {
+    const res = await inject({
+      method: 'POST',
+      url: '/adventure/start',
+      headers: { cookie },
+      payload: { regionId: 'green-grass', party: [id] },
+    });
+    return { res, json: res.json<{ runId: string; scene?: { id: string } }>() };
+  };
+  let started = await startSunny();
+  for (let i = 0; i < 40 && started.json.scene?.id !== 'meadow-edge'; i++)
+    started = await startSunny();
+  eq('POST /adventure/start → 200', started.res.statusCode, 200);
+  eq('the run opens on the meadow edge', started.json.scene?.id, 'meadow-edge');
+  const storyRunId = started.json.runId;
 
   const noScript = await inject({
     method: 'POST',
@@ -845,7 +855,10 @@ async function main(): Promise<void> {
   const herdBefore = (await listHerdHorses(db, herdId)).length;
   let befriendedName: string | null = null;
   for (let s = 1; s <= 60 && befriendedName === null; s++) {
-    const r = await startRun(db, herdId, 'green-grass', [hs1.id, hs2.id], { seed: s });
+    const r = await startRun(db, herdId, 'green-grass', [hs1.id, hs2.id], {
+      seed: s,
+      scriptId: 'sunny-hollow',
+    });
     if (!r.ok) continue;
     await chooseInRun(db, herdId, r.runId, 'forage-bank');
     await chooseInRun(db, herdId, r.runId, 'push');
@@ -860,7 +873,10 @@ async function main(): Promise<void> {
   );
 
   // Run persistence (§9.3): a run started before a restart survives in the DB and continues.
-  const persisted = await startRun(db, herdId, 'green-grass', [id], { seed: 4242 });
+  const persisted = await startRun(db, herdId, 'green-grass', [id], {
+    seed: 4242,
+    scriptId: 'sunny-hollow',
+  });
   check('startRun opens an interactive run', persisted.ok);
   if (persisted.ok) {
     const persistRunId = persisted.runId;
@@ -904,6 +920,114 @@ async function main(): Promise<void> {
     });
     check('the finished run is persisted as ended', endedRow?.status === 'ended');
     await app2.close();
+  }
+
+  // §2 pool mechanic: a region holds a pool of scripts; startRun draws one (seeded, reproducible).
+  check(
+    'green-grass holds a pool of two scripts',
+    (ADVENTURE_POOLS.get('green-grass')?.length ?? 0) === 2,
+  );
+  const pickA = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
+  const pickB = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
+  check(
+    'a fixed seed draws the same script every time',
+    pickA.ok && pickB.ok && pickA.scene.id === pickB.scene.id,
+  );
+  const startsSeen = new Set<string>();
+  for (let s = 1; s <= 40; s++) {
+    const r = await startRun(db, herdId, 'green-grass', [id], { seed: s });
+    if (r.ok) startsSeen.add(r.scene.id);
+  }
+  check(
+    'both scripts in the pool are reachable across seeds',
+    startsSeen.has('meadow-edge') && startsSeen.has('herb-meadow'),
+  );
+  const forced = await startRun(db, herdId, 'green-grass', [id], {
+    seed: 1,
+    scriptId: 'herb-hunt',
+  });
+  check('a scriptId override forces that script', forced.ok && forced.scene.id === 'herb-meadow');
+
+  // §3 herb hunt: structure, gating, feed-forward, the brew, and a coherent marsh-sage chain.
+  const herb = ADVENTURE_BY_ID.get('herb-hunt');
+  check('herb-hunt is registered in the pool', !!herb);
+  if (herb) {
+    const targets = Object.values(herb.scenes).flatMap(
+      (sc) =>
+        sc.choices.flatMap((c) => [c.success.next, c.failure?.next].filter(Boolean)) as string[],
+    );
+    check(
+      'every herb-hunt branch points to a real scene or end',
+      targets.every((t) => t === 'end' || !!herb.scenes[t]),
+    );
+    const usedStats = new Set(
+      Object.values(herb.scenes).flatMap((sc) =>
+        sc.choices.map((c) => c.check?.stat).filter(Boolean),
+      ),
+    );
+    check('herb-hunt uses several distinct stats (not one for all)', usedStats.size >= 4);
+
+    const fen = herb.scenes['fen'];
+    const sneak = fen?.choices.find((c) => c.id === 'sneak');
+    check(
+      'the sneak option is gated on Conscientiousness (≠ Sunny Hollow)',
+      sneak?.requires?.trait === 'c',
+    );
+    const cautious = await mintHorse(db, {
+      herdId,
+      genotype: { E: 'Ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      stats: flatStats,
+      luck: 10,
+      personality: { o: 50, c: 80, e: 30, a: 60, n: 30 },
+    });
+    if (fen) {
+      check(
+        'a low-Conscientiousness party cannot sneak',
+        !availableChoices(fen, calmParty).some((c) => c.id === 'sneak'),
+      );
+      check(
+        'a Conscientious party unlocks the sneak',
+        availableChoices(fen, [cautious]).some((c) => c.id === 'sneak'),
+      );
+    }
+
+    const richDc = herb.scenes['brew-rich']?.choices[0]?.check?.dc ?? 0;
+    const thinDc = herb.scenes['brew-thin']?.choices[0]?.check?.dc ?? 0;
+    check('better sage yields a more forgiving brew (feed-forward)', richDc > 0 && richDc < thinDc);
+    check(
+      'the brew is the harmony-buffed check',
+      herb.scenes['brew-rich']?.choices[0]?.check?.harmony === true,
+    );
+  }
+
+  const ggLoot = REGION_BY_ID.get('green-grass')?.loot.map((l) => l.item) ?? [];
+  check('marsh-sage is sourced from Green Grass (no orphan)', ggLoot.includes('marsh-sage'));
+  const brew = RECIPE_BY_ID.get('brew-healing-potion');
+  check(
+    'the Brew Healing Potion recipe sinks marsh-sage into a potion',
+    !!brew && brew.inputs.some((i) => i.id === 'marsh-sage') && brew.output.id === 'healing-potion',
+  );
+  check(
+    'the healing potion is a known item with framing flavor',
+    !!ITEM_BY_ID.get('healing-potion')?.flavor,
+  );
+
+  // A deterministic herb-hunt path: bank at the fork → a modest potion, no dice needed.
+  const hh = await startRun(db, herdId, 'green-grass', [id], { scriptId: 'herb-hunt' });
+  check('herb-hunt opens at the meadow', hh.ok && hh.scene.id === 'herb-meadow');
+  if (hh.ok) {
+    const toFork = await chooseInRun(db, herdId, hh.runId, 'pick-open');
+    check(
+      'the meadow leads to the push/bank fork',
+      toFork.ok && !toFork.ended && toFork.scene.id === 'herb-fork',
+    );
+    const banked = await chooseInRun(db, herdId, hh.runId, 'brew-now');
+    check(
+      'banking the herb hunt brews a healing potion',
+      banked.ok && banked.ended && banked.summary.loot.some((l) => l.id === 'healing-potion'),
+    );
   }
 
   // --- Phase 9: The Living Herd ---

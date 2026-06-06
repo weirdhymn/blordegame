@@ -1,0 +1,1 @@
+ALTER TABLE "adventure_runs" ADD COLUMN "script_id" text NOT NULL;

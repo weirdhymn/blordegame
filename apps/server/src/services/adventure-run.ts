@@ -10,7 +10,8 @@ import {
 } from '@blorse/balance';
 import { randomGenotype, resolve } from '@blorse/genetics';
 import {
-  ADVENTURE_BY_REGION,
+  ADVENTURE_BY_ID,
+  ADVENTURE_POOLS,
   type Choice,
   type Outcome,
   type Scene,
@@ -36,6 +37,10 @@ type RunRow = typeof adventureRuns.$inferSelect;
 function stepRng(seed: number, step: number, salt = 0x9e3779b9): () => number {
   return mulberry32((seed ^ Math.imul(step + 1, salt)) >>> 0);
 }
+
+// Salt for the per-run script draw from a region's pool — distinct from the dice salts above so
+// which-script and the in-run rolls stay independent.
+const PICK_SALT = 0xc2b2ae35;
 
 // ── Harmony, gating, party selection (pure) ──────────────────────────────────
 /** Avg pairwise OCEAN compatibility → a small DC reduction (cozy: buff only, 0..MAX). */
@@ -193,6 +198,8 @@ export type StartResult =
 
 export interface StartOptions {
   seed?: number;
+  /** Force a specific script (tests / replay), bypassing the seeded pool draw. */
+  scriptId?: string;
 }
 
 /** Begin an interactive adventure run in a region that has an authored scene library. */
@@ -203,8 +210,10 @@ export async function startRun(
   partyIds: string[],
   opts: StartOptions = {},
 ): Promise<StartResult> {
-  const script = ADVENTURE_BY_REGION.get(regionId);
-  if (!script) return { ok: false, code: 'no_script', message: 'No story for that region yet.' };
+  const pool = ADVENTURE_POOLS.get(regionId);
+  if (!pool || pool.length === 0) {
+    return { ok: false, code: 'no_script', message: 'No story for that region yet.' };
+  }
   const region = REGION_BY_ID.get(regionId);
   if (!region || !(await isQuestCompleted(db, herdId, region.requiresQuest))) {
     return { ok: false, code: 'locked', message: 'That region is not open yet.' };
@@ -216,6 +225,15 @@ export async function startRun(
   if (!party)
     return { ok: false, code: 'bad_party', message: 'A party must be your adult horses.' };
 
+  const seed = opts.seed ?? randomInt(1, 2 ** 31);
+  // Pick the run's script: an explicit override (tests/replay), else a seeded uniform draw from
+  // the pool. Stored on the run so it stays put across a redeploy even if the pool changes.
+  const script = opts.scriptId
+    ? ADVENTURE_BY_ID.get(opts.scriptId)
+    : pool[Math.floor(mulberry32((seed ^ PICK_SALT) >>> 0)() * pool.length)];
+  if (!script || script.regionId !== regionId) {
+    return { ok: false, code: 'no_script', message: 'No such adventure here.' };
+  }
   const start = script.scenes[script.start];
   if (!start) return { ok: false, code: 'no_script', message: 'That story is misconfigured.' };
 
@@ -224,8 +242,9 @@ export async function startRun(
     .values({
       herdId,
       regionId,
+      scriptId: script.id,
       party: partyIds,
-      seed: opts.seed ?? randomInt(1, 2 ** 31),
+      seed,
       sceneId: script.start,
     })
     .returning();
@@ -273,7 +292,7 @@ export async function chooseInRun(
     ),
   });
   if (!run) return { ok: false, code: 'not_found', message: 'No such run.' };
-  const script = ADVENTURE_BY_REGION.get(run.regionId);
+  const script = ADVENTURE_BY_ID.get(run.scriptId);
   const scene = script?.scenes[run.sceneId];
   if (!script || !scene) return { ok: false, code: 'not_found', message: 'This run got lost.' };
   const choice = scene.choices.find((c) => c.id === choiceId);

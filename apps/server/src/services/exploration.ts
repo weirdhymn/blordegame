@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { ROAM_DROPS_MAX, ROAM_DROPS_MIN } from '@blorse/balance';
-import { ADVENTURE_BY_REGION } from '../content/adventures.js';
+import { ADVENTURE_POOLS } from '../content/adventures.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { mulberry32 } from '../util/rng.js';
@@ -26,7 +26,7 @@ export async function listRegions(db: DB, herdId: string): Promise<RegionView[]>
       tier: r.tier,
       recommendedPower: r.recommendedPower,
       unlocked: await isQuestCompleted(db, herdId, r.requiresQuest),
-      interactive: ADVENTURE_BY_REGION.has(r.id),
+      interactive: (ADVENTURE_POOLS.get(r.id)?.length ?? 0) > 0,
     });
   }
   return out;

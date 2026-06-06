@@ -64,6 +64,17 @@ export const RECIPES: Recipe[] = [
       { id: 'timber', qty: 1 },
     ],
   },
+  // The marsh-sage sink (§9.3). Also the herb hunt's narrative climax — same recipe, brewed
+  // in-adventure. Output is a terminal consumable today (provisioning for future combat, §7).
+  {
+    id: 'brew-healing-potion',
+    name: 'Brew Healing Potion',
+    output: { id: 'healing-potion', qty: 1 },
+    inputs: [
+      { id: 'marsh-sage', qty: 2 },
+      { id: 'plant-fiber', qty: 1 },
+    ],
+  },
 ];
 
 export const RECIPE_BY_ID = new Map(RECIPES.map((r) => [r.id, r]));

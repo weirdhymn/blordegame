@@ -36,5 +36,15 @@ export const build = (type: string): Promise<{ ok: boolean; type: string }> =>
 
 export const getRecipes = (): Promise<Recipe[]> => api.get<Recipe[]>('/recipes');
 
+export interface ItemDef {
+  id: string;
+  name: string;
+  kind: string;
+  /** Optional in-world flavor — e.g. why a terminal item isn't usable yet. */
+  flavor?: string;
+}
+
+export const getItems = (): Promise<ItemDef[]> => api.get<ItemDef[]>('/items');
+
 export const craft = (recipeId: string, qty = 1): Promise<{ ok: boolean; output: ItemStack }> =>
   api.post<{ ok: boolean; output: ItemStack }>('/craft', { recipeId, qty });

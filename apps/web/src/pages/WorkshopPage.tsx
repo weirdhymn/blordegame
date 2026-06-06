@@ -4,8 +4,10 @@ import { getInventory, type ItemStack } from '../api/explore.js';
 import {
   build,
   craft,
+  getItems,
   getPasture,
   getRecipes,
+  type ItemDef,
   type PastureView,
   type Recipe,
 } from '../api/workshop.js';
@@ -16,6 +18,7 @@ export function WorkshopPage(): ReactElement {
   const { refresh } = useSession();
   const [inv, setInv] = useState<ItemStack[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [itemDefs, setItemDefs] = useState<ItemDef[]>([]);
   const [pasture, setPasture] = useState<PastureView | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,11 +43,18 @@ export function WorkshopPage(): ReactElement {
       .catch(() => {
         /* ignore */
       });
+    getItems()
+      .then(setItemDefs)
+      .catch(() => {
+        /* ignore */
+      });
     load();
   }, [load]);
 
   const have = (itemId: string): number => inv.find((i) => i.id === itemId)?.qty ?? 0;
   const canCraft = (r: Recipe): boolean => r.inputs.every((i) => have(i.id) >= i.qty);
+  const flavorOf = (id: string): string | undefined => itemDefs.find((d) => d.id === id)?.flavor;
+  const flavoredHeld = inv.filter((i) => flavorOf(i.id));
 
   async function act(fn: () => Promise<unknown>, msg: string): Promise<void> {
     setBusy(true);
@@ -77,13 +87,28 @@ export function WorkshopPage(): ReactElement {
         {inv.length === 0 ? (
           <p className="muted">Empty. Roam a region (Explore) to gather materials.</p>
         ) : (
-          <div className="guide-grid">
-            {inv.map((i) => (
-              <div className="guide-chip" key={i.id}>
-                {pretty(i.id)} ×{i.qty}
+          <>
+            <div className="guide-grid">
+              {inv.map((i) => {
+                const fl = flavorOf(i.id);
+                return (
+                  <div className="guide-chip" key={i.id} title={fl ?? undefined}>
+                    {pretty(i.id)} ×{i.qty}
+                    {fl ? ' ✦' : ''}
+                  </div>
+                );
+              })}
+            </div>
+            {flavoredHeld.length > 0 && (
+              <div className="curios">
+                {flavoredHeld.map((i) => (
+                  <p className="muted curio" key={i.id}>
+                    <strong>{pretty(i.id)} ✦</strong> — {flavorOf(i.id)}
+                  </p>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </section>
 

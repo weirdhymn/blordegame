@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
+import { ITEMS } from '../content/items.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { craft, listRecipes } from '../services/crafting.js';
 import { buildStructure, getPasture } from '../services/pasture.js';
@@ -14,6 +15,7 @@ async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | nu
 
 export function registerPastureRoutes(app: FastifyInstance, db: DB): void {
   app.get('/recipes', () => listRecipes()); // static content
+  app.get('/items', () => ITEMS); // static content — item catalog (names, kinds, flavor)
 
   app.post('/craft', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

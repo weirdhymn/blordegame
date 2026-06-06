@@ -176,6 +176,8 @@ export const adventureRuns = pgTable(
       .notNull()
       .references(() => herds.id, { onDelete: 'cascade' }),
     regionId: text('region_id').notNull(),
+    /** Which script (from the region's pool) this run is playing — picked once at startRun (§9.3). */
+    scriptId: text('script_id').notNull(),
     /** Horse ids in the party, in order. */
     party: jsonb('party').notNull().$type<string[]>(),
     /** Seed for the whole run; (seed, step) derives each choice's dice deterministically. */

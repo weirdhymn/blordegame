@@ -630,3 +630,13 @@ code {
   padding: 0.2rem 0;
   cursor: pointer;
 }
+.curios {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.curio {
+  font-style: italic;
+  margin: 0;
+}

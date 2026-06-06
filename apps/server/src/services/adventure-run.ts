@@ -1,5 +1,5 @@
-import { randomInt, randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { randomInt } from 'node:crypto';
+import { and, eq, sql } from 'drizzle-orm';
 import {
   ADVENTURE_HARMONY_MAX,
   ADVENTURE_HARMONY_SCALE,
@@ -17,7 +17,7 @@ import {
 } from '../content/adventures.js';
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
-import { herds, type HorseRow } from '../db/schema.js';
+import { adventureRuns, herds, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
@@ -26,25 +26,11 @@ import { isQuestCompleted } from './quests.js';
 import { skillCheck, type SkillBlock, type StatBlock } from './stats.js';
 
 // ── Run state ────────────────────────────────────────────────────────────────
-// Lives in an in-memory per-process store for the vertical slice. Runs are short
-// (a few choices) and server-authoritative. PRODUCTION TODO: swap RUNS for a small
-// `adventureRuns` table so runs survive a restart / multiple instances (§9.3).
-export interface RunState {
-  id: string;
-  herdId: string;
-  regionId: string;
-  party: string[];
-  seed: number;
-  step: number;
-  sceneId: string;
-  loot: Record<string, number>;
-  cubes: number;
-  fatigue: number;
-  befriended: string | null; // name of a wild horse who joined this run
-  status: 'active' | 'ended';
-}
-
-const RUNS = new Map<string, RunState>();
+// Persisted in the `adventure_runs` table (§9.3) so a run survives a restart / redeploy /
+// multiple instances. A row carries only the cursor (regionId, sceneId, step, seed) + the
+// accrued, not-yet-banked haul; resolution stays pure + seeded below. `$inferSelect` keeps
+// this type in lockstep with the schema.
+type RunRow = typeof adventureRuns.$inferSelect;
 
 // Deterministic per-step RNG derived from (seed, step) — same inputs, same dice (testable).
 function stepRng(seed: number, step: number, salt = 0x9e3779b9): () => number {
@@ -189,7 +175,7 @@ interface RunView {
   befriended: string | null;
 }
 
-function runView(run: RunState, stage: number): RunView {
+function runView(run: RunRow, stage: number): RunView {
   return {
     runId: run.id,
     regionId: run.regionId,
@@ -233,21 +219,17 @@ export async function startRun(
   const start = script.scenes[script.start];
   if (!start) return { ok: false, code: 'no_script', message: 'That story is misconfigured.' };
 
-  const run: RunState = {
-    id: randomUUID(),
-    herdId,
-    regionId,
-    party: partyIds,
-    seed: opts.seed ?? randomInt(1, 2 ** 31),
-    step: 0,
-    sceneId: script.start,
-    loot: {},
-    cubes: 0,
-    fatigue: 0,
-    befriended: null,
-    status: 'active',
-  };
-  RUNS.set(run.id, run);
+  const [run] = await db
+    .insert(adventureRuns)
+    .values({
+      herdId,
+      regionId,
+      party: partyIds,
+      seed: opts.seed ?? randomInt(1, 2 ** 31),
+      sceneId: script.start,
+    })
+    .returning();
+  if (!run) return { ok: false, code: 'bad_party', message: 'Could not start the run.' };
   return {
     ok: true,
     runId: run.id,
@@ -283,10 +265,14 @@ export async function chooseInRun(
   runId: string,
   choiceId: string,
 ): Promise<ChooseResult> {
-  const run = RUNS.get(runId);
-  if (!run || run.herdId !== herdId || run.status !== 'active') {
-    return { ok: false, code: 'not_found', message: 'No such run.' };
-  }
+  const run = await db.query.adventureRuns.findFirst({
+    where: and(
+      eq(adventureRuns.id, runId),
+      eq(adventureRuns.herdId, herdId),
+      eq(adventureRuns.status, 'active'),
+    ),
+  });
+  if (!run) return { ok: false, code: 'not_found', message: 'No such run.' };
   const script = ADVENTURE_BY_REGION.get(run.regionId);
   const scene = script?.scenes[run.sceneId];
   if (!script || !scene) return { ok: false, code: 'not_found', message: 'This run got lost.' };
@@ -301,10 +287,12 @@ export async function chooseInRun(
 
   const { outcome, roll } = resolveChoice(party, choice, stepRng(run.seed, run.step));
 
-  // Accrue the haul (banked only when the run ends — the whole point of push-vs-bank).
-  for (const it of outcome.items ?? []) run.loot[it.id] = (run.loot[it.id] ?? 0) + it.qty;
-  run.cubes += outcome.cubes ?? 0;
-  run.fatigue += outcome.fatigue ?? 0;
+  // Accrue the haul into next-state locals (banked only when the run ends — push-vs-bank).
+  const loot = { ...run.loot };
+  for (const it of outcome.items ?? []) loot[it.id] = (loot[it.id] ?? 0) + it.qty;
+  const cubes = run.cubes + (outcome.cubes ?? 0);
+  const fatigue = run.fatigue + (outcome.fatigue ?? 0);
+  let befriendedName = run.befriended;
 
   // Befriend a wild stranger → it joins the herd now (the narrative recruit, no fee).
   let befriended: { id: string; name: string } | null = null;
@@ -322,24 +310,31 @@ export async function chooseInRun(
       personality,
     });
     befriended = { id: minted.id, name };
-    run.befriended = name;
+    befriendedName = name;
   }
 
-  run.step += 1;
+  const step = run.step + 1;
   const narration = outcome.text;
+  const nextScene = outcome.next === 'end' ? undefined : script.scenes[outcome.next];
 
-  if (outcome.next === 'end') {
-    const summary = await bankAndEnd(db, run);
-    return { ok: true, ended: true, narration, roll, befriended, summary };
-  }
-
-  const nextScene = script.scenes[outcome.next];
   if (!nextScene) {
-    // Defensive: a dangling `next` ends the run rather than trapping the player.
-    const summary = await bankAndEnd(db, run);
+    // `end`, or a dangling `next` → bank everything and close the run (never trap the player).
+    const summary = await bankAndEnd(db, {
+      id: run.id,
+      herdId,
+      step,
+      loot,
+      cubes,
+      fatigue,
+      befriended: befriendedName,
+    });
     return { ok: true, ended: true, narration, roll, befriended, summary };
   }
-  run.sceneId = outcome.next;
+
+  await db
+    .update(adventureRuns)
+    .set({ step, sceneId: nextScene.id, loot, cubes, fatigue, befriended: befriendedName })
+    .where(eq(adventureRuns.id, run.id));
   return {
     ok: true,
     ended: false,
@@ -347,15 +342,27 @@ export async function chooseInRun(
     roll,
     befriended,
     scene: sceneView(nextScene, party),
-    run: runView(run, nextScene.stage),
+    run: runView(
+      { ...run, step, sceneId: nextScene.id, loot, cubes, fatigue, befriended: befriendedName },
+      nextScene.stage,
+    ),
   };
+}
+
+interface RunEndState {
+  id: string;
+  herdId: string;
+  step: number;
+  loot: Record<string, number>;
+  cubes: number;
+  fatigue: number;
+  befriended: string | null;
 }
 
 async function bankAndEnd(
   db: DB,
-  run: RunState,
+  run: RunEndState,
 ): Promise<{ loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null }> {
-  run.status = 'ended';
   const loot: ItemStack[] = Object.entries(run.loot).map(([id, qty]) => ({ id, qty }));
   if (loot.length) await grantItems(db, run.herdId, loot);
   if (run.cubes > 0) {
@@ -364,6 +371,17 @@ async function bankAndEnd(
       .set({ cubes: sql`${herds.cubes} + ${run.cubes}` })
       .where(eq(herds.id, run.herdId));
   }
-  RUNS.delete(run.id);
+  // Keep the row as `ended` (history) with the final accrued state persisted.
+  await db
+    .update(adventureRuns)
+    .set({
+      status: 'ended',
+      step: run.step,
+      loot: run.loot,
+      cubes: run.cubes,
+      fatigue: run.fatigue,
+      befriended: run.befriended,
+    })
+    .where(eq(adventureRuns.id, run.id));
   return { loot, cubes: run.cubes, fatigue: run.fatigue, befriended: run.befriended };
 }

@@ -10,7 +10,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { users } from '../src/db/schema.js';
+import { adventureRuns, users } from '../src/db/schema.js';
 import { ADVENTURE_BY_REGION, type Choice } from '../src/content/adventures.js';
 import { adventure } from '../src/services/adventure.js';
 import {
@@ -858,6 +858,53 @@ async function main(): Promise<void> {
     'befriending added a horse to the herd',
     (await listHerdHorses(db, herdId)).length > herdBefore,
   );
+
+  // Run persistence (§9.3): a run started before a restart survives in the DB and continues.
+  const persisted = await startRun(db, herdId, 'green-grass', [id], { seed: 4242 });
+  check('startRun opens an interactive run', persisted.ok);
+  if (persisted.ok) {
+    const persistRunId = persisted.runId;
+    const liveRow = await db.query.adventureRuns.findFirst({
+      where: drizzleEq(adventureRuns.id, persistRunId),
+    });
+    check('the run is persisted to adventure_runs as active', liveRow?.status === 'active');
+
+    // Simulate a server restart: a brand-new app instance, zero in-memory state, same DB.
+    const app2 = buildApp(db, { rateLimitMax: 100_000, authRateLimitMax: 100_000 });
+    await app2.ready();
+    const inject2 = (opts: InjectOptions) =>
+      app2.inject({ ...opts, url: `/api${typeof opts.url === 'string' ? opts.url : ''}` });
+
+    const restartStep1 = await inject2({
+      method: 'POST',
+      url: `/adventure/${persistRunId}/choose`,
+      headers: { cookie },
+      payload: { choiceId: 'forage-bank' },
+    });
+    eq('continue a pre-restart run on a fresh instance → 200', restartStep1.statusCode, 200);
+    const restartScene = restartStep1.json<{ ended: boolean; scene?: { id: string } }>();
+    check(
+      'the run resumes from its persisted scene',
+      restartScene.ended === false && restartScene.scene?.id === 'crossroads',
+    );
+
+    const restartEnd = await inject2({
+      method: 'POST',
+      url: `/adventure/${persistRunId}/choose`,
+      headers: { cookie },
+      payload: { choiceId: 'retreat' },
+    });
+    const restartSummary = restartEnd.json<{ ended: boolean; summary?: { loot: unknown[] } }>();
+    check(
+      'the resumed run ends and banks its haul',
+      restartSummary.ended === true && (restartSummary.summary?.loot.length ?? 0) > 0,
+    );
+    const endedRow = await db.query.adventureRuns.findFirst({
+      where: drizzleEq(adventureRuns.id, persistRunId),
+    });
+    check('the finished run is persisted as ended', endedRow?.status === 'ended');
+    await app2.close();
+  }
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

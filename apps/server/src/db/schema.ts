@@ -159,6 +159,41 @@ export const questProgress = pgTable(
   (t) => [uniqueIndex('quest_progress_herd_quest_idx').on(t.herdId, t.questId)],
 );
 
+export const adventureRunStatusEnum = pgEnum('adventure_run_status', ['active', 'ended']);
+
+/**
+ * In-flight interactive adventure runs (§9.3). Promoted from an in-memory store so a run
+ * survives a server restart / redeploy / multiple instances. Resolution stays pure + seeded
+ * (services/adventure-run.ts); this table only persists the run's cursor (regionId, sceneId,
+ * step, seed) and the accrued, not-yet-banked haul. Loot/Cubes bank to the herd on `end`;
+ * the row is then kept as `ended` (like quest_progress) for history.
+ */
+export const adventureRuns = pgTable(
+  'adventure_runs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    regionId: text('region_id').notNull(),
+    /** Horse ids in the party, in order. */
+    party: jsonb('party').notNull().$type<string[]>(),
+    /** Seed for the whole run; (seed, step) derives each choice's dice deterministically. */
+    seed: integer('seed').notNull(),
+    step: integer('step').notNull().default(0),
+    sceneId: text('scene_id').notNull(),
+    /** Accrued haul, banked to the herd only on `end`. */
+    loot: jsonb('loot').notNull().$type<Record<string, number>>().default({}),
+    cubes: integer('cubes').notNull().default(0),
+    fatigue: integer('fatigue').notNull().default(0),
+    /** Name of a wild horse befriended during this run (it joins the herd immediately). */
+    befriended: text('befriended'),
+    status: adventureRunStatusEnum('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('adventure_runs_herd_idx').on(t.herdId)],
+);
+
 /** Per-herd record of discovered coats — the Field Guide (collection pillar, §6/§7). */
 export const fieldGuide = pgTable(
   'field_guide',

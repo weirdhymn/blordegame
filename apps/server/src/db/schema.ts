@@ -78,6 +78,8 @@ export const horses = pgTable(
       .notNull()
       .default({}),
     accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
+    /** Big Five (OCEAN) temperament (§8.1) — set at mint, near-immutable. */
+    personality: jsonb('personality').$type<Record<string, number>>().notNull().default({}),
     // Tavern (§10): set when an unrecruited wild horse walks to the shared pool.
     tavernFee: integer('tavern_fee'),
     firstEncounteredBy: uuid('first_encountered_by').references((): AnyPgColumn => herds.id, {
@@ -202,6 +204,59 @@ export const jobAssignments = pgTable(
     assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('job_assignments_herd_idx').on(t.herdId)],
+);
+
+/** The relationship graph the autonomy engine reads + writes (§8). horseA < horseB. */
+export const relationships = pgTable(
+  'relationships',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    horseA: uuid('horse_a')
+      .notNull()
+      .references(() => horses.id, { onDelete: 'cascade' }),
+    horseB: uuid('horse_b')
+      .notNull()
+      .references(() => horses.id, { onDelete: 'cascade' }),
+    affinity: integer('affinity').notNull().default(0),
+    type: text('type'), // friend | rival | bonded | null
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('relationships_pair_idx').on(t.herdId, t.horseA, t.horseB)],
+);
+
+/** Append-only feed of autonomous happenings — the player's window into the herd (§8). */
+export const journalEvents = pgTable(
+  'journal_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    day: integer('day').notNull(),
+    kind: text('kind').notNull(),
+    text: text('text').notNull(),
+    glyph: text('glyph'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('journal_events_herd_idx').on(t.herdId)],
+);
+
+/** Emergent groups horses self-organize (reading circle, …), gated by a Structure (§8.4). */
+export const clubs = pgTable(
+  'clubs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    members: jsonb('members').$type<string[]>().notNull().default([]),
+    formedAt: timestamp('formed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('clubs_herd_type_idx').on(t.herdId, t.type)],
 );
 
 export type UserRow = typeof users.$inferSelect;

@@ -23,6 +23,7 @@ export function publicHorse(h: HorseRow) {
     stats: h.stats,
     skills: h.skills,
     accomplishments: h.accomplishments,
+    personality: h.personality,
     // `luck` is intentionally omitted — it is hidden (§9.1).
   };
 }

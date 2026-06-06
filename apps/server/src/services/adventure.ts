@@ -21,6 +21,7 @@ import { horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
+import { rollWildPersonality } from './personality.js';
 import { isQuestCompleted } from './quests.js';
 import {
   accomplishmentsForLevel,
@@ -173,9 +174,12 @@ export async function adventure(
   let wild: WildOutcome | null = null;
   if (opts.forceWild || rng() < WILD_ENCOUNTER_CHANCE) {
     const genotype = randomGenotype(region.freqOverride);
+    const personality = rollWildPersonality(rng);
     const name = resolve(genotype).displayName;
     const avgCha = party.reduce((s, h) => s + ((h.stats as StatBlock).cha ?? 10), 0) / party.length;
-    const accepted = party.length < PARTY_MAX && rng() < acceptChance(avgCha);
+    const accepted =
+      party.length < PARTY_MAX &&
+      rng() < acceptChance(avgCha, personality.a, personality.n, personality.e);
 
     if (accepted) {
       const recruited = await mintHorse(db, {
@@ -183,6 +187,7 @@ export async function adventure(
         genotype,
         origin: 'wild',
         lifeStage: 'adult',
+        personality,
       });
       wild = { toTavern: false, horseId: recruited.id, name };
     } else {
@@ -191,6 +196,7 @@ export async function adventure(
         genotype,
         origin: 'wild',
         lifeStage: 'adult',
+        personality,
       });
       await db
         .update(horses)

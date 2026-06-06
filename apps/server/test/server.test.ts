@@ -14,6 +14,7 @@ import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
+import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
 import { mulberry32 } from '../src/util/rng.js';
 
@@ -622,6 +623,100 @@ async function main(): Promise<void> {
     payload: {},
   });
   check('re-recruiting a claimed horse fails (atomic)', recruit2.statusCode !== 201);
+
+  // --- Phase 9: The Living Herd ---
+  const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{
+    personality: Record<string, number>;
+    name: string;
+  }>();
+  const ocean = ['o', 'c', 'e', 'a', 'n'];
+  check(
+    'horse has OCEAN personality',
+    ocean.every((k) => typeof pView.personality[k] === 'number'),
+  );
+  check(
+    'personality traits are 0..100',
+    ocean.every((k) => (pView.personality[k] ?? -1) >= 0 && (pView.personality[k] ?? 101) <= 100),
+  );
+  check('horse has an auto-generated name', pView.name.length > 0);
+
+  // compatibility (§8.1): friendly vs clashing temperaments
+  const friendly = compatibility(
+    { o: 50, c: 50, e: 80, a: 80, n: 20 },
+    { o: 50, c: 55, e: 80, a: 75, n: 25 },
+  );
+  const clashing = compatibility(
+    { o: 0, c: 0, e: 0, a: 0, n: 100 },
+    { o: 100, c: 100, e: 0, a: 0, n: 100 },
+  );
+  check('compatible personalities → positive affinity', friendly > 0);
+  check('clashing personalities → non-positive affinity', clashing <= 0);
+
+  // autonomy: two compatible horses in a fresh herd → a friendship + a journal beat
+  const regC = await inject({
+    method: 'POST',
+    url: '/auth/register',
+    payload: { username: 'cherry', password: 'hunter2horse' },
+  });
+  const cookieC = cookieOf(regC);
+  const herdC = regC.json<{ herd: { id: string } }>().herd.id;
+  const social = { o: 50, c: 50, e: 85, a: 85, n: 15 };
+  await mintHorse(db, {
+    herdId: herdC,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    personality: social,
+    name: 'Apple',
+  });
+  await mintHorse(db, {
+    herdId: herdC,
+    genotype: { E: 'ee', A: 'aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    personality: social,
+    name: 'Pearl',
+  });
+  await advanceHerd(db, herdC, Date.now() + 6 * 86_400_000);
+  const journalC = (
+    await inject({ method: 'GET', url: '/journal', headers: { cookie: cookieC } })
+  ).json<{ kind: string; text: string }[]>();
+  check('autonomy wrote journal beats', journalC.length > 0);
+  check(
+    'a friendship formed',
+    journalC.some((ev) => ev.kind === 'friend' || ev.kind === 'bonded'),
+  );
+  const relsC = (
+    await inject({ method: 'GET', url: '/relationships', headers: { cookie: cookieC } })
+  ).json<{ type: string | null; affinity: number }[]>();
+  check(
+    'relationship recorded with positive affinity',
+    relsC.some((r) => r.affinity > 0),
+  );
+
+  // clubs (§8.4): a reading circle, gated by the Library
+  await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    skills: { reading: { level: 2, xp: 0 } },
+  });
+  await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    skills: { reading: { level: 2, xp: 0 } },
+  });
+  await advanceHerd(db, herdId, Date.now() + 16 * 86_400_000);
+  const clubsP = (await inject({ method: 'GET', url: '/clubs', headers: { cookie } })).json<
+    { type: string }[]
+  >();
+  check(
+    'a reading circle formed (Library-gated)',
+    clubsP.some((club) => club.type === 'reading-circle'),
+  );
 
   await app.close();
 

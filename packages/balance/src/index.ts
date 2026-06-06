@@ -109,12 +109,37 @@ export const ADVENTURE_XP = 30;
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';
 
-/** Wild-horse accept odds (§14.4). The personality terms (A/N/E) join in Phase 9. */
-export function acceptChance(avgPartyCha: number): number {
-  return Math.max(0.1, Math.min(0.9, 0.5 + 0.25 * ((avgPartyCha - 10) / 10)));
+/** Wild-horse accept odds (§14.4): charisma persuades, agreeable/extravert horses join, anxious hesitate. */
+export function acceptChance(avgPartyCha: number, a: number, n: number, e: number): number {
+  return Math.max(
+    0.1,
+    Math.min(
+      0.9,
+      0.5 +
+        0.25 * ((avgPartyCha - 10) / 10) +
+        0.15 * ((a - 50) / 50) -
+        0.1 * ((n - 50) / 50) +
+        0.05 * ((e - 50) / 50),
+    ),
+  );
 }
 
 /** Chance an encounter also drops a rare item (§14.5). */
 export function rareItemChance(tier: number, margin: number, crit: boolean): number {
   return 0.02 + 0.025 * (tier - 1) + 0.01 * Math.max(0, Math.min(10, margin)) + (crit ? 0.15 : 0);
 }
+
+// ── The Living Herd: personality & autonomy (Phase 9, §8, §14.2) ────────────
+export type PersonalityKey = 'o' | 'c' | 'e' | 'a' | 'n'; // OCEAN
+export const PERSONALITY_KEYS: PersonalityKey[] = ['o', 'c', 'e', 'a', 'n'];
+
+/** Affinity step for a maximally compatible pair, applied each daily tick. */
+export const AFFINITY_STEP = 12;
+export const FRIEND_THRESHOLD = 30;
+export const BONDED_THRESHOLD = 80;
+export const RIVAL_THRESHOLD = -30;
+export const AFFINITY_MIN = -100;
+export const AFFINITY_MAX = 200;
+/** Cap pair-evaluations per herd per day so login-catchup stays cheap (§8.2). */
+export const MAX_AUTONOMY_PAIRS = 60;
+export const CLUB_MIN_MEMBERS = 2;

@@ -7,6 +7,7 @@ import {
   type LifeStage,
   type RenderSpec,
 } from '@blorse/render-core';
+import { randomHorseName } from '../content/names.js';
 import type { DB } from '../db/client.js';
 import { horseAncestors, horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
@@ -23,10 +24,11 @@ export interface MintInput {
   name?: string | null;
   parentA?: string | null;
   parentB?: string | null;
-  /** Override generated stats/luck/skills (tests, special horses). */
+  /** Override generated stats/luck/skills/personality (tests, special horses). */
   stats?: Record<string, number>;
   luck?: number;
   skills?: Record<string, { level: number; xp: number }>;
+  personality?: Record<string, number>;
 }
 
 /** Store a new horse (genotype + seed [+ glitch]) and materialize its lineage closure. */
@@ -47,7 +49,7 @@ export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
       seed,
       glitch: input.glitch ?? null,
       lifeStage: input.lifeStage ?? 'foal',
-      name: input.name ?? null,
+      name: input.name ?? randomHorseName(), // default fruit/veg name (§9)
       origin: input.origin,
       parentA: input.parentA ?? null,
       parentB: input.parentB ?? null,
@@ -55,6 +57,7 @@ export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
       luck: input.luck ?? gen.luck,
       skills: input.skills ?? gen.skills,
       accomplishments: gen.accomplishments,
+      personality: input.personality ?? gen.personality,
     })
     .returning();
   if (!horse) throw new Error('failed to mint horse');

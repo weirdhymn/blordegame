@@ -13,13 +13,18 @@ function rarityTier(genotype: Genotype): keyof typeof RARITY_SCORE {
 }
 
 /** Recruitment fee from rarity + skills + stats (Luck excluded — it must not leak, §14.3). */
-export function computeTavernFee(horse: Pick<HorseRow, 'genotype' | 'stats' | 'skills'>): number {
+export function computeTavernFee(
+  horse: Pick<HorseRow, 'genotype' | 'stats' | 'skills' | 'personality'>,
+): number {
   const skills = horse.skills as SkillBlock;
   const stats = horse.stats as StatBlock;
+  const pers = horse.personality as Record<string, number>;
   const rarityScore = RARITY_SCORE[rarityTier(horse.genotype)];
   const skillScore = Math.min(1, SKILL_KEYS.reduce((s, k) => s + (skills[k]?.level ?? 0), 0) / 40);
   const statScore = (STAT_KEYS.reduce((s, k) => s + (stats[k] ?? 0), 0) - 6) / (120 - 6);
-  const persScore = 0.5; // neutral until personality lands (Phase 9)
+  const a = pers.a ?? 50;
+  const n = pers.n ?? 50;
+  const persScore = Math.max(0, Math.min(1, 0.5 + 0.3 * ((a - 50) / 50) - 0.2 * ((n - 50) / 50)));
   const score = 0.45 * rarityScore + 0.25 * skillScore + 0.2 * statScore + 0.1 * persScore;
   return Math.round((BASE_FEE * (1 + FEE_MULT * score)) / 5) * 5; // round to 5
 }

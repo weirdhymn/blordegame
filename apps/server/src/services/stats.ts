@@ -17,6 +17,7 @@ import {
 } from '@blorse/balance';
 import type { DB } from '../db/client.js';
 import { horses } from '../db/schema.js';
+import { inheritPersonality, rollWildPersonality, type Personality } from './personality.js';
 
 export type StatBlock = Record<StatKey, number>;
 export type SkillBlock = Record<SkillKey, { level: number; xp: number }>;
@@ -26,6 +27,7 @@ export interface GeneratedStats {
   luck: number;
   skills: SkillBlock;
   accomplishments: string[];
+  personality: Personality;
 }
 
 // Rounded-normal sampler (Box–Muller) on an injected, seeded RNG (server-authoritative).
@@ -81,6 +83,11 @@ export async function generateStatBlock(
         luck: inheritLuck(pa.luck, pb.luck, rng),
         skills: emptySkills(),
         accomplishments: [],
+        personality: inheritPersonality(
+          pa.personality as Personality,
+          pb.personality as Personality,
+          rng,
+        ),
       };
     }
   }
@@ -89,6 +96,7 @@ export async function generateStatBlock(
     luck: rollWildLuck(rng),
     skills: emptySkills(),
     accomplishments: [],
+    personality: rollWildPersonality(rng),
   };
 }
 

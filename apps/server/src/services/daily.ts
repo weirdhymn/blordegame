@@ -4,7 +4,9 @@ import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay, nextRollover } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
+import { resolveAutonomyForDay } from './autonomy.js';
 import { recordDiscovery } from './fieldguide.js';
+import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
 
 /** Cap on per-day job resolution during catch-up so a long absence stays cheap (§8.2). */
@@ -67,6 +69,13 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
   for (let i = 0; i < jobDays; i++) {
     const tickDay = herd.lastSimTick + 1 + i;
     jobCubes += await resolveJobsForDay(db, herdId, mulberry32((herd.simSeed ^ tickDay) >>> 0));
+    // The Living Herd (§8): relationships + clubs evolve, producing journal beats.
+    const events = await resolveAutonomyForDay(
+      db,
+      herdId,
+      mulberry32((herd.simSeed ^ tickDay ^ 0x9e3779b9) >>> 0),
+    );
+    await addJournalEvents(db, herdId, tickDay, events);
   }
 
   const cubesGained = daysAdvanced * DAILY_CUBES;

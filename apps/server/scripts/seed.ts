@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   if ((await listTavern(db)).length === 0) {
     const stock = [
       { genotype: { E: 'Ee', A: 'aa' }, seed: 0xa11 }, // Black
-      { genotype: { E: 'Ee', A: 'At' }, seed: 0xb22 }, // Seal Brown
+      { genotype: { E: 'EE', A: 'AA' }, seed: 0xb22 }, // Bay
       { genotype: { G: 'Gg', E: 'Ee', A: 'Aa' }, seed: 0xc33 }, // Gray (rarer → pricier)
     ];
     for (const s of stock) {

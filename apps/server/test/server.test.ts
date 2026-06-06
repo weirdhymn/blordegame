@@ -11,11 +11,19 @@ import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { users } from '../src/db/schema.js';
+import { ADVENTURE_BY_REGION, type Choice } from '../src/content/adventures.js';
 import { adventure } from '../src/services/adventure.js';
+import {
+  availableChoices,
+  chooseInRun,
+  partyHarmony,
+  resolveChoice,
+  startRun,
+} from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
 import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
-import { mintHorse, shareLineage } from '../src/services/horse.js';
+import { listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
 import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
@@ -650,6 +658,206 @@ async function main(): Promise<void> {
     payload: {},
   });
   check('re-recruiting a claimed horse fails (atomic)', recruit2.statusCode !== 201);
+
+  // --- Phase 8c: interactive "story" adventures (§9.3) ---
+  // Pure scene resolution is deterministic under a seeded RNG.
+  const flatStats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const calm1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: flatStats,
+    luck: 10,
+    personality: { o: 50, c: 50, e: 45, a: 80, n: 20 },
+  });
+  const calm2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: flatStats,
+    luck: 10,
+    personality: { o: 52, c: 48, e: 50, a: 82, n: 18 },
+  });
+  const calmParty = [calm1, calm2];
+
+  const safeChoice: Choice = { id: 'safe', text: 'safe', success: { text: 'auto', next: 'end' } };
+  eq(
+    'a checkless choice always takes its success branch',
+    resolveChoice(calmParty, safeChoice, () => 0.5).outcome.text,
+    'auto',
+  );
+
+  const ref = skillCheck(10, 0, 10, 0, () => 0.5).total; // the roll these flat horses make at rng 0.5
+  const plain: Choice = {
+    id: 'p',
+    text: 'p',
+    check: { stat: 'cha', dc: ref + 1 },
+    success: { text: 'win', next: 'end' },
+    failure: { text: 'lose', next: 'end' },
+  };
+  eq(
+    'a roll one under the DC fails',
+    resolveChoice(calmParty, plain, () => 0.5).outcome.text,
+    'lose',
+  );
+
+  // Harmony buffs a flagged check: a tight-knit party clears a DC the same roll would miss.
+  const harmonyBonus = partyHarmony(calmParty);
+  check('a tight-knit party earns a harmony buff', harmonyBonus >= 1);
+  eq('a lone horse has no harmony', partyHarmony([calm1]), 0);
+  const harmonized: Choice = {
+    id: 'h',
+    text: 'h',
+    check: { stat: 'cha', dc: ref + 1, harmony: true },
+    success: { text: 'win', next: 'end' },
+    failure: { text: 'lose', next: 'end' },
+  };
+  eq(
+    'the same roll clears the DC with harmony',
+    resolveChoice(calmParty, harmonized, () => 0.5).outcome.text,
+    'win',
+  );
+
+  // A clashing party harmonizes worse than a compatible one.
+  const clash1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: flatStats,
+    luck: 10,
+    personality: { o: 95, c: 5, e: 10, a: 5, n: 95 },
+  });
+  const clash2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: flatStats,
+    luck: 10,
+    personality: { o: 5, c: 95, e: 95, a: 10, n: 98 },
+  });
+  check(
+    'a clashing party harmonizes worse than a compatible one',
+    partyHarmony([clash1, clash2]) < harmonyBonus,
+  );
+
+  // Personality gates a choice: the bold call needs Extraversion ≥ 60 in someone.
+  const ggScript = ADVENTURE_BY_REGION.get('green-grass');
+  const strangerScene = ggScript?.scenes['stranger'];
+  check('green-grass has a stranger scene', !!strangerScene);
+  if (strangerScene) {
+    const timidIds = availableChoices(strangerScene, calmParty).map((c) => c.id);
+    check('a non-bold party cannot call out boldly', !timidIds.includes('call-bold'));
+    check('a non-bold party can still approach gently', timidIds.includes('approach'));
+    const bold = await mintHorse(db, {
+      herdId,
+      genotype: { E: 'Ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      stats: flatStats,
+      luck: 10,
+      personality: { o: 50, c: 50, e: 80, a: 70, n: 25 },
+    });
+    const boldIds = availableChoices(strangerScene, [bold]).map((c) => c.id);
+    check('a bold party unlocks the bold call', boldIds.includes('call-bold'));
+  }
+
+  // HTTP flow: start → choose → bank, with the haul reaching the stash.
+  const fiberQty = async (): Promise<number> => {
+    const inv = (await inject({ method: 'GET', url: '/inventory', headers: { cookie } })).json<
+      { id: string; qty: number }[]
+    >();
+    return inv.find((i) => i.id === 'plant-fiber')?.qty ?? 0;
+  };
+  const regionsView = (await inject({ method: 'GET', url: '/regions', headers: { cookie } })).json<
+    { id: string; interactive: boolean }[]
+  >();
+  check(
+    'green-grass is flagged interactive',
+    regionsView.find((r) => r.id === 'green-grass')?.interactive === true,
+  );
+  check(
+    'a scriptless region is not interactive',
+    regionsView.find((r) => r.id === 'dusty-dunes')?.interactive === false,
+  );
+
+  const startRes = await inject({
+    method: 'POST',
+    url: '/adventure/start',
+    headers: { cookie },
+    payload: { regionId: 'green-grass', party: [id] },
+  });
+  eq('POST /adventure/start → 200', startRes.statusCode, 200);
+  const startJson = startRes.json<{ runId: string; scene: { id: string } }>();
+  eq('the run opens on the meadow edge', startJson.scene.id, 'meadow-edge');
+  const storyRunId = startJson.runId;
+
+  const noScript = await inject({
+    method: 'POST',
+    url: '/adventure/start',
+    headers: { cookie },
+    payload: { regionId: 'dusty-dunes', party: [id] },
+  });
+  eq('start in a scriptless region → 404', noScript.statusCode, 404);
+
+  const step1 = await inject({
+    method: 'POST',
+    url: `/adventure/${storyRunId}/choose`,
+    headers: { cookie },
+    payload: { choiceId: 'forage-bank' },
+  });
+  eq('first choice → 200', step1.statusCode, 200);
+  const step1Json = step1.json<{ ended: boolean; scene?: { id: string } }>();
+  check(
+    'foraging advances to the crossroads',
+    step1Json.ended === false && step1Json.scene?.id === 'crossroads',
+  );
+
+  const fiberBefore = await fiberQty();
+  const retreatRes = await inject({
+    method: 'POST',
+    url: `/adventure/${storyRunId}/choose`,
+    headers: { cookie },
+    payload: { choiceId: 'retreat' },
+  });
+  const retreatJson = retreatRes.json<{
+    ended: boolean;
+    summary: { loot: { id: string; qty: number }[] };
+  }>();
+  check(
+    'retreat ends the run with a banked haul',
+    retreatJson.ended === true && retreatJson.summary.loot.length > 0,
+  );
+  check('the banked haul reached the herd stash', (await fiberQty()) > fiberBefore);
+
+  const stale = await inject({
+    method: 'POST',
+    url: `/adventure/${storyRunId}/choose`,
+    headers: { cookie },
+    payload: { choiceId: 'retreat' },
+  });
+  eq('choosing in an ended run → 404', stale.statusCode, 404);
+
+  // Wild befriend: a successful approach mints a stranger straight into the herd.
+  const herdBefore = (await listHerdHorses(db, herdId)).length;
+  let befriendedName: string | null = null;
+  for (let s = 1; s <= 60 && befriendedName === null; s++) {
+    const r = await startRun(db, herdId, 'green-grass', [hs1.id, hs2.id], { seed: s });
+    if (!r.ok) continue;
+    await chooseInRun(db, herdId, r.runId, 'forage-bank');
+    await chooseInRun(db, herdId, r.runId, 'push');
+    const res = await chooseInRun(db, herdId, r.runId, 'approach');
+    if (res.ok && res.befriended) befriendedName = res.befriended.name;
+    if (res.ok && !res.ended) await chooseInRun(db, herdId, r.runId, 'slip-out');
+  }
+  check('a wild stranger can be befriended into the herd', befriendedName !== null);
+  check(
+    'befriending added a horse to the herd',
+    (await listHerdHorses(db, herdId)).length > herdBefore,
+  );
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

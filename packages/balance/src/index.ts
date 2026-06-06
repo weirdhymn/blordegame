@@ -117,6 +117,10 @@ export const ADVENTURE_XP = 30;
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';
 
+/** Interactive adventure scenes (§9.3): party harmony buffs `harmony` checks — cozy, buff-only. */
+export const ADVENTURE_HARMONY_MAX = 4; // max DC reduction a tight-knit party grants a check
+export const ADVENTURE_HARMONY_SCALE = 3; // avg pairwise OCEAN compatibility ÷ this → the bonus
+
 /** Wild-horse accept odds (§14.4): charisma persuades, agreeable/extravert horses join, anxious hesitate. */
 export function acceptChance(avgPartyCha: number, a: number, n: number, e: number): number {
   return Math.max(

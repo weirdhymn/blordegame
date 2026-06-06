@@ -561,3 +561,72 @@ code {
   padding: 0 0.3rem;
   font-size: 0.8rem;
 }
+
+/* ── Interactive "story" adventures ── */
+.story-haul {
+  margin: 0 0 0.5rem;
+}
+.story-scene {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  margin: 0.25rem 0 0.75rem;
+}
+.story-log {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.story-log li {
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--sage-deep);
+  padding-left: 0.5rem;
+}
+.story-log li.hit {
+  border-left-color: #4a7a2c;
+}
+.story-log li.miss {
+  border-left-color: #b08a3a;
+}
+.story-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.story-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+}
+.story-choice:hover:not(:disabled) {
+  background: var(--sage);
+}
+.story-choice:disabled {
+  opacity: 0.55;
+}
+.story-choice-text {
+  font-size: 0.9rem;
+}
+.check-tag {
+  font-size: 0.72rem;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  font-size: 0.78rem;
+  padding: 0.2rem 0;
+  cursor: pointer;
+}

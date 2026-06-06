@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { ROAM_DROPS_MAX, ROAM_DROPS_MIN } from '@blorse/balance';
+import { ADVENTURE_BY_REGION } from '../content/adventures.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { mulberry32 } from '../util/rng.js';
@@ -12,6 +13,8 @@ export interface RegionView {
   tier: number;
   recommendedPower: number;
   unlocked: boolean;
+  /** Has an authored scene library → the Explore "Set out" runs the interactive flow (§9.3). */
+  interactive: boolean;
 }
 
 export async function listRegions(db: DB, herdId: string): Promise<RegionView[]> {
@@ -23,6 +26,7 @@ export async function listRegions(db: DB, herdId: string): Promise<RegionView[]>
       tier: r.tier,
       recommendedPower: r.recommendedPower,
       unlocked: await isQuestCompleted(db, herdId, r.requiresQuest),
+      interactive: ADVENTURE_BY_REGION.has(r.id),
     });
   }
   return out;

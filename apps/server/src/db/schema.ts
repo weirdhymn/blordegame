@@ -20,6 +20,8 @@ export const lifeStageEnum = pgEnum('life_stage', ['foal', 'adult']);
 export const glitchKindEnum = pgEnum('glitch_kind', ['inverted', 'screen', 'shade']);
 export const horseOrigin = pgEnum('horse_origin', ['founder', 'wild', 'bred']);
 export const questStatus = pgEnum('quest_status', ['active', 'completed']);
+export const listingStatus = pgEnum('listing_status', ['active', 'sold', 'cancelled']);
+export const tradeStatus = pgEnum('trade_status', ['pending', 'accepted', 'declined', 'cancelled']);
 
 /** Auth identity only (BLORSE_PLAN.md §6). Game state hangs off the Herd, not the User. */
 export const users = pgTable('users', {
@@ -257,6 +259,72 @@ export const clubs = pgTable(
     formedAt: timestamp('formed_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('clubs_herd_type_idx').on(t.herdId, t.type)],
+);
+
+/** Marketplace listings — a horse offered at a fixed Cube price; escrowed buy (§10). */
+export const marketListings = pgTable(
+  'market_listings',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }), // seller
+    horseId: uuid('horse_id')
+      .notNull()
+      .references(() => horses.id, { onDelete: 'cascade' }),
+    price: integer('price').notNull(),
+    status: listingStatus('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('market_status_idx').on(t.status)],
+);
+
+/** Direct offer/accept trades — both sides escrowed, atomic settlement (§10). */
+export const trades = pgTable('trades', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fromHerd: uuid('from_herd')
+    .notNull()
+    .references(() => herds.id, { onDelete: 'cascade' }),
+  toHerd: uuid('to_herd')
+    .notNull()
+    .references(() => herds.id, { onDelete: 'cascade' }),
+  offerHorses: jsonb('offer_horses').$type<string[]>().notNull().default([]),
+  offerCubes: integer('offer_cubes').notNull().default(0),
+  requestHorses: jsonb('request_horses').$type<string[]>().notNull().default([]),
+  requestCubes: integer('request_cubes').notNull().default(0),
+  status: tradeStatus('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Simple async direct messages (§10). */
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    fromHerd: uuid('from_herd')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    toHerd: uuid('to_herd')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('messages_to_idx').on(t.toHerd)],
+);
+
+/** Every state-changing economy action, for anti-abuse + moderation (§10). */
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id').references(() => herds.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('audit_herd_idx').on(t.herdId)],
 );
 
 export type UserRow = typeof users.$inferSelect;

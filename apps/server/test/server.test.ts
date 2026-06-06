@@ -10,6 +10,7 @@ import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { adventure } from '../src/services/adventure.js';
+import { getAudit } from '../src/services/audit.js';
 import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
@@ -716,6 +717,116 @@ async function main(): Promise<void> {
   check(
     'a reading circle formed (Library-gated)',
     clubsP.some((club) => club.type === 'reading-circle'),
+  );
+
+  // --- Phase 10: social & economy ---
+  // Marketplace: plum lists a horse, cherry buys it
+  const list = await inject({
+    method: 'POST',
+    url: '/market',
+    headers: { cookie },
+    payload: { horseId: mateId, price: 100 },
+  });
+  eq('list a horse → 201', list.statusCode, 201);
+  const listingId = list.json<{ listingId: string }>().listingId;
+  const market = (await inject({ method: 'GET', url: '/market', headers: { cookie } })).json<
+    { id: string }[]
+  >();
+  check(
+    'listing appears on the market',
+    market.some((l) => l.id === listingId),
+  );
+  const buyOwn = await inject({
+    method: 'POST',
+    url: `/market/${listingId}/buy`,
+    headers: { cookie },
+  });
+  eq('buying your own listing → 400', buyOwn.statusCode, 400);
+  const buy = await inject({
+    method: 'POST',
+    url: `/market/${listingId}/buy`,
+    headers: { cookie: cookieC },
+  });
+  eq('cherry buys the horse → 200', buy.statusCode, 200);
+  eq(
+    'the bought horse now belongs to cherry',
+    (await inject({ method: 'GET', url: `/horses/${mateId}` })).json<{ herdId: string }>().herdId,
+    herdC,
+  );
+
+  // Direct trade: plum offers gp1 for 30 of cherry's Cubes; cherry accepts (atomic swap)
+  const trade = await inject({
+    method: 'POST',
+    url: '/trades',
+    headers: { cookie },
+    payload: { toHerd: herdC, offerHorses: [gp1.id], requestCubes: 30 },
+  });
+  eq('create trade → 201', trade.statusCode, 201);
+  const tradeId = trade.json<{ tradeId: string }>().tradeId;
+  check(
+    'cherry sees the incoming trade',
+    (await inject({ method: 'GET', url: '/trades', headers: { cookie: cookieC } }))
+      .json<{ id: string }[]>()
+      .some((t) => t.id === tradeId),
+  );
+  const accept = await inject({
+    method: 'POST',
+    url: `/trades/${tradeId}/accept`,
+    headers: { cookie: cookieC },
+  });
+  eq('accept trade → 200', accept.statusCode, 200);
+  eq(
+    'the traded horse moved to cherry',
+    (await inject({ method: 'GET', url: `/horses/${gp1.id}` })).json<{ herdId: string }>().herdId,
+    herdC,
+  );
+  const trade2 = await inject({
+    method: 'POST',
+    url: '/trades',
+    headers: { cookie },
+    payload: { toHerd: herdC, offerCubes: 10 },
+  });
+  const tradeId2 = trade2.json<{ tradeId: string }>().tradeId;
+  eq(
+    'cherry declines a trade → 200',
+    (
+      await inject({
+        method: 'POST',
+        url: `/trades/${tradeId2}/decline`,
+        headers: { cookie: cookieC },
+      })
+    ).statusCode,
+    200,
+  );
+
+  // Inter-herd visit
+  const profile = (
+    await inject({ method: 'GET', url: `/herds/${herdC}/profile`, headers: { cookie } })
+  ).json<{ name: string; horseCount: number; highlights: unknown[] }>();
+  check('visit shows the herd name', profile.name.length > 0);
+  check('visit shows horses', profile.horseCount > 0);
+
+  // Messaging
+  const msg = await inject({
+    method: 'POST',
+    url: '/messages',
+    headers: { cookie },
+    payload: { toHerd: herdC, body: 'Want to trade?' },
+  });
+  eq('send a message → 201', msg.statusCode, 201);
+  check(
+    'message lands in the recipient inbox',
+    (await inject({ method: 'GET', url: '/messages', headers: { cookie: cookieC } }))
+      .json<{ body: string }[]>()
+      .some((m) => m.body === 'Want to trade?'),
+  );
+
+  // AuditLog recorded the economy actions
+  const audit = await getAudit(db, herdId);
+  check(
+    'economy actions were audited',
+    audit.some((row) => row.action === 'market_list') &&
+      audit.some((row) => row.action === 'trade_offer'),
   );
 
   await app.close();

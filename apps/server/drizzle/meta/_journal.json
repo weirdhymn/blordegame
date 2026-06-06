@@ -57,6 +57,13 @@
       "when": 1780716957267,
       "tag": "0007_tiresome_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780717482272,
+      "tag": "0008_striped_nextwave",
+      "breakpoints": true
     }
   ]
 }

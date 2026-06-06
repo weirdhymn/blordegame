@@ -5,6 +5,8 @@ import type { HerdRow } from '../db/schema.js';
 import { getClubs, getRelationships } from '../services/autonomy.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getJournal } from '../services/journal.js';
+import { getInbox, sendMessage } from '../services/messaging.js';
+import { getHerdProfile } from '../services/visit.js';
 
 async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
   const user = await resolveSessionUser(db, cookie);
@@ -30,5 +32,35 @@ export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     return reply.send(await getRelationships(db, herd.id));
+  });
+
+  // Inter-herd visit (§10): another herd's public grounds + journal highlights.
+  app.get('/herds/:id/profile', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    const profile = await getHerdProfile(db, id);
+    if (!profile) return reply.code(404).send({ error: 'no such herd' });
+    return reply.send(profile);
+  });
+
+  // Async messaging (§10).
+  app.post('/messages', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    const body = (req.body ?? {}) as { toHerd?: string; body?: string };
+    const result = await sendMessage(db, herd.id, body.toHerd ?? '', body.body ?? '');
+    if (!result.ok) {
+      return reply
+        .code(result.code === 'no_recipient' ? 404 : 400)
+        .send({ error: result.message, code: result.code });
+    }
+    return reply.code(201).send(result);
+  });
+
+  app.get('/messages', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    return reply.send(await getInbox(db, herd.id));
   });
 }

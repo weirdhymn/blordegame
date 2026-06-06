@@ -3,7 +3,7 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
-import { FOAL_TO_ADULT_MS } from '@blorse/balance';
+import { FOAL_TO_ADULT_MS, STAT_KEYS } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
@@ -13,6 +13,7 @@ import { breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
+import { skillCheck } from '../src/services/stats.js';
 import { mulberry32 } from '../src/util/rng.js';
 
 let pass = 0;
@@ -474,6 +475,91 @@ async function main(): Promise<void> {
     'Library is placed',
     pasture.structures.some((s) => s.type === 'library'),
   );
+
+  // --- Phase 8a: stats, dice & jobs ---
+  const horseView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{
+    stats: Record<string, number>;
+    skills: Record<string, { level: number; xp: number }>;
+    accomplishments: unknown[];
+    luck?: number;
+  }>();
+  check(
+    'horse exposes all six stats',
+    STAT_KEYS.every((k) => typeof horseView.stats[k] === 'number'),
+  );
+  check(
+    'stats are in 1..20',
+    STAT_KEYS.every((k) => (horseView.stats[k] ?? 0) >= 1 && (horseView.stats[k] ?? 0) <= 20),
+  );
+  check('luck is hidden', horseView.luck === undefined);
+  check('accomplishments is a list', Array.isArray(horseView.accomplishments));
+
+  // dice (§9.1): deterministic + crit on a natural 20
+  eq(
+    'dice are deterministic for a seed',
+    skillCheck(15, 3, 12, 10, mulberry32(7)).total,
+    skillCheck(15, 3, 12, 10, mulberry32(7)).total,
+  );
+  const natTwenty = skillCheck(10, 0, 10, 15, () => 0.99);
+  check('a natural 20 is a crit', natTwenty.d20 === 20 && natTwenty.crit);
+
+  // stat inheritance (§14.2): maxed parents → a capable foal
+  const maxStats = { str: 20, dex: 20, con: 20, int: 20, wis: 20, cha: 20 };
+  const hs1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: maxStats,
+    luck: 20,
+  });
+  const hs2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee', A: 'aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: maxStats,
+    luck: 20,
+  });
+  const hsBreed = await breedHorses(db, herdId, hs1.id, hs2.id);
+  check('maxed parents produce a foal', hsBreed.ok && hsBreed.viable);
+  if (hsBreed.ok && hsBreed.viable) {
+    const fStats = hsBreed.foal.stats;
+    const avg = STAT_KEYS.reduce((s, k) => s + (fStats[k] ?? 0), 0) / STAT_KEYS.length;
+    check('foal inherits high stats from maxed parents', avg > 12);
+  }
+
+  // jobs (§9.2): structure-gated assignment
+  const noStructure = await inject({
+    method: 'POST',
+    url: `/horses/${id}/job`,
+    headers: { cookie },
+    payload: { structureType: 'forge' },
+  });
+  eq('assign a job without the structure → 409', noStructure.statusCode, 409);
+  const noJob = await inject({
+    method: 'POST',
+    url: `/horses/${id}/job`,
+    headers: { cookie },
+    payload: { structureType: 'meeting-hall' },
+  });
+  eq('assign to a jobless building → 400', noJob.statusCode, 400);
+  const assign = await inject({
+    method: 'POST',
+    url: `/horses/${id}/job`,
+    headers: { cookie },
+    payload: { structureType: 'library' },
+  });
+  eq('assign the Librarian job → 201', assign.statusCode, 201);
+
+  // jobs produce + train skills over the daily rollover
+  const adv8 = await advanceHerd(db, herdId, Date.now() + 12 * 86_400_000);
+  check('jobs earned Cubes on the rollover', adv8.jobCubes > 0);
+  const worked = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{
+    skills: Record<string, { level: number; xp: number }>;
+  }>();
+  const reading = worked.skills.reading ?? { level: 0, xp: 0 };
+  check('the worker gained Reading progress', reading.level + reading.xp > 0);
 
   await app.close();
 

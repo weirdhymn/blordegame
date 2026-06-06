@@ -36,6 +36,13 @@
       "when": 1780714997583,
       "tag": "0004_short_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780715982547,
+      "tag": "0005_fancy_lifeguard",
+      "breakpoints": true
     }
   ]
 }

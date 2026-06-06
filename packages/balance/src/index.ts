@@ -71,3 +71,34 @@ export const DAILY_CUBES = 50;
 /** Structure slots in a fresh Pasture; grows with herd level. */
 export const PASTURE_BASE_SLOTS = 4;
 export const PASTURE_SLOTS_PER_LEVEL = 1;
+
+// ── RPG: stats, skills, jobs (Phase 8, §9, §14.6) ───────────────────────────
+export type StatKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+export type SkillKey = 'reading' | 'smithing' | 'baking' | 'foraging' | 'athletics' | 'performance';
+
+export const STAT_KEYS: StatKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+export const SKILL_KEYS: SkillKey[] = [
+  'reading',
+  'smithing',
+  'baking',
+  'foraging',
+  'athletics',
+  'performance',
+];
+
+/** Skill → governing stat (§14.6). */
+export const SKILL_STAT: Record<SkillKey, StatKey> = {
+  reading: 'int',
+  smithing: 'str',
+  baking: 'dex',
+  foraging: 'wis',
+  athletics: 'con',
+  performance: 'cha',
+};
+
+/** Job difficulty + yields (§9.2) — low-risk, cozy: a poor roll just yields less. */
+export const JOB_DC = 12;
+export const JOB_CUBES_BASE = 10;
+export const JOB_XP_BASE = 20;
+/** XP needed to go from level L to L+1 = SKILL_XP_PER_LEVEL × (L + 1). */
+export const SKILL_XP_PER_LEVEL = 100;

@@ -70,6 +70,14 @@ export const horses = pgTable(
     /** Light-care counter (§7) — a hook for small bonuses once stats land (Phase 8). */
     careCount: integer('care_count').notNull().default(0),
     lastCaredAt: timestamp('last_cared_at', { withTimezone: true }),
+    // RPG (§9): six core stats, hidden Luck, skills, accomplishments. Set at mint.
+    stats: jsonb('stats').$type<Record<string, number>>().notNull().default({}),
+    luck: integer('luck').notNull().default(10),
+    skills: jsonb('skills')
+      .$type<Record<string, { level: number; xp: number }>>()
+      .notNull()
+      .default({}),
+    accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
   },
   (t) => [index('horses_herd_idx').on(t.herdId)],
 );
@@ -169,6 +177,26 @@ export const structures = pgTable(
     placedAt: timestamp('placed_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('structures_herd_type_idx').on(t.herdId, t.type)],
+);
+
+/** A horse posted to a job at a Structure (§9.2). One job per horse. */
+export const jobAssignments = pgTable(
+  'job_assignments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    horseId: uuid('horse_id')
+      .notNull()
+      .unique()
+      .references(() => horses.id, { onDelete: 'cascade' }),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    structureType: text('structure_type').notNull(),
+    skill: text('skill').notNull(),
+    stat: text('stat').notNull(),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('job_assignments_herd_idx').on(t.herdId)],
 );
 
 export type UserRow = typeof users.$inferSelect;

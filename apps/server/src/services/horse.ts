@@ -9,7 +9,9 @@ import {
 } from '@blorse/render-core';
 import type { DB } from '../db/client.js';
 import { horseAncestors, horses, type HorseRow } from '../db/schema.js';
+import { mulberry32 } from '../util/rng.js';
 import { recordDiscovery } from './fieldguide.js';
+import { generateStatBlock } from './stats.js';
 
 export interface MintInput {
   herdId: string | null;
@@ -21,11 +23,22 @@ export interface MintInput {
   name?: string | null;
   parentA?: string | null;
   parentB?: string | null;
+  /** Override generated stats/luck/skills (tests, special horses). */
+  stats?: Record<string, number>;
+  luck?: number;
+  skills?: Record<string, { level: number; xp: number }>;
 }
 
 /** Store a new horse (genotype + seed [+ glitch]) and materialize its lineage closure. */
 export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
   const seed = input.seed ?? randomInt(1, 2 ** 31);
+  // Stats/luck: inherited from parents (bred) or rolled (wild) — §9.1/§14.2.
+  const gen = await generateStatBlock(
+    db,
+    input.parentA,
+    input.parentB,
+    mulberry32((seed ^ 0x5bf03635) >>> 0),
+  );
   const [horse] = await db
     .insert(horses)
     .values({
@@ -38,6 +51,10 @@ export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
       origin: input.origin,
       parentA: input.parentA ?? null,
       parentB: input.parentB ?? null,
+      stats: input.stats ?? gen.stats,
+      luck: input.luck ?? gen.luck,
+      skills: input.skills ?? gen.skills,
+      accomplishments: gen.accomplishments,
     })
     .returning();
   if (!horse) throw new Error('failed to mint horse');

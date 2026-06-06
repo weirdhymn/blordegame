@@ -7,6 +7,7 @@ import {
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
   BONDED_THRESHOLD,
+  CARE_CHECK_BONUS,
   PARTY_MAX,
   type PersonalityKey,
   type SkillKey,
@@ -23,6 +24,7 @@ import {
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
+import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { getRelationships } from './autonomy.js';
 import { getHorse, mintHorse } from './horse.js';
@@ -152,10 +154,24 @@ function bestForCheck(
 
 export interface ChoiceResolution {
   outcome: Outcome;
-  /** Present when the choice had a check; absent for safe/narrative choices. */
-  roll: { d20: number; total: number; dc: number; success: boolean; harmony: number } | null;
+  /** Present when the choice had a check; absent for safe/narrative choices. `harmony` + `care`
+   *  are the DC reductions from party rapport and from the attempting horse being freshly cared. */
+  roll: {
+    d20: number;
+    total: number;
+    dc: number;
+    success: boolean;
+    harmony: number;
+    care: number;
+  } | null;
   /** When the check has a skill: the horse that stepped up + the skill it practiced (§9.3). */
   trained: { horseId: string; skill: SkillKey; success: boolean } | null;
+}
+
+/** A horse tended today (feed/groom, §7) sets out in good fettle — a small buff on its checks. */
+function careBonusFor(horse: HorseRow | undefined, now: number): number {
+  if (!horse || now <= 0 || !horse.lastCaredAt) return 0;
+  return gameDay(horse.lastCaredAt.getTime()) === gameDay(now) ? CARE_CHECK_BONUS : 0;
 }
 
 /**
@@ -169,16 +185,28 @@ export function resolveChoice(
   choice: Choice,
   rng: () => number,
   bonds: PartyBond[] = [],
+  now = 0,
 ): ChoiceResolution {
   if (!choice.check) return { outcome: choice.success, roll: null, trained: null };
   const { stat, skill, dc, harmony } = choice.check;
   const who = bestForCheck(party, stat, skill);
-  const bonus = harmony ? partyHarmony(party, bonds) : 0;
-  const check = skillCheck(who.statValue, who.skillLevel, who.luck, dc - bonus, rng);
+  const harmonyBonus = harmony ? partyHarmony(party, bonds) : 0;
+  const care = careBonusFor(
+    party.find((h) => h.id === who.horseId),
+    now,
+  );
+  const check = skillCheck(who.statValue, who.skillLevel, who.luck, dc - harmonyBonus - care, rng);
   const outcome = check.success ? choice.success : (choice.failure ?? choice.success);
   return {
     outcome,
-    roll: { d20: check.d20, total: check.total, dc, success: check.success, harmony: bonus },
+    roll: {
+      d20: check.d20,
+      total: check.total,
+      dc,
+      success: check.success,
+      harmony: harmonyBonus,
+      care,
+    },
     trained: skill ? { horseId: who.horseId, skill, success: check.success } : null,
   };
 }
@@ -382,6 +410,7 @@ export async function chooseInRun(
     choice,
     stepRng(run.seed, run.step),
     bonds,
+    Date.now(),
   );
   // Did a real friendship/bond (not just a shared temperament) help this harmony check? (→ 💞)
   const bonded = !!choice.check?.harmony && partyHasBond(party, bonds);

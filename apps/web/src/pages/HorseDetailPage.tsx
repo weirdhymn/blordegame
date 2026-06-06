@@ -108,6 +108,7 @@ export function HorseDetailPage(): ReactElement {
     setCareNote(null);
     try {
       setCareNote((await care(id, action)).message);
+      setHorse(await getHorse(id)); // refresh caredToday / careCount / the Beloved mark
     } catch (e) {
       setCareNote(e instanceof ApiError ? e.message : 'Could not care for it.');
     } finally {
@@ -216,6 +217,7 @@ export function HorseDetailPage(): ReactElement {
             {horse.lifeStage} · {horse.origin}
           </p>
           {horse.experienced && <p className="mark">🧭 Seasoned Adventurer</p>}
+          {horse.beloved && <p className="mark">🍎 Beloved</p>}
           {(horse.adventures ?? 0) > 0 && (
             <p className="muted">
               {horse.adventures} adventure{(horse.adventures ?? 0) === 1 ? '' : 's'} completed
@@ -234,6 +236,11 @@ export function HorseDetailPage(): ReactElement {
         </button>
         {careNote && <span className="muted">{careNote}</span>}
       </div>
+      <p className="muted">
+        {horse.caredToday
+          ? '🍎 Tended today — it sets out on adventures in good fettle (a small edge on its checks).'
+          : 'A fed-and-groomed horse fares a little better on its adventures today.'}
+      </p>
 
       {horse.lifeStage === 'adult' && (
         <>

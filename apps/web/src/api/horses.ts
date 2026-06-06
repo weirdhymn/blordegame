@@ -20,6 +20,10 @@ export interface Horse {
   /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3). */
   adventures?: number;
   experienced?: boolean;
+  /** Lifetime care + the "Beloved" mark; `caredToday` → its adventure checks get the care buff (§7). */
+  careCount?: number;
+  beloved?: boolean;
+  caredToday?: boolean;
 }
 
 export const listHerdHorses = (herdId: string): Promise<Horse[]> =>

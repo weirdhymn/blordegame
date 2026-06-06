@@ -142,6 +142,11 @@ export const ADVENTURE_SKILL_XP_SUCCESS = 12;
 export const ADVENTURE_SKILL_XP_ATTEMPT = 5;
 /** Completed interactive adventures a horse needs before it wears the cosmetic "Seasoned" mark. */
 export const ADVENTURE_MARK_THRESHOLD = 3;
+/** Care matters (§7→§9.3): a horse tended today (feed/groom) sets out in good fettle — a small DC
+ *  reduction on the adventure checks it attempts (stacks with harmony; buff-only, cozy). */
+export const CARE_CHECK_BONUS = 2;
+/** Lifetime care a horse needs before it wears the cosmetic "Beloved" mark. */
+export const CARE_BELOVED_THRESHOLD = 10;
 /** Per-adventure chance a wild horse appears — the main new-horse faucet (§9.3). */
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';

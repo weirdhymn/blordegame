@@ -192,3 +192,47 @@ a {
   text-align: center;
   color: var(--ink-soft);
 }
+
+.section-h {
+  font-size: 1rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.horse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.horse-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 0.6rem;
+}
+
+.horse-canvas {
+  image-rendering: pixelated;
+  width: 100%;
+  height: auto;
+  background: var(--sage);
+  border-radius: 4px;
+}
+
+.horse-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.horse-coat {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.footer-link {
+  margin-top: 1.25rem;
+}

@@ -70,7 +70,11 @@ importers:
 
   packages/genetics: {}
 
-  packages/render-core: {}
+  packages/render-core:
+    dependencies:
+      '@blorse/genetics':
+        specifier: workspace:*
+        version: link:../genetics
 
 packages:
 

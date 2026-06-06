@@ -1,7 +1,10 @@
 /**
- * @blorse/render-core — layer manifest types, the genetics→art palette adapter,
- * procedural shading, and glitch transforms.
- *
- * Phase 0 (scaffold): intentionally empty. Built in Phase 2 (BLORSE_PLAN.md §4).
+ * @blorse/render-core — the genetics→art bridge (BLORSE_PLAN.md §4).
+ * Pure, framework-agnostic: turns `resolve()` output into a `RenderSpec` a
+ * compositor can paint. No PixiJS/Canvas here — only color + shading params.
  */
-export const PACKAGE_NAME = '@blorse/render-core';
+export * from './types.js';
+export { HORSE_MANIFEST } from './manifest.js';
+export { buildRenderSpec } from './palette-adapter.js';
+export { transformHex } from './glitch.js';
+export * as paletteMap from './palette-map.js';

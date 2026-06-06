@@ -3,11 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Layer manifest types + palette adapter + glitch transforms. Phase 2 (BLORSE_PLAN.md §4).",
+  "description": "Genetics→art bridge: layer manifest, palette adapter, procedural shading params, glitch transforms. BLORSE_PLAN.md §4.",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@blorse/genetics": "workspace:*"
   }
 }

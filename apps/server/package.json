@@ -3,17 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "BLORSE server — Fastify (Drizzle + Postgres + game logic arrive in later phases).",
+  "description": "BLORSE server — Fastify + Drizzle + auth + game logic + autonomy sim.",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "node --import tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "node --import ./scripts/register.mjs --watch src/index.ts",
+    "start": "node --import ./scripts/register.mjs src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./scripts/register.mjs test/server.test.ts",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@blorse/genetics": "workspace:*",
+    "@blorse/render-core": "workspace:*",
+    "@electric-sql/pglite": "^0.2.17",
+    "@fastify/cookie": "^11.0.2",
+    "drizzle-orm": "^0.36.4",
     "fastify": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
-    "tsx": "^4.19.2"
+    "drizzle-kit": "^0.28.1"
   }
 }

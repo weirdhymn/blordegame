@@ -1,0 +1,18 @@
+import cookie from '@fastify/cookie';
+import Fastify, { type FastifyInstance } from 'fastify';
+import type { DB } from './db/client.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerHorseRoutes } from './routes/horses.js';
+
+/** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
+export function buildApp(db: DB): FastifyInstance {
+  const app = Fastify({ logger: false });
+  app.register(cookie);
+
+  app.get('/health', () => ({ status: 'ok' }));
+
+  registerAuthRoutes(app, db);
+  registerHorseRoutes(app, db);
+
+  return app;
+}

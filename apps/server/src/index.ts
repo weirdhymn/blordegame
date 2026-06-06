@@ -1,13 +1,19 @@
-import Fastify from 'fastify';
+import { buildApp } from './app.js';
+import { createDb } from './db/client.js';
+import { runMigrations } from './db/migrate.js';
 
-const app = Fastify({ logger: true });
+const db = createDb();
+await runMigrations(db);
 
-// Liveness probe — Phase 0 acceptance: GET /health -> { status: "ok" }.
-app.get('/health', async () => ({ status: 'ok' }));
-
+const app = buildApp(db);
 const port = Number(process.env.PORT ?? 3001);
 
-app.listen({ port, host: '0.0.0.0' }).catch((err: unknown) => {
-  app.log.error(err);
-  process.exit(1);
-});
+app
+  .listen({ port, host: '0.0.0.0' })
+  .then((address) => {
+    console.log(`blorse server listening at ${address}`);
+  })
+  .catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });

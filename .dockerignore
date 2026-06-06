@@ -1,0 +1,24 @@
+# Installed inside the image; never copy host modules over the container's.
+node_modules
+**/node_modules
+
+# VCS + local tooling
+.git
+.github
+.vscode
+.idea
+
+# Build/output + logs
+**/dist
+**/.cache
+**/*.log
+**/*.local
+
+# The web client isn't part of the server image — but keep its manifest so the
+# pnpm workspace graph still resolves during the filtered install.
+apps/web/*
+!apps/web/package.json
+
+# OS cruft
+.DS_Store
+Thumbs.db

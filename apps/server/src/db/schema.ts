@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
+  boolean,
   index,
   integer,
   jsonb,
@@ -29,6 +30,8 @@ export const users = pgTable('users', {
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: userRole('role').notNull().default('player'),
+  /** Moderation freeze (§11) — a frozen account can read but not perform actions. */
+  frozen: boolean('frozen').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -326,6 +329,17 @@ export const auditLog = pgTable(
   },
   (t) => [index('audit_herd_idx').on(t.herdId)],
 );
+
+/** Player reports for moderation review (§11). */
+export const reports = pgTable('reports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  reporterHerd: uuid('reporter_herd').references(() => herds.id, { onDelete: 'set null' }),
+  targetType: text('target_type').notNull(), // herd | horse | message
+  targetId: text('target_id').notNull(),
+  reason: text('reason').notNull(),
+  status: text('status').notNull().default('open'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type UserRow = typeof users.$inferSelect;
 export type HerdRow = typeof herds.$inferSelect;

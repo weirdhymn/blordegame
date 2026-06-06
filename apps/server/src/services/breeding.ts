@@ -6,6 +6,7 @@ import type { PunnettColor } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
 import { horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
+import { logAudit } from './audit.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from './horse.js';
 import { recordEvent } from './quests.js';
 
@@ -90,6 +91,7 @@ export async function breedHorses(
   await db.update(horses).set({ lastBredAt: bredAt }).where(eq(horses.id, b.id));
 
   await recordEvent(db, herdId, { type: 'breed' }); // advances breeding quests (§7)
+  await logAudit(db, herdId, 'breed', { foal: foal.id, parentA: a.id, parentB: b.id });
 
   return { ok: true, viable: true, foal };
 }

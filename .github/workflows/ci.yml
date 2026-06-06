@@ -32,3 +32,21 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  docker:
+    name: Server image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the server image (no push — validates the deploy artifact)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          push: false
+          tags: blorse-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

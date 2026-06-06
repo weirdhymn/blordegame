@@ -476,6 +476,8 @@ Each phase ends in something runnable and testable. The core (genetics \+ render
 
 **Phase 11 — Beta hardening.** AuditLog coverage, rate limiting, moderation tools, report flow, error/empty states, deploy pipeline, basic analytics, and a rehearsed gene-drop runbook.
 
+> **Phase 11 contract (as built).** New endpoints: `POST /report` (any authed player; rate-limited 5/min), `GET /mod/reports` + `GET /mod/stats` (mod/admin), `POST /mod/users/:id/freeze` + `/unfreeze` (admin). Global rate limit 600 req/min per IP (configurable via `buildApp(db,{rateLimitMax})`; sensitive routes set a tighter per-route cap). Account freeze (`users.frozen`): a frozen account may read, but every non-`/auth` mutating request is refused with `403 {code:"frozen"}` via a central pre-handler. All errors now return JSON `{error, code}`; unknown routes return `404 {code:"not_found"}`. `AuditLog` coverage extended to `breed` and `tavern_recruit` (joining the economy actions). Basic analytics = the `/mod/stats` aggregate over the AuditLog event stream. Deploy: `apps/server/Dockerfile` + root `docker-compose.yml` run a single instance with PGlite persisted to a `/data` volume; horizontal scale swaps `DATABASE_URL` to real Postgres (§6). See `DEPLOY.md` and `docs/GENE_DROP_RUNBOOK.md`.
+
 ---
 
 ## 12\. Working With Claude Code

@@ -5,10 +5,12 @@
  */
 import { FOAL_TO_ADULT_MS, STAT_KEYS } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
+import { eq as drizzleEq } from 'drizzle-orm';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
+import { users } from '../src/db/schema.js';
 import { adventure } from '../src/services/adventure.js';
 import { getAudit } from '../src/services/audit.js';
 import { breedHorses } from '../src/services/breeding.js';
@@ -44,7 +46,9 @@ function cookieOf(res: InjectResult): string {
 async function main(): Promise<void> {
   const db = createPgliteDb();
   await runMigrations(db);
-  const app = buildApp(db);
+  // High global cap so the fast inject() burst below isn't throttled; the tight
+  // per-route /report limit (max 5) is exercised on its own in the §11 section.
+  const app = buildApp(db, { rateLimitMax: 100_000 });
   await app.ready();
   const inject = (opts: InjectOptions) => app.inject(opts);
 
@@ -829,10 +833,152 @@ async function main(): Promise<void> {
       audit.some((row) => row.action === 'trade_offer'),
   );
 
+  // ───────────────────────── Phase 11 — beta hardening ─────────────────────────
+
+  // Report flow: any authed player can file a report.
+  const rep1 = await inject({
+    method: 'POST',
+    url: '/report',
+    headers: { cookie },
+    payload: { targetType: 'horse', targetId: mateId, reason: 'looks suspicious' },
+  });
+  eq('file a report → 201', rep1.statusCode, 201);
+  eq(
+    'report without a target → 400',
+    (
+      await inject({
+        method: 'POST',
+        url: '/report',
+        headers: { cookie },
+        payload: { reason: 'no target given' },
+      })
+    ).statusCode,
+    400,
+  );
+
+  // Promote a fresh account to admin (mods are seeded out-of-band in prod).
+  const modReg = await inject({
+    method: 'POST',
+    url: '/auth/register',
+    payload: { username: 'modboss', password: 'moderator99' },
+  });
+  const cookieMod = cookieOf(modReg);
+  const modUser = await db.query.users.findFirst({ where: drizzleEq(users.username, 'modboss') });
+  if (!modUser) throw new Error('mod account missing');
+  check('mod account created', true);
+  await db.update(users).set({ role: 'admin' }).where(drizzleEq(users.id, modUser.id));
+
+  // A regular player can't reach the mod queue…
+  eq(
+    'non-mod hitting /mod/reports → 403',
+    (await inject({ method: 'GET', url: '/mod/reports', headers: { cookie } })).statusCode,
+    403,
+  );
+  // …but the admin can, and the filed report is waiting there.
+  const modReports = await inject({
+    method: 'GET',
+    url: '/mod/reports',
+    headers: { cookie: cookieMod },
+  });
+  eq('admin reads /mod/reports → 200', modReports.statusCode, 200);
+  check(
+    'the filed report is in the queue',
+    modReports.json<{ targetId: string }[]>().some((r) => r.targetId === mateId),
+  );
+
+  // Mod stats aggregate the world.
+  const stats = (
+    await inject({ method: 'GET', url: '/mod/stats', headers: { cookie: cookieMod } })
+  ).json<{ users: number; horses: number; openReports: number }>();
+  check('stats count users', stats.users >= 3);
+  check('stats count the open report', stats.openReports >= 1);
+
+  // Account freeze: admin freezes cherry; cherry keeps read access but can't act.
+  const targetUser = await db.query.users.findFirst({ where: drizzleEq(users.username, 'cherry') });
+  if (!targetUser) throw new Error('freeze target missing');
+  eq(
+    'admin freezes the account → 200',
+    (
+      await inject({
+        method: 'POST',
+        url: `/mod/users/${targetUser.id}/freeze`,
+        headers: { cookie: cookieMod },
+      })
+    ).statusCode,
+    200,
+  );
+  eq(
+    'frozen account can still read',
+    (await inject({ method: 'GET', url: '/market', headers: { cookie: cookieC } })).statusCode,
+    200,
+  );
+  const frozenAct = await inject({
+    method: 'POST',
+    url: '/messages',
+    headers: { cookie: cookieC },
+    payload: { toHerd: herdId, body: 'can I still talk?' },
+  });
+  eq('frozen account blocked from acting → 403', frozenAct.statusCode, 403);
+  eq('frozen refusal is tagged', frozenAct.json<{ code: string }>().code, 'frozen');
+  eq(
+    'a non-admin cannot freeze accounts → 403',
+    (
+      await inject({
+        method: 'POST',
+        url: `/mod/users/${modUser.id}/freeze`,
+        headers: { cookie },
+      })
+    ).statusCode,
+    403,
+  );
+  // Unfreeze restores the ability to act.
+  await inject({
+    method: 'POST',
+    url: `/mod/users/${targetUser.id}/unfreeze`,
+    headers: { cookie: cookieMod },
+  });
+  eq(
+    'unfrozen account can act again → 201',
+    (
+      await inject({
+        method: 'POST',
+        url: '/messages',
+        headers: { cookie: cookieC },
+        payload: { toHerd: herdId, body: 'back in action' },
+      })
+    ).statusCode,
+    201,
+  );
+
+  // Consistent error envelopes: an unknown route returns JSON, not a stack.
+  const notFound = await inject({ method: 'GET', url: '/no/such/route' });
+  eq('unknown route → 404', notFound.statusCode, 404);
+  eq('404 carries a machine code', notFound.json<{ code: string }>().code, 'not_found');
+
+  // Audit coverage extended beyond the economy to breeding + recruiting.
+  const audit2 = await getAudit(db, herdId);
+  check(
+    'breeding is audited',
+    audit2.some((r) => r.action === 'breed'),
+  );
+
+  // Per-route rate limit: /report caps at 5/min, so a burst from one IP gets throttled.
+  let sawRateLimit = false;
+  for (let i = 0; i < 8; i++) {
+    const r = await inject({
+      method: 'POST',
+      url: '/report',
+      headers: { cookie },
+      payload: { targetType: 'horse', targetId: mateId, reason: `spam ${i}` },
+    });
+    if (r.statusCode === 429) sawRateLimit = true;
+  }
+  check('the report endpoint rate-limits a burst (429)', sawRateLimit);
+
   await app.close();
 
   console.log(
-    `\n=== Phase 3 server tests ===\npassed: ${pass}   failed: ${fail}   total: ${pass + fail}`,
+    `\n=== BLORSE server tests ===\npassed: ${pass}   failed: ${fail}   total: ${pass + fail}`,
   );
   process.exit(fail === 0 ? 0 : 1);
 }

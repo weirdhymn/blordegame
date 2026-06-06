@@ -3,6 +3,7 @@ import { BASE_FEE, FEE_MULT, RARITY_SCORE, SKILL_KEYS, STAT_KEYS } from '@blorse
 import { resolve, type Genotype } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
 import { herds, horses, type HorseRow } from '../db/schema.js';
+import { logAudit } from './audit.js';
 import { getHorse } from './horse.js';
 import type { SkillBlock, StatBlock } from './stats.js';
 
@@ -83,6 +84,7 @@ export async function recruitFromTavern(
     .update(herds)
     .set({ cubes: sql`${herds.cubes} - ${h.tavernFee}` })
     .where(eq(herds.id, herdId));
+  await logAudit(db, herdId, 'tavern_recruit', { horseId, fee: h.tavernFee });
   // firstEncounteredBy is retained for the recruit notification (delivered in Phase 9).
   return { ok: true, horseId, fee: h.tavernFee };
 }

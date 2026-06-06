@@ -3,7 +3,7 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
-import { FOAL_TO_ADULT_MS, STAT_KEYS } from '@blorse/balance';
+import { FOAL_TO_ADULT_MS, STARTING_CUBES, STAT_KEYS } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import { eq as drizzleEq } from 'drizzle-orm';
 import type { FastifyInstance, InjectOptions } from 'fastify';
@@ -64,6 +64,21 @@ async function main(): Promise<void> {
     /Herd$/.test(reg.json<{ herd: { name: string } }>().herd.name),
   );
   check('session cookie set', cookieOf(reg).includes('blorse_session='));
+
+  // --- cold-start grant (§6, §14): a fresh account is immediately playable ---
+  const startHerd = reg.json<{ herd: { id: string; cubes: number } }>().herd;
+  eq('new herd starts with the Cubes purse', startHerd.cubes, STARTING_CUBES);
+  const starters = (await inject({ method: 'GET', url: `/herds/${startHerd.id}/horses` })).json<
+    { id: string; lifeStage: string }[]
+  >();
+  eq('new herd is granted two starter horses', starters.length, 2);
+  eq('both starters are adults', starters.filter((h) => h.lifeStage === 'adult').length, 2);
+  const [s0, s1] = starters;
+  eq(
+    'the two starters are unrelated (can breed immediately)',
+    s0 && s1 ? await shareLineage(db, s0.id, s1.id) : true,
+    false,
+  );
 
   // --- duplicate + weak input ---
   const dup = await inject({
@@ -314,9 +329,13 @@ async function main(): Promise<void> {
     inv.some((s) => s.qty > 0),
   );
 
-  // quest rewards: a-new-foal (200) + first-steps (150) = 350 cubes
+  // quest rewards: a-new-foal (200) + first-steps (150) = 350 cubes, on top of the starting purse
   const me2 = await inject({ method: 'GET', url: '/me', headers: { cookie } });
-  eq('cubes from quest rewards', me2.json<{ herd: { cubes: number } }>().herd.cubes, 350);
+  eq(
+    'cubes from quest rewards (plus the starting purse)',
+    me2.json<{ herd: { cubes: number } }>().herd.cubes,
+    STARTING_CUBES + 350,
+  );
 
   // first-steps unlocked Dusty Dunes → roam now succeeds
   const regions1 = (await inject({ method: 'GET', url: '/regions', headers: { cookie } })).json<

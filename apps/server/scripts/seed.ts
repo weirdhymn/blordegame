@@ -1,33 +1,27 @@
 /*
  * Idempotent dev seed.  Run:  pnpm --filter @blorse/server seed
  *
- * Populates a database with one login-able Herd + one known-genotype starter horse so
- * the API can be exercised by hand. The three starter regions (Green Grass, Dusty Dunes,
- * Weird Woods) are CODE content (src/content/regions.ts), not table rows — they always
- * exist at runtime and need no seeding.
+ * Guarantees a known login-able account for hand-testing the API. Every new Herd is already
+ * granted its cold-start position by registerUser — two unrelated founder adults + a starting
+ * Cubes purse (§6/§14) — so the seed mainly just pins the `tester` login.
  *
- * Idempotent: the account is reused if it already exists, and the starter horse is minted
- * only once (keyed by its pinned seed + 'founder' origin). A founder horse has no parents,
- * so it introduces no lineage; its stats come from the engine via the pinned seed, so it
- * respects every breeding/balance rule. Safe to run repeatedly.
+ * The three starter regions (Green Grass, Dusty Dunes, Weird Woods) are CODE content
+ * (src/content/regions.ts), not table rows — they always exist and need no seeding.
  *
- * Writes to whatever DATABASE_URL points at; if unset, defaults to a persisted PGlite dir
- * (file:./.data/blorse) so the data survives restarts. Start the server with the SAME
- * DATABASE_URL so it reads this database.
+ * Idempotent: the account is reused if present, and grantStarterHorses is a no-op once the
+ * Herd has horses. Writes to DATABASE_URL (defaults to a persisted file:./.data/blorse so the
+ * data survives restarts). Start the server with the SAME DATABASE_URL to read this database.
  */
-import { eq } from 'drizzle-orm';
 import { resolve } from '@blorse/genetics';
+import { eq } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { users } from '../src/db/schema.js';
-import { getHerdForUser, registerUser } from '../src/services/auth.js';
-import { listHerdHorses, mintHorse } from '../src/services/horse.js';
+import { getHerdForUser, grantStarterHorses, registerUser } from '../src/services/auth.js';
+import { listHerdHorses } from '../src/services/horse.js';
 
 const SEED_USER = 'tester';
 const SEED_PASS = 'horsehorse1'; // ≥8 chars — valid per the /auth rules
-const STARTER_GENOTYPE = { E: 'Ee', A: 'Aa' }; // resolves to "Bay"
-const STARTER_SEED = 1337; // pinned → identical look + stats on every run
-const STARTER_NAME = 'Clementine';
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
@@ -39,7 +33,7 @@ async function main(): Promise<void> {
   await runMigrations(db);
   console.log(`• migrations applied  (DATABASE_URL=${process.env.DATABASE_URL})`);
 
-  // 1) Account + Herd — idempotent by username.
+  // Account + Herd — idempotent by username. registerUser grants the cold-start position.
   const existing = await db.query.users.findFirst({ where: eq(users.username, SEED_USER) });
   const herd = existing
     ? await getHerdForUser(db, existing.id)
@@ -51,30 +45,16 @@ async function main(): Promise<void> {
       : `• created account "${SEED_USER}"  (herd ${herd.id})`,
   );
 
-  // 2) Starter horse — idempotent by pinned seed + founder origin.
+  // Top up starters even if this herd predates the cold-start grant (idempotent — no-op if present).
+  await grantStarterHorses(db, herd.id);
   const mine = await listHerdHorses(db, herd.id);
-  const starter = mine.find((h) => h.seed === STARTER_SEED && h.origin === 'founder');
-  if (starter) {
-    console.log(
-      `• starter horse already present: ${starter.id} — ${resolve(starter.genotype).displayName} "${starter.name ?? ''}"`,
-    );
-  } else {
-    const minted = await mintHorse(db, {
-      herdId: herd.id,
-      genotype: STARTER_GENOTYPE,
-      origin: 'founder',
-      seed: STARTER_SEED,
-      lifeStage: 'adult', // adult so it can breed / adventure immediately
-      name: STARTER_NAME,
-    });
-    console.log(
-      `• minted starter horse ${minted.id} — ${resolve(minted.genotype).displayName} "${STARTER_NAME}" (adult)`,
-    );
-  }
+  const coats = mine.map((h) => `${resolve(h.genotype).displayName} (${h.lifeStage})`).join(', ');
 
   console.log('\n=== seed complete ===');
   console.log(`  login       : ${SEED_USER} / ${SEED_PASS}`);
   console.log(`  herd id     : ${herd.id}`);
+  console.log(`  cubes       : ${herd.cubes}`);
+  console.log(`  horses (${mine.length}) : ${coats}`);
   console.log(`  open region : green-grass   (dusty-dunes & weird-woods unlock via quests)`);
   process.exit(0);
 }

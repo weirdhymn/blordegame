@@ -314,7 +314,7 @@ Core entities for beta. **Herd is the hub** most things hang off.
 Identity & creatures:
 
 - **User** — auth identity only: login, role (player/mod/admin), account settings.  
-- **Herd** — the player's game entity (1:1 with User at beta). Holds **Cube balances** (copper/silver/gold), progression/level, **Pasture** reference, time cursor, and the `simSeed` \+ `lastSimTick` used by the autonomy engine.  
+- **Herd** — the player's game entity (1:1 with User at beta). Holds **Cube balances** (copper/silver/gold), progression/level, **Pasture** reference, time cursor, and the `simSeed` \+ `lastSimTick` used by the autonomy engine. **Cold-start grant (standing rule):** on signup, every Herd is seeded with a viable starting position — `STARTER_HORSE_COUNT` (2) unrelated **founder** adults (parentless, so they share no ancestor and can breed immediately, §5.4a) plus `STARTING_CUBES` starting Cubes (§14.8). Idempotent: re-running onboarding never double-grants.  
 - **Horse** — `herd` (FK, **null \= in the Tavern pool / unrecruited**), `genotype` (JSONB, the engine's `{E:"Ee", A:"Aa", …}` object), `seed` (for `varySwatch`), **`glitch`** (null | `inverted` | … — non-heritable, §5.7), `lifeStage` (foal/adult — gates the white→color reveal and breeding eligibility), birth timestamp, **`name`** (optional, cosmetic; identity is the row ID, surfaced in the horse's URL), `parentA`/`parentB` FKs (no sire/dam — no sex), origin (wild/bred). Life-sim: **`personality`** (Big Five OCEAN, §8.1). RPG (§9): **`stats`** (Str/Dex/Con/Int/Wis/Cha \+ hidden `luck`), **`skills`**, **`accomplishments`**. **No sex/gender field; all horses are it/its.** Phenotype is **derived via `resolve()` \+ palette adapter (+ glitch transform) and cached, never stored.**  
 - **Lineage (ancestor closure table)** — **required, not optional**: the breeding rule (§5.4a) needs fast "do these two share any ancestor?" checks. Store each horse's ancestor set (or a closure table) so disjoint-ancestry breeding and pedigree views are O(1)-ish. Lineages never shrink (no death), so materialize at birth.
 
@@ -634,6 +634,13 @@ Weird Woods (Tier 3): strange edge of the digital frontier — modifiers (sooty,
   pearl) slightly likelier; the place future \*unnatural\* drop-genes first appear (still rare).
 
   Sty:{ on:0.20 }, Rn:{ Rn:0.10, n:0.90 }, C:{ prl:0.06, ... }
+
+### 14.8 Onboarding (cold-start grant)
+
+Every new Herd is granted a viable starting position on signup, so a new player is never stuck with nothing to do (this is a standing rule — see §6 Herd):
+
+- **`STARTER_HORSE_COUNT` = 2** founder adults, **unrelated** (parentless founders share no ancestor, so they can breed immediately, §5.4a). v0 roster: one **Bay**, one **Chestnut** — plain real-coat bases with no lethal (`W`/`O`) allele, so the cross is always viable and first foals vary. Seeds are pinned, so the grant is deterministic.
+- **`STARTING_CUBES` = 150** (= 3 × `DAILY_CUBES`): a small starting purse — enough to engage the economy (a craft, a save toward a first recruit) without immediately affording a standout Tavern horse (fees from `BASE_FEE` = 75 up).
 
 - Frequencies are illustrative; tune so commons dominate early regions and rarity climbs with tier. A future region ("The Tundra") can lean *relatively* gray while gray stays rare globally. Region-name convention so far: playful alliterative "Adjective Noun" for wilds (Green Grass, Dusty Dunes, Weird Woods), "The Noun" for fixed places (The Town, The Pasture, The Tundra).
 

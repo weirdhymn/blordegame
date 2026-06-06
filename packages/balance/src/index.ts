@@ -67,6 +67,14 @@ export const ROAM_DROPS_MAX = 3;
 /** Cubes granted per daily rollover (login-catchup accrues one per missed day). */
 export const DAILY_CUBES = 50;
 
+// ── Onboarding / cold-start grant (Phase 3, §6) ─────────────────────────────
+/** Founder adults granted to every new Herd. Two unrelated founders → they can breed at once. */
+export const STARTER_HORSE_COUNT = 2;
+/** Starting Cubes purse for a new Herd: three daily stipends. Enough to engage the economy
+ *  (a craft, a save toward a first recruit) without immediately affording a standout Tavern
+ *  horse — fees start at BASE_FEE (75) and climb with rarity. v0 dial. */
+export const STARTING_CUBES = 3 * DAILY_CUBES; // 150
+
 // ── The Pasture (Phase 7) ───────────────────────────────────────────────────
 /** Structure slots in a fresh Pasture; grows with herd level. */
 export const PASTURE_BASE_SLOTS = 4;

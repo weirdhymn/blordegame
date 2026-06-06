@@ -29,8 +29,9 @@ corepack pnpm install
 $env:DATABASE_URL = 'file:./.data/blorse'
 
 # 3. Seed the database (idempotent — safe to run repeatedly).
-#    Expect: "created account \"tester\"" then "minted starter horse ... Bay \"Clementine\" (adult)",
-#    and a summary printing  login: tester / horsehorse1.
+#    Expect: "created account \"tester\"" + a summary: horses (2) : Bay (adult), Chestnut (adult),
+#    cubes : 150, login: tester / horsehorse1.  (Registration grants the two starters + purse;
+#    the seed just pins this known login.)
 corepack pnpm --filter @blorse/server seed
 
 # 4. Start the server (no file-watching; stable for hand-testing).
@@ -55,16 +56,17 @@ Invoke-RestMethod http://127.0.0.1:3001/health
 With the server from Terminal 1 still running, open a **second** PowerShell window:
 
 ```powershell
-# Walk the full player path: log in -> starter horse -> breeding odds -> breed -> adventure -> Tavern -> journal.
-# Expect: lines 0)–9) printing each step, ending in "DONE".
+# Walk the full player path: log in -> two starters -> breeding odds -> breed -> adventure -> Tavern -> journal.
+# Expect: lines 0)–8) printing each step, ending in "DONE".
 powershell -ExecutionPolicy Bypass -File .\player-path.ps1
 ```
 
 (That script targets `http://127.0.0.1:3001` by default; override with
 `-BaseUrl http://127.0.0.1:3055`.) The individual commands are also listed in
-`player-path.ps1` if you'd rather paste them one at a time. Note: a fresh herd has **0 Cubes**,
-and the **Tavern/journal can be empty on day one** — wild-horse-to-Tavern is probabilistic and
-journal entries accrue from the daily tick.
+`player-path.ps1` if you'd rather paste them one at a time. Note: a fresh herd starts with
+**two unrelated adult founders + 150 Cubes** (the cold-start grant), and the **Tavern/journal can
+be empty on day one** — wild-horse-to-Tavern is probabilistic and journal entries accrue from the
+daily tick.
 
 ---
 

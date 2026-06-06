@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle, type PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from './schema.js';
@@ -24,5 +26,8 @@ export function createDb(): DB {
     );
   }
   const dataDir = url ? url.replace(/^file:/, '') : undefined;
+  // PGlite creates only the leaf data dir, not intermediate parents — ensure they exist
+  // so a path like file:./.data/blorse works on a clean checkout.
+  if (dataDir) mkdirSync(dirname(dataDir), { recursive: true });
   return createPgliteDb(dataDir);
 }

@@ -16,6 +16,9 @@ coverage/
 .env.*
 !.env.example
 
+# local PGlite data dir (dev seed / manual testing)
+.data/
+
 # editor / OS
 .DS_Store
 *.log

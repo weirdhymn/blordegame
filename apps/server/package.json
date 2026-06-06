@@ -9,6 +9,7 @@
     "start": "node --import ./scripts/register.mjs src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/register.mjs test/server.test.ts",
+    "seed": "node --import ./scripts/register.mjs scripts/seed.ts",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

@@ -58,3 +58,7 @@ export const ENCOUNTERS_MAX = 5;
 export const BREED_COOLDOWN_MS = 20 * 60 * 60 * 1000; // 20h
 /** Foal → adult maturation (the white→color reveal lands at adulthood, Phase 6). */
 export const FOAL_TO_ADULT_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+
+// ── Exploration (Phase 5) — v0 dials ────────────────────────────────────────
+export const ROAM_DROPS_MIN = 1;
+export const ROAM_DROPS_MAX = 3;

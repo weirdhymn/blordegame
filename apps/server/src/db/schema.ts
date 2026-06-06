@@ -9,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import type { Genotype } from '@blorse/genetics';
@@ -18,6 +19,7 @@ export const userRole = pgEnum('user_role', ['player', 'mod', 'admin']);
 export const lifeStageEnum = pgEnum('life_stage', ['foal', 'adult']);
 export const glitchKindEnum = pgEnum('glitch_kind', ['inverted', 'screen', 'shade']);
 export const horseOrigin = pgEnum('horse_origin', ['founder', 'wild', 'bred']);
+export const questStatus = pgEnum('quest_status', ['active', 'completed']);
 
 /** Auth identity only (BLORSE_PLAN.md §6). Game state hangs off the Herd, not the User. */
 export const users = pgTable('users', {
@@ -102,6 +104,37 @@ export const sessions = pgTable('sessions', {
     .notNull()
     .default(sql`now()`),
 });
+
+/** Per-herd material/item stash (Item catalog is content, §6/§7). */
+export const inventory = pgTable(
+  'inventory',
+  {
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    itemId: text('item_id').notNull(),
+    qty: integer('qty').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.herdId, t.itemId] })],
+);
+
+/** Per-herd progress on quest chains (quest definitions are content, §7). */
+export const questProgress = pgTable(
+  'quest_progress',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    questId: text('quest_id').notNull(),
+    status: questStatus('status').notNull().default('active'),
+    /** One counter per objective, parallel to the quest def's objectives array. */
+    counters: jsonb('counters').notNull().$type<number[]>(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('quest_progress_herd_quest_idx').on(t.herdId, t.questId)],
+);
 
 export type UserRow = typeof users.$inferSelect;
 export type HerdRow = typeof herds.$inferSelect;

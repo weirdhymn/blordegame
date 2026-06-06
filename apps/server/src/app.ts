@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { DB } from './db/client.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
+import { registerExplorationRoutes } from './routes/exploration.js';
 import { registerHorseRoutes } from './routes/horses.js';
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
@@ -15,6 +16,7 @@ export function buildApp(db: DB): FastifyInstance {
   registerAuthRoutes(app, db);
   registerHorseRoutes(app, db);
   registerBreedingRoutes(app, db);
+  registerExplorationRoutes(app, db);
 
   return app;
 }

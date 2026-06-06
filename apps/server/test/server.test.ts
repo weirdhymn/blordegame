@@ -249,6 +249,79 @@ async function main(): Promise<void> {
   const afterNv = await breedHorses(db, herdId, w1.id, w2.id, { seed: viableSeed });
   check('viable breed after non-viable (no cooldown burned)', afterNv.ok && afterNv.viable);
 
+  // --- Phase 5: exploration & quests ---
+  // the viable breeds above advanced the 'A New Foal' breed quest to completion
+  const quests0 = await inject({ method: 'GET', url: '/quests', headers: { cookie } });
+  eq('quests → 200', quests0.statusCode, 200);
+  check(
+    'breeding completed "A New Foal"',
+    quests0
+      .json<{ questId: string; status: string }[]>()
+      .some((q) => q.questId === 'a-new-foal' && q.status === 'completed'),
+  );
+
+  // region gating: Green Grass open, Dusty Dunes locked (first-steps not done yet)
+  const regions0 = (await inject({ method: 'GET', url: '/regions', headers: { cookie } })).json<
+    { id: string; unlocked: boolean }[]
+  >();
+  check(
+    'Green Grass unlocked',
+    regions0.some((r) => r.id === 'green-grass' && r.unlocked),
+  );
+  check(
+    'Dusty Dunes locked',
+    regions0.some((r) => r.id === 'dusty-dunes' && !r.unlocked),
+  );
+  const lockedRoam = await inject({
+    method: 'POST',
+    url: '/regions/dusty-dunes/roam',
+    headers: { cookie },
+  });
+  eq('roam locked region → 403', lockedRoam.statusCode, 403);
+
+  // roam Green Grass 3× → completes 'first-steps'
+  let firstStepsDone = false;
+  for (let i = 0; i < 3; i++) {
+    const r = await inject({
+      method: 'POST',
+      url: '/regions/green-grass/roam',
+      headers: { cookie },
+    });
+    eq(`roam ${i + 1} → 200`, r.statusCode, 200);
+    const body = r.json<{ found: unknown[]; questCompletions: { questId: string }[] }>();
+    check(`roam ${i + 1} found materials`, body.found.length > 0);
+    if (body.questCompletions.some((c) => c.questId === 'first-steps')) firstStepsDone = true;
+  }
+  check('roaming completed "First Steps"', firstStepsDone);
+
+  // inventory reflects roam loot
+  const inv = (await inject({ method: 'GET', url: '/inventory', headers: { cookie } })).json<
+    { id: string; qty: number }[]
+  >();
+  check(
+    'inventory has materials',
+    inv.some((s) => s.qty > 0),
+  );
+
+  // quest rewards: a-new-foal (200) + first-steps (150) = 350 cubes
+  const me2 = await inject({ method: 'GET', url: '/me', headers: { cookie } });
+  eq('cubes from quest rewards', me2.json<{ herd: { cubes: number } }>().herd.cubes, 350);
+
+  // first-steps unlocked Dusty Dunes → roam now succeeds
+  const regions1 = (await inject({ method: 'GET', url: '/regions', headers: { cookie } })).json<
+    { id: string; unlocked: boolean }[]
+  >();
+  check(
+    'Dusty Dunes now unlocked',
+    regions1.some((r) => r.id === 'dusty-dunes' && r.unlocked),
+  );
+  const duneRoam = await inject({
+    method: 'POST',
+    url: '/regions/dusty-dunes/roam',
+    headers: { cookie },
+  });
+  eq('roam Dusty Dunes → 200', duneRoam.statusCode, 200);
+
   await app.close();
 
   console.log(

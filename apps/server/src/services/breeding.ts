@@ -7,6 +7,7 @@ import type { DB } from '../db/client.js';
 import { horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from './horse.js';
+import { recordEvent } from './quests.js';
 
 export type BreedRejection =
   | 'not_found'
@@ -87,6 +88,8 @@ export async function breedHorses(
   const bredAt = new Date(now);
   await db.update(horses).set({ lastBredAt: bredAt }).where(eq(horses.id, a.id));
   await db.update(horses).set({ lastBredAt: bredAt }).where(eq(horses.id, b.id));
+
+  await recordEvent(db, herdId, { type: 'breed' }); // advances breeding quests (§7)
 
   return { ok: true, viable: true, foal };
 }

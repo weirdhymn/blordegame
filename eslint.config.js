@@ -13,6 +13,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       'js/**',
+      '**/vendor/**', // vendored genetics engine — kept byte-for-byte (BLORSE_PLAN.md §5.1)
+      'packages/genetics/test/**', // the vendored 340-test harness (legacy CJS)
       'assets/horse/**',
     ],
   },

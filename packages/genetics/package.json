@@ -3,12 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Vendored equine-genetics engine + typed facade. Phase 1 (BLORSE_PLAN.md §5).",
+  "description": "Vendored equine-genetics engine (untouched) + typed ESM facade. BLORSE_PLAN.md §5.",
+  "sideEffects": [
+    "./vendor/*.js",
+    "./src/window-shim.ts",
+    "./src/engine.ts"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node test/run-tests.cjs && vitest run",
+    "test:engine": "node test/run-tests.cjs",
+    "test:facade": "vitest run"
   }
 }

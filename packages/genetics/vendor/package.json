@@ -1,0 +1,4 @@
+{
+  "type": "commonjs",
+  "//": "Scopes the vendored engine (data.js, genetics.js, game.js) as CommonJS so the original node test runner can require() them. They contain no ESM/CJS-specific syntax (only global `window` side effects), so the ESM facade imports them too. Files are kept byte-for-byte — never edit (BLORSE_PLAN.md §5.1)."
+}

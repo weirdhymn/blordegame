@@ -1,3 +1,4 @@
+import { ADVENTURE_MARK_THRESHOLD } from '@blorse/balance';
 import type { Genotype } from '@blorse/genetics';
 import type { LifeStage } from '@blorse/render-core';
 import type { FastifyInstance } from 'fastify';
@@ -25,6 +26,9 @@ export function publicHorse(h: HorseRow) {
     skills: h.skills,
     accomplishments: h.accomplishments,
     personality: h.personality,
+    /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3, flavor only). */
+    adventures: h.adventures,
+    experienced: h.adventures >= ADVENTURE_MARK_THRESHOLD,
     // `luck` is intentionally omitted — it is hidden (§9.1).
   };
 }

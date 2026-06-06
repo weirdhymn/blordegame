@@ -17,6 +17,9 @@ export interface Horse {
   stats: Record<string, number>;
   skills: Record<string, { level: number; xp: number }>;
   personality: Record<string, number>;
+  /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3). */
+  adventures?: number;
+  experienced?: boolean;
 }
 
 export const listHerdHorses = (herdId: string): Promise<Horse[]> =>

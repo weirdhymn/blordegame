@@ -128,6 +128,7 @@ export function ExplorePage(): ReactElement {
           : res.narration,
         harmony: res.roll?.harmony ?? null,
         success: res.roll ? res.roll.success : null,
+        train: res.trained ?? null,
       };
       setStoryLog((l) => [...l, line]);
       if (res.ended) {

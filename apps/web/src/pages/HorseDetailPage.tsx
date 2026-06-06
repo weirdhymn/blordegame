@@ -215,6 +215,12 @@ export function HorseDetailPage(): ReactElement {
             {spec.foalWhite ? 'Foal · coat revealed at adulthood' : spec.displayName} ·{' '}
             {horse.lifeStage} · {horse.origin}
           </p>
+          {horse.experienced && <p className="mark">🧭 Seasoned Adventurer</p>}
+          {(horse.adventures ?? 0) > 0 && (
+            <p className="muted">
+              {horse.adventures} adventure{(horse.adventures ?? 0) === 1 ? '' : 's'} completed
+            </p>
+          )}
         </div>
       </div>
 

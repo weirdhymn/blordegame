@@ -1,0 +1,1 @@
+ALTER TABLE "horses" ADD COLUMN "adventures" integer DEFAULT 0 NOT NULL;

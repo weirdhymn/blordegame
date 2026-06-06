@@ -1,8 +1,10 @@
 import { randomInt } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
   ADVENTURE_HARMONY_MAX,
   ADVENTURE_HARMONY_SCALE,
+  ADVENTURE_SKILL_XP_ATTEMPT,
+  ADVENTURE_SKILL_XP_SUCCESS,
   PARTY_MAX,
   type PersonalityKey,
   type SkillKey,
@@ -18,13 +20,19 @@ import {
 } from '../content/adventures.js';
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
-import { adventureRuns, herds, type HorseRow } from '../db/schema.js';
+import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
 import { isQuestCompleted } from './quests.js';
-import { skillCheck, type SkillBlock, type StatBlock } from './stats.js';
+import {
+  accomplishmentsForLevel,
+  grantSkillXp,
+  skillCheck,
+  type SkillBlock,
+  type StatBlock,
+} from './stats.js';
 
 // ── Run state ────────────────────────────────────────────────────────────────
 // Persisted in the `adventure_runs` table (§9.3) so a run survives a restart / redeploy /
@@ -84,12 +92,13 @@ function bestForCheck(
   party: HorseRow[],
   stat: StatKey,
   skill?: SkillKey,
-): { statValue: number; skillLevel: number; luck: number } {
+): { horseId: string; statValue: number; skillLevel: number; luck: number } {
   const score = (h: HorseRow): number =>
     ((h.stats as StatBlock)[stat] ?? 10) +
     (skill ? ((h.skills as SkillBlock)[skill]?.level ?? 0) * 2 : 0);
   const best = party.reduce((a, b) => (score(b) > score(a) ? b : a));
   return {
+    horseId: best.id,
     statValue: (best.stats as StatBlock)[stat] ?? 10,
     skillLevel: skill ? ((best.skills as SkillBlock)[skill]?.level ?? 0) : 0,
     luck: best.luck,
@@ -100,19 +109,22 @@ export interface ChoiceResolution {
   outcome: Outcome;
   /** Present when the choice had a check; absent for safe/narrative choices. */
   roll: { d20: number; total: number; dc: number; success: boolean; harmony: number } | null;
+  /** When the check has a skill: the horse that stepped up + the skill it practiced (§9.3). */
+  trained: { horseId: string; skill: SkillKey; success: boolean } | null;
 }
 
 /**
  * PURE scene resolution: roll the choice's check for the party's best horse, apply the
  * party-harmony buff (as a DC reduction), and pick success vs. failure. No DB, no I/O —
- * this is the unit under test.
+ * this is the unit under test. Also reports which horse + skill was practiced (the caller
+ * grants the XP), so adventuring trains the specific skill a horse actually used.
  */
 export function resolveChoice(
   party: HorseRow[],
   choice: Choice,
   rng: () => number,
 ): ChoiceResolution {
-  if (!choice.check) return { outcome: choice.success, roll: null };
+  if (!choice.check) return { outcome: choice.success, roll: null, trained: null };
   const { stat, skill, dc, harmony } = choice.check;
   const who = bestForCheck(party, stat, skill);
   const bonus = harmony ? partyHarmony(party) : 0;
@@ -121,6 +133,7 @@ export function resolveChoice(
   return {
     outcome,
     roll: { d20: check.d20, total: check.total, dc, success: check.success, harmony: bonus },
+    trained: skill ? { horseId: who.horseId, skill, success: check.success } : null,
   };
 }
 
@@ -257,6 +270,15 @@ export async function startRun(
   };
 }
 
+/** What a horse learned from the check it just attempted (surfaced so the player sees it improve). */
+export interface TrainedView {
+  horseName: string;
+  skill: SkillKey;
+  xp: number;
+  /** The new skill level if this XP crossed a threshold, else null. */
+  leveledTo: number | null;
+}
+
 export type ChooseResult =
   | { ok: false; code: 'not_found' | 'bad_choice' | 'locked_choice' | 'bad_party'; message: string }
   | {
@@ -264,6 +286,7 @@ export type ChooseResult =
       ended: false;
       narration: string;
       roll: ChoiceResolution['roll'];
+      trained: TrainedView | null;
       befriended: { id: string; name: string } | null;
       scene: SceneView;
       run: RunView;
@@ -273,6 +296,7 @@ export type ChooseResult =
       ended: true;
       narration: string;
       roll: ChoiceResolution['roll'];
+      trained: TrainedView | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };
     };
@@ -304,7 +328,7 @@ export async function chooseInRun(
     return { ok: false, code: 'locked_choice', message: 'No one in your party can do that.' };
   }
 
-  const { outcome, roll } = resolveChoice(party, choice, stepRng(run.seed, run.step));
+  const { outcome, roll, trained } = resolveChoice(party, choice, stepRng(run.seed, run.step));
 
   // Accrue the haul into next-state locals (banked only when the run ends — push-vs-bank).
   const loot = { ...run.loot };
@@ -332,6 +356,33 @@ export async function chooseInRun(
     befriendedName = name;
   }
 
+  // Adventures train horses (§9.3): the horse that stepped up practices the *specific* skill it
+  // used — a little XP per attempt, more on success — reusing the existing skill-XP / level path.
+  let trainedView: TrainedView | null = null;
+  if (trained) {
+    const learner = party.find((h) => h.id === trained.horseId);
+    if (learner) {
+      const xp = trained.success ? ADVENTURE_SKILL_XP_SUCCESS : ADVENTURE_SKILL_XP_ATTEMPT;
+      const skills = learner.skills as SkillBlock;
+      const stats = learner.stats as StatBlock;
+      const ups = grantSkillXp(skills, stats, trained.skill, xp);
+      const accomplishments = new Set(learner.accomplishments);
+      for (const up of ups)
+        for (const acc of accomplishmentsForLevel(up.skill, up.newLevel)) accomplishments.add(acc);
+      await db
+        .update(horses)
+        .set({ skills, stats, accomplishments: [...accomplishments] })
+        .where(eq(horses.id, learner.id));
+      const lastUp = ups[ups.length - 1];
+      trainedView = {
+        horseName: learner.name ?? resolve(learner.genotype).displayName,
+        skill: trained.skill,
+        xp,
+        leveledTo: lastUp ? lastUp.newLevel : null,
+      };
+    }
+  }
+
   const step = run.step + 1;
   const narration = outcome.text;
   const nextScene = outcome.next === 'end' ? undefined : script.scenes[outcome.next];
@@ -347,7 +398,12 @@ export async function chooseInRun(
       fatigue,
       befriended: befriendedName,
     });
-    return { ok: true, ended: true, narration, roll, befriended, summary };
+    // A completed adventure: bump each party horse's count (drives the cosmetic "Seasoned" mark).
+    await db
+      .update(horses)
+      .set({ adventures: sql`${horses.adventures} + 1` })
+      .where(inArray(horses.id, run.party));
+    return { ok: true, ended: true, narration, roll, trained: trainedView, befriended, summary };
   }
 
   await db
@@ -359,6 +415,7 @@ export async function chooseInRun(
     ended: false,
     narration,
     roll,
+    trained: trainedView,
     befriended,
     scene: sceneView(nextScene, party),
     run: runView(

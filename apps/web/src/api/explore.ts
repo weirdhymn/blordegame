@@ -107,12 +107,21 @@ export interface StoryRoll {
   harmony: number;
 }
 
+/** What a horse learned from the check it just attempted (so the player sees it improve). */
+export interface StoryTrained {
+  horseName: string;
+  skill: string;
+  xp: number;
+  leveledTo: number | null;
+}
+
 export type ChooseStoryResult =
   | {
       ok: true;
       ended: false;
       narration: string;
       roll: StoryRoll | null;
+      trained: StoryTrained | null;
       befriended: { id: string; name: string } | null;
       scene: SceneView;
       run: StoryRunView;
@@ -122,6 +131,7 @@ export type ChooseStoryResult =
       ended: true;
       narration: string;
       roll: StoryRoll | null;
+      trained: StoryTrained | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };
     };

@@ -4,6 +4,9 @@
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
 import {
+  ADVENTURE_MARK_THRESHOLD,
+  ADVENTURE_SKILL_XP_ATTEMPT,
+  ADVENTURE_SKILL_XP_SUCCESS,
   FOAL_TO_ADULT_MS,
   SKILL_KEYS,
   STARTING_CUBES,
@@ -21,6 +24,7 @@ import {
   adventureRuns,
   herds,
   horseAncestors,
+  horses,
   jobAssignments,
   marketListings,
   relationships,
@@ -1243,6 +1247,70 @@ async function main(): Promise<void> {
     'the uploaded horse is gone (404)',
     (await inject({ method: 'GET', url: `/horses/${httpUp.id}` })).statusCode,
     404,
+  );
+
+  // --- Adventures train horses (§9.3): per-check skill XP + the cosmetic "Seasoned" mark ---
+  const trainee = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+    stats: flat6,
+  });
+  const beforeXp =
+    ((await getHorse(db, trainee.id))?.skills as Record<string, { level: number; xp: number }>)
+      ?.foraging?.xp ?? 0;
+  const trainRun = await startRun(db, herdId, 'green-grass', [trainee.id], {
+    scriptId: 'sunny-hollow',
+    seed: 7,
+  });
+  check('a training run started', trainRun.ok);
+  if (trainRun.ok) {
+    const step1 = await chooseInRun(db, herdId, trainRun.runId, 'forage-bank');
+    check(
+      'a skill check reports who trained + the specific skill',
+      step1.ok && !step1.ended && step1.trained?.skill === 'foraging',
+    );
+    check(
+      'the surfaced XP gain is positive',
+      step1.ok && !step1.ended && (step1.trained?.xp ?? 0) > 0,
+    );
+    const afterXp =
+      ((await getHorse(db, trainee.id))?.skills as Record<string, { level: number; xp: number }>)
+        ?.foraging?.xp ?? 0;
+    check('foraging XP rose from the adventure check', afterXp > beforeXp);
+    await chooseInRun(db, herdId, trainRun.runId, 'retreat'); // crossroads → end
+    check(
+      'completing an adventure increments the horse adventure count',
+      ((await getHorse(db, trainee.id))?.adventures ?? 0) >= 1,
+    );
+  }
+  check(
+    'a successful check trains more than a failed attempt',
+    ADVENTURE_SKILL_XP_SUCCESS > ADVENTURE_SKILL_XP_ATTEMPT,
+  );
+
+  // The cosmetic mark surfaces at the threshold — flavor only, no mechanical effect.
+  const markHorse = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'founder',
+    lifeStage: 'adult',
+  });
+  await db
+    .update(horses)
+    .set({ adventures: ADVENTURE_MARK_THRESHOLD })
+    .where(drizzleEq(horses.id, markHorse.id));
+  const markedView = (await inject({ method: 'GET', url: `/horses/${markHorse.id}` })).json<{
+    adventures: number;
+    experienced: boolean;
+  }>();
+  eq('the horse view reports the adventure count', markedView.adventures, ADVENTURE_MARK_THRESHOLD);
+  check('the experienced mark appears at the threshold', markedView.experienced === true);
+  check(
+    'a horse below the threshold is not yet experienced',
+    (await inject({ method: 'GET', url: `/horses/${trainee.id}` })).json<{ experienced: boolean }>()
+      .experienced === false,
   );
 
   // --- Phase 9: The Living Herd ---

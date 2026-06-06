@@ -85,6 +85,13 @@
       "when": 1780766809470,
       "tag": "0011_strong_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780783526512,
+      "tag": "0012_whole_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

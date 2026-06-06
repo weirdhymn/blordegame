@@ -135,7 +135,13 @@ export const JOB_XP_BASE = 20;
 export const SKILL_XP_PER_LEVEL = 100;
 
 // ── Adventures & the Tavern (Phase 8b, §9.3, §14.3–14.5) ────────────────────
-export const ADVENTURE_XP = 30;
+export const ADVENTURE_XP = 30; // flat-adventure XP to the lead's best skill (legacy path)
+/** Interactive adventures train the *specific* skill a horse uses on a check (§9.3): a little XP
+ *  per attempt, more on success. The horse that steps up for the check is the one that learns. */
+export const ADVENTURE_SKILL_XP_SUCCESS = 12;
+export const ADVENTURE_SKILL_XP_ATTEMPT = 5;
+/** Completed interactive adventures a horse needs before it wears the cosmetic "Seasoned" mark. */
+export const ADVENTURE_MARK_THRESHOLD = 3;
 /** Per-adventure chance a wild horse appears — the main new-horse faucet (§9.3). */
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';

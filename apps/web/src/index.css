@@ -592,6 +592,21 @@ code {
 .story-log li.miss {
   border-left-color: #b08a3a;
 }
+.story-log .train {
+  color: #2c5a1d;
+  font-style: normal;
+  font-weight: 700;
+}
+.mark {
+  display: inline-block;
+  margin: 0.2rem 0 0;
+  background: var(--sage-deep);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
 .story-choices {
   display: flex;
   flex-direction: column;

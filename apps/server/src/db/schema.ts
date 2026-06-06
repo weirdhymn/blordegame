@@ -83,6 +83,8 @@ export const horses = pgTable(
       .notNull()
       .default({}),
     accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
+    /** Completed interactive adventures (§9.3) — drives the cosmetic "Seasoned" mark. Flavor only. */
+    adventures: integer('adventures').notNull().default(0),
     /** Big Five (OCEAN) temperament (§8.1) — set at mint, near-immutable. */
     personality: jsonb('personality').$type<Record<string, number>>().notNull().default({}),
     // Tavern (§10): set when an unrecruited wild horse walks to the shared pool.

@@ -1,5 +1,10 @@
 import { type ReactElement } from 'react';
-import { type ChooseStoryResult, type SceneView, type StoryRunView } from '../api/explore.js';
+import {
+  type ChooseStoryResult,
+  type SceneView,
+  type StoryRunView,
+  type StoryTrained,
+} from '../api/explore.js';
 import { pretty } from '../util/format.js';
 
 type Ending = Extract<ChooseStoryResult, { ended: true }>;
@@ -8,6 +13,7 @@ export interface StoryLogEntry {
   text: string;
   harmony: number | null;
   success: boolean | null;
+  train?: StoryTrained | null;
 }
 
 const TRAIT_NAMES: Record<string, string> = {
@@ -53,6 +59,13 @@ export function StoryRunner(props: {
               {l.text}
               {l.harmony && l.harmony > 0 ? (
                 <span className="muted"> (harmony +{l.harmony})</span>
+              ) : null}
+              {l.train ? (
+                <span className="train">
+                  {' '}
+                  ↑ {l.train.horseName}&apos;s {pretty(l.train.skill)}{' '}
+                  {l.train.leveledTo ? `rose to Lv ${l.train.leveledTo}!` : `+${l.train.xp} XP`}
+                </span>
               ) : null}
             </li>
           ))}

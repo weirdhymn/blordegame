@@ -419,13 +419,12 @@ async function main(): Promise<void> {
   eq('POST /daily → 200', daily.statusCode, 200);
 
   // --- Phase 7: Pasture, gathering & crafting ---
-  // stock raw materials (as if from roaming)
+  // stock raw materials (as if from roaming): timber → planks, clay → bricks
   await grantItems(db, herdId, [
-    { id: 'odd-acorn', qty: 20 },
-    { id: 'smooth-pebble', qty: 20 },
-    { id: 'dust-shard', qty: 10 },
-    { id: 'clover', qty: 10 },
-    { id: 'grass-tuft', qty: 10 },
+    { id: 'timber', qty: 20 },
+    { id: 'clay', qty: 20 },
+    { id: 'plant-fiber', qty: 12 },
+    { id: 'ore', qty: 8 },
   ]);
 
   const recipes = await inject({ method: 'GET', url: '/recipes' });

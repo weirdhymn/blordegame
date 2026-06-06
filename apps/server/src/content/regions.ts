@@ -45,9 +45,9 @@ export const REGIONS: Region[] = [
       D: { d: 0.97, D: 0.03 },
     },
     loot: [
-      { item: 'grass-tuft', weight: 6 },
-      { item: 'clover', weight: 3 },
-      { item: 'smooth-pebble', weight: 1 },
+      { item: 'plant-fiber', weight: 6 },
+      { item: 'timber', weight: 3 },
+      { item: 'clay', weight: 1 },
     ],
   },
   {
@@ -64,9 +64,9 @@ export const REGIONS: Region[] = [
       C: { Cr: 0.12, C: 0.88 },
     },
     loot: [
-      { item: 'dust-shard', weight: 6 },
-      { item: 'sun-bead', weight: 3 },
-      { item: 'smooth-pebble', weight: 2 },
+      { item: 'clay', weight: 6 },
+      { item: 'ore', weight: 3 },
+      { item: 'plant-fiber', weight: 1 },
     ],
   },
   {
@@ -83,9 +83,9 @@ export const REGIONS: Region[] = [
       C: { prl: 0.06, Cr: 0.1, C: 0.84 },
     },
     loot: [
-      { item: 'odd-acorn', weight: 5 },
-      { item: 'clover', weight: 2 },
-      { item: 'glitch-mote', weight: 1 },
+      { item: 'timber', weight: 6 },
+      { item: 'ore', weight: 3 },
+      { item: 'clay', weight: 1 },
     ],
   },
 ];

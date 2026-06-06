@@ -10,33 +10,41 @@ export interface Recipe {
   inputs: ItemAmount[];
 }
 
-// Materials -> building materials -> activity items (§7). Roam gathers the raw
-// inputs; crafting turns them into planks/bricks (for Structures) and books/games/
-// tools (which feed jobs and clubs in Phases 8–9).
+// Grounded-naturalist recipe tree (§7): raw → intermediate → product. Roam gathers the raws
+// (timber, clay, plant fiber, ore); crafting refines them into planks/bricks (for Structures)
+// and paper/ingots → books/games/tools.
 export const RECIPES: Recipe[] = [
+  // ── intermediates ──
   {
     id: 'plank',
     name: 'Plank',
     output: { id: 'plank', qty: 1 },
-    inputs: [{ id: 'odd-acorn', qty: 2 }],
+    inputs: [{ id: 'timber', qty: 2 }],
   },
   {
     id: 'brick',
     name: 'Brick',
     output: { id: 'brick', qty: 1 },
-    inputs: [
-      { id: 'smooth-pebble', qty: 2 },
-      { id: 'dust-shard', qty: 1 },
-    ],
+    inputs: [{ id: 'clay', qty: 2 }],
   },
+  {
+    id: 'paper',
+    name: 'Paper',
+    output: { id: 'paper', qty: 1 },
+    inputs: [{ id: 'plant-fiber', qty: 3 }],
+  },
+  {
+    id: 'ingot',
+    name: 'Ingot',
+    output: { id: 'ingot', qty: 1 },
+    inputs: [{ id: 'ore', qty: 2 }],
+  },
+  // ── products ──
   {
     id: 'book',
     name: 'Book',
     output: { id: 'book', qty: 1 },
-    inputs: [
-      { id: 'clover', qty: 2 },
-      { id: 'grass-tuft', qty: 1 },
-    ],
+    inputs: [{ id: 'paper', qty: 2 }],
   },
   {
     id: 'board-game',
@@ -44,7 +52,7 @@ export const RECIPES: Recipe[] = [
     output: { id: 'board-game', qty: 1 },
     inputs: [
       { id: 'plank', qty: 1 },
-      { id: 'clover', qty: 1 },
+      { id: 'paper', qty: 1 },
     ],
   },
   {
@@ -52,8 +60,8 @@ export const RECIPES: Recipe[] = [
     name: 'Tool',
     output: { id: 'tool', qty: 1 },
     inputs: [
-      { id: 'brick', qty: 1 },
-      { id: 'smooth-pebble', qty: 1 },
+      { id: 'ingot', qty: 1 },
+      { id: 'timber', qty: 1 },
     ],
   },
 ];

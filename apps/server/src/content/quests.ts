@@ -41,7 +41,7 @@ export const QUESTS: QuestDef[] = [
     title: 'A New Foal',
     requires: null,
     objectives: [{ type: 'breed', count: 1, label: 'Breed your first foal' }],
-    reward: { cubes: 200, items: [{ id: 'clover', qty: 3 }] },
+    reward: { cubes: 200, items: [{ id: 'plant-fiber', qty: 3 }] },
   },
   {
     id: 'into-the-dunes',

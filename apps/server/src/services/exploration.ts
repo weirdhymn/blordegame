@@ -35,7 +35,7 @@ function rollLoot(region: Region, rng: () => number): string {
     roll -= entry.weight;
     if (roll < 0) return entry.item;
   }
-  return region.loot[region.loot.length - 1]?.item ?? region.loot[0]?.item ?? 'grass-tuft';
+  return region.loot[region.loot.length - 1]?.item ?? region.loot[0]?.item ?? 'plant-fiber';
 }
 
 export type RoamResult =

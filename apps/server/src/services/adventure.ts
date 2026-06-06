@@ -135,7 +135,7 @@ export async function adventure(
       crit: check.crit,
     });
 
-    const pick = (idx: number): string => region.loot[idx]?.item ?? 'grass-tuft';
+    const pick = (idx: number): string => region.loot[idx]?.item ?? 'plant-fiber';
     if (check.success) {
       successes++;
       const item = pick(Math.floor(rng() * region.loot.length));
@@ -145,7 +145,7 @@ export async function adventure(
         rareFound++;
       }
     } else {
-      const item = region.loot[region.loot.length - 1]?.item ?? 'grass-tuft'; // meager haul, never a loss
+      const item = region.loot[region.loot.length - 1]?.item ?? 'plant-fiber'; // meager haul, never a loss
       tally.set(item, (tally.get(item) ?? 0) + 1);
     }
   }

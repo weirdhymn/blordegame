@@ -6,23 +6,24 @@ export interface ItemDef {
   kind: ItemKind;
 }
 
+// Grounded-naturalist supply chain (§7): gather raw timber/clay/fiber/ore → refine into
+// planks/bricks/paper/ingots → build Structures and craft books/games/tools.
 export const ITEMS: ItemDef[] = [
-  // raw materials (roam loot, §7 gathering)
-  { id: 'grass-tuft', name: 'Grass Tuft', kind: 'material' },
-  { id: 'clover', name: 'Lucky Clover', kind: 'material' },
-  { id: 'smooth-pebble', name: 'Smooth Pebble', kind: 'material' },
-  { id: 'dust-shard', name: 'Dust Shard', kind: 'material' },
-  { id: 'sun-bead', name: 'Sun Bead', kind: 'material' },
-  { id: 'odd-acorn', name: 'Odd Acorn', kind: 'material' },
-  { id: 'glitch-mote', name: 'Glitch Mote', kind: 'material' },
-  // crafted building materials
-  { id: 'plank', name: 'Plank', kind: 'material' },
-  { id: 'brick', name: 'Brick', kind: 'material' },
-  // crafted activity items (feed jobs/clubs in Phases 8–9)
+  // raw materials — gathered by roam / adventure
+  { id: 'timber', name: 'Timber', kind: 'material' },
+  { id: 'clay', name: 'Clay', kind: 'material' },
+  { id: 'plant-fiber', name: 'Plant Fiber', kind: 'material' },
+  { id: 'ore', name: 'Ore', kind: 'material' },
+  // crafted intermediates
+  { id: 'plank', name: 'Plank', kind: 'material' }, // sawn timber — building material
+  { id: 'brick', name: 'Brick', kind: 'material' }, // fired clay — building material
+  { id: 'paper', name: 'Paper', kind: 'material' }, // pressed fiber pulp
+  { id: 'ingot', name: 'Ingot', kind: 'material' }, // smelted ore
+  // crafted products — feed jobs/clubs in Phases 8–9 (no consuming sink yet, see BLORSE_PLAN §7)
   { id: 'book', name: 'Book', kind: 'book' },
   { id: 'board-game', name: 'Board Game', kind: 'game' },
   { id: 'tool', name: 'Tool', kind: 'tool' },
-  // rare adventure drop
+  // rare adventure drop — sell / prestige; not a crafting input
   { id: 'rare-gem', name: 'Rare Gem', kind: 'material' },
 ];
 

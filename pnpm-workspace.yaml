@@ -1,0 +1,13 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# esbuild (used by vite / tsx / vitest) runs an install script to link its native
+# binary. pnpm 10+ requires explicit opt-in to run dependency build scripts.
+# As of pnpm 11 this setting lives here, not in package.json#pnpm.
+onlyBuiltDependencies:
+  - esbuild
+
+# Mirror of the decision for the harness build-approval gate.
+allowBuilds:
+  esbuild: true

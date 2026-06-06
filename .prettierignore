@@ -1,0 +1,16 @@
+# build + deps
+node_modules/
+dist/
+build/
+coverage/
+pnpm-lock.yaml
+
+# vendored engine + prototype art data — kept byte-for-byte (BLORSE_PLAN.md §5.1)
+js/
+assets/horse/
+
+# planning docs + markdown — preserve authored formatting (don't let Prettier rewrap)
+*.md
+
+# generated/large
+*.png

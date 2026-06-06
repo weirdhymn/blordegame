@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# tooling caches
+.vite/
+coverage/
+.eslintcache
+
+# env
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.DS_Store
+*.log

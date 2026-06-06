@@ -1,0 +1,19 @@
+{
+  "name": "@blorse/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BLORSE server — Fastify (Drizzle + Postgres + game logic arrive in later phases).",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@blorse/genetics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vendored equine-genetics engine + typed facade. Phase 1 (BLORSE_PLAN.md §5).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

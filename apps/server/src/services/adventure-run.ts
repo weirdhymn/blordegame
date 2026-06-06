@@ -367,8 +367,3 @@ async function bankAndEnd(
   RUNS.delete(run.id);
   return { loot, cubes: run.cubes, fatigue: run.fatigue, befriended: run.befriended };
 }
-
-/** Test-only: drop all in-memory runs so cases don't bleed into each other. */
-export function _resetRuns(): void {
-  RUNS.clear();
-}

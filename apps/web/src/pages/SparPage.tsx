@@ -3,6 +3,7 @@ import { ApiError } from '../api/client.js';
 import {
   actInBattle,
   startBattle,
+  type Approach,
   type BattleAction,
   type BattleView,
   type CombatantView,
@@ -10,14 +11,14 @@ import {
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { useSession } from '../session.js';
 
-// v1 minimum: a standalone "sparring ring" to play the core battle loop. Real entry (a region boss
-// reached from an adventure) lands with the approach/weakness layer.
+// A standalone "sparring ring" to play the core battle loop + the approach/weakness puzzle. The real
+// entry (a region boss reached from an adventure) lands with the run→battle handoff.
 const FOES: { key: string; label: string; enemies: string[]; blurb: string }[] = [
   {
     key: 'bramble',
     label: 'A Bramble-Tangle',
     enemies: ['bramble-tangle'],
-    blurb: 'Sturdy. Hits back. A good first scrap.',
+    blurb: 'Sturdy, brittle. Read its tell.',
   },
   {
     key: 'thistle',
@@ -26,11 +27,25 @@ const FOES: { key: string; label: string; enemies: string[]; blurb: string }[] =
     blurb: 'Quick and silly — it acts before slow horses.',
   },
   {
+    key: 'gander',
+    label: 'A Snappish Gander',
+    enemies: ['snappish-gander'],
+    blurb: 'All hiss and bluster. A job for a gentle horse.',
+  },
+  {
     key: 'thistles',
     label: 'Two Thistle-Whirls',
     enemies: ['thistle-whirl', 'thistle-whirl'],
     blurb: 'A pair. Bring friends.',
   },
+];
+
+// The four approaches as the attack choice — each keys off a stat (Soothe off kindness).
+const APPROACH_META: { key: Approach; label: string; icon: string; hint: string }[] = [
+  { key: 'confront', label: 'Confront', icon: '⚔', hint: 'STR' },
+  { key: 'outwit', label: 'Outwit', icon: '🧠', hint: 'INT' },
+  { key: 'soothe', label: 'Soothe', icon: '🌿', hint: 'kindness' },
+  { key: 'endure', label: 'Endure', icon: '🪨', hint: 'CON' },
 ];
 
 function HpBar({ c, actor }: { c: CombatantView; actor: boolean }): ReactElement {
@@ -60,7 +75,8 @@ export function SparPage(): ReactElement {
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [foeKey, setFoeKey] = useState(FOES[0]!.key);
   const [battle, setBattle] = useState<BattleView | null>(null);
-  const [picking, setPicking] = useState<'attack' | 'item' | null>(null);
+  const [picking, setPicking] = useState<'approach' | 'target' | 'item' | null>(null);
+  const [approach, setApproach] = useState<Approach | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +113,7 @@ export function SparPage(): ReactElement {
     setBusy(true);
     setError(null);
     setPicking(null);
+    setApproach(null);
     try {
       setBattle((await actInBattle(battle.battleId, action)).battle);
       await refresh(); // reward Cubes land in the topbar badge
@@ -110,6 +127,7 @@ export function SparPage(): ReactElement {
   function reset(): void {
     setBattle(null);
     setPicking(null);
+    setApproach(null);
     setError(null);
   }
 
@@ -199,7 +217,10 @@ export function SparPage(): ReactElement {
         <div className="battle-side">
           <h2 className="section-h">Foes</h2>
           {foes.map((c) => (
-            <HpBar key={c.id} c={c} actor={c.id === battle.turnId} />
+            <div key={c.id}>
+              <HpBar c={c} actor={c.id === battle.turnId} />
+              {c.tell && !c.ko && <p className="foe-tell">“{c.tell}”</p>}
+            </div>
           ))}
         </div>
         <div className="battle-side">
@@ -220,7 +241,7 @@ export function SparPage(): ReactElement {
               <div className="row-actions">
                 <button
                   disabled={busy || liveFoes.length === 0}
-                  onClick={() => setPicking('attack')}
+                  onClick={() => setPicking('approach')}
                 >
                   ⚔ Attack
                 </button>
@@ -236,20 +257,62 @@ export function SparPage(): ReactElement {
               </div>
             </>
           )}
-          {picking === 'attack' && (
+          {picking === 'approach' && (
             <>
-              <p className="battle-turn">Strike which foe?</p>
+              <p className="battle-turn">
+                How does {actor.name} go in? (match the foe&apos;s tell)
+              </p>
+              <div className="row-actions approach-row">
+                {APPROACH_META.map((a) => (
+                  <button
+                    key={a.key}
+                    className="approach-btn"
+                    disabled={busy}
+                    onClick={() => {
+                      if (liveFoes.length === 1)
+                        void act({ type: 'attack', targetId: liveFoes[0]!.id, approach: a.key });
+                      else {
+                        setApproach(a.key);
+                        setPicking('target');
+                      }
+                    }}
+                  >
+                    <span>
+                      {a.icon} {a.label}
+                    </span>
+                    <span className="approach-val">
+                      {a.hint} {actor.approaches?.[a.key] ?? '–'}
+                    </span>
+                  </button>
+                ))}
+                <button className="ghost" onClick={() => setPicking(null)}>
+                  Back
+                </button>
+              </div>
+            </>
+          )}
+          {picking === 'target' && approach && (
+            <>
+              <p className="battle-turn">
+                {APPROACH_META.find((a) => a.key === approach)?.label} which foe?
+              </p>
               <div className="row-actions">
                 {liveFoes.map((f) => (
                   <button
                     key={f.id}
                     disabled={busy}
-                    onClick={() => void act({ type: 'attack', targetId: f.id })}
+                    onClick={() => void act({ type: 'attack', targetId: f.id, approach })}
                   >
                     {f.name}
                   </button>
                 ))}
-                <button className="ghost" onClick={() => setPicking(null)}>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setPicking('approach');
+                    setApproach(null);
+                  }}
+                >
                   Back
                 </button>
               </div>

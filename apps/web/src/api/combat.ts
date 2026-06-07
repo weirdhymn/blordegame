@@ -1,5 +1,7 @@
 import { api } from './client.js';
 
+export type Approach = 'confront' | 'outwit' | 'soothe' | 'endure';
+
 export interface CombatantView {
   id: string;
   side: 'party' | 'foe';
@@ -8,6 +10,10 @@ export interface CombatantView {
   maxHp: number;
   ko: boolean;
   defending: boolean;
+  /** Foe only — the readable hint at its weakness (§9.4a). */
+  tell?: string;
+  /** Party only — this horse's attack value per approach. */
+  approaches?: Record<Approach, number>;
 }
 
 export interface BattleView {
@@ -25,7 +31,7 @@ export interface BattleView {
 }
 
 export type BattleAction =
-  | { type: 'attack'; targetId: string }
+  | { type: 'attack'; targetId: string; approach?: Approach }
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };

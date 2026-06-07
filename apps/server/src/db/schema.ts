@@ -218,6 +218,8 @@ export interface Combatant {
   stats: Record<string, number>;
   skills: Record<string, number>; // skill *levels* (boost a matching attack)
   luck: number;
+  /** Benevolence (Agreeableness 0–100) — drives the Soothe approach (§9.4a). Party only. */
+  kindness?: number;
   statuses: CombatStatus[];
   defending: boolean; // set by Defend, cleared at the start of this combatant's next turn
   enemyId?: string; // foe only — its EnemyDef id

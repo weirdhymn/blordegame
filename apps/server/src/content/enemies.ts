@@ -49,7 +49,7 @@ export const ENEMIES: EnemyDef[] = [
     resist: 'soothe', // …but there is no sweet-talking a thornbush
     intro:
       'The path knots shut ahead of you — a whole thicket of bramble hauls itself upright, shakes off the dirt, and considers your party with what can only be described as territorial intent. It is not malicious. It is just extremely a bramble.',
-    tell: 'It bristles and creaks, all thorn and no plan. Whatever this is, it is not going to out-think you.',
+    tell: 'All thorn and bluster — no cunning to outwit, no heart to soothe. But it is brittle: put a shoulder into it and it comes apart.',
     moves: [
       {
         id: 'thorn-lash',
@@ -81,6 +81,29 @@ export const ENEMIES: EnemyDef[] = [
       { id: 'prickle', kind: 'strike', weight: 1, text: 'It bowls through, scattering prickles.' },
     ],
     reward: { cubes: 10 },
+  },
+  {
+    id: 'snappish-gander',
+    name: 'a Snappish Gander',
+    maxHp: 40,
+    power: 12,
+    guard: 11,
+    speed: 12,
+    weakness: 'soothe', // all bluster — a kind word settles it where a shove only makes it worse
+    resist: 'confront', // meet its aggression head-on and it just digs in, wings out
+    intro:
+      'A great grey gander erupts from the reeds with its neck low and its wings spread, hissing like a kettle that has taken everything personally. It has decided, on no evidence whatsoever, that you are the enemy.',
+    tell: 'All hiss and raised hackles — spoiling for a fight it does not really want. Shove back and it only digs in; a gentle, steady word might be another matter entirely.',
+    moves: [
+      { id: 'wing-buffet', kind: 'strike', weight: 3, text: 'It batters out with both wings.' },
+      {
+        id: 'honk',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It looses a honk that rattles the whole party.',
+      },
+    ],
+    reward: { cubes: 22, items: [{ id: 'plant-fiber', qty: 1 }] },
   },
 ];
 

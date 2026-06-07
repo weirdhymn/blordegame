@@ -1,3 +1,4 @@
+import { APPROACHES, type Approach } from '@blorse/balance';
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
@@ -12,10 +13,20 @@ async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | nu
 }
 
 function parseAction(body: unknown): BattleAction | null {
-  const b = (body ?? {}) as { type?: string; targetId?: string; itemId?: string };
+  const b = (body ?? {}) as {
+    type?: string;
+    targetId?: string;
+    itemId?: string;
+    approach?: string;
+  };
   switch (b.type) {
-    case 'attack':
-      return b.targetId ? { type: 'attack', targetId: b.targetId } : null;
+    case 'attack': {
+      if (!b.targetId) return null;
+      const approach = APPROACHES.includes(b.approach as Approach)
+        ? (b.approach as Approach)
+        : undefined;
+      return { type: 'attack', targetId: b.targetId, approach };
+    }
     case 'item':
       return b.targetId && b.itemId
         ? { type: 'item', itemId: b.itemId, targetId: b.targetId }

@@ -248,3 +248,15 @@ export const COMBAT_FLEE_DC = 12; // a DEX check to slip away (cozy: a miss only
 export const POTION_HEAL_HP = 30; // Healing Potion restores this to a conscious horse…
 export const POTION_REVIVE_HP = 20; // …or rouses a spooked (KO'd) horse back to this (clutch revive)
 export const REWARD_RETREAT_FRACTION = 0.4; // a full-party retreat still banks this share of Cubes
+
+// Approach ↔ weakness (the tactical heart, §9.4a). A party attack picks an approach; an enemy is
+// weak to one (×WEAKNESS) and may resist one (×RESIST). Reading the foe's *tell* and matching the
+// right approach with the right horse is the core decision. Cozy: a "wrong" approach just does
+// less, never a punish; even a resisted hit still chips (≥1).
+export const COMBAT_WEAKNESS_MULT = 1.5; // damage × this when the approach hits the foe's weakness
+export const COMBAT_RESIST_MULT = 0.5; // …× this when the foe resists the approach
+// Soothe is the *kind* approach: its power comes from Benevolence (the Agreeableness trait), not a
+// core stat — so kind/Benevolent horses earn a real combat role. Kindness = Agreeableness ÷ this on
+// the 0–20 stat scale (A 100 → 20, A 50 → 10). (APPROACH_STAT.soothe='cha' is only its social
+// governing stat, reserved for later social checks; Soothe *damage* reads kindness.)
+export const KINDNESS_STAT_DIV = 5;

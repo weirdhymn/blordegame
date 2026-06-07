@@ -12,6 +12,8 @@ import {
   BONDED_THRESHOLD,
   CARE_BELOVED_THRESHOLD,
   CARE_CHECK_BONUS,
+  COMBAT_RESIST_MULT,
+  COMBAT_WEAKNESS_MULT,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
   JOB_DC,
@@ -59,7 +61,9 @@ import { getAudit } from '../src/services/audit.js';
 import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
 import {
   actInBattle,
+  approachMultiplier,
   getBattleView,
+  kindnessStat,
   startBattle,
   type BattleAction,
   type BattleView,
@@ -1664,6 +1668,7 @@ async function main(): Promise<void> {
     dex?: number;
     con?: number;
     luck?: number;
+    a?: number; // Agreeableness (Benevolence) — drives Soothe
     name?: string;
   }): Promise<string> => {
     const h = await mintHorse(db, {
@@ -1681,6 +1686,7 @@ async function main(): Promise<void> {
         cha: 10,
       },
       luck: over.luck ?? 10,
+      personality: over.a !== undefined ? { o: 50, c: 50, e: 50, a: over.a, n: 50 } : undefined,
     });
     return h.id;
   };
@@ -1848,6 +1854,69 @@ async function main(): Promise<void> {
         JSON.stringify(b.combatants.map((c) => [c.id, c.hp, c.ko])),
     );
   }
+
+  // approach ↔ weakness (§9.4a): the tactical heart. Pure scaling + Soothe-off-kindness.
+  eq(
+    'an approach the foe is weak to scales damage up',
+    approachMultiplier('soothe', 'confront', 'soothe'),
+    COMBAT_WEAKNESS_MULT,
+  );
+  eq(
+    'an approach the foe resists scales damage down',
+    approachMultiplier('soothe', 'confront', 'confront'),
+    COMBAT_RESIST_MULT,
+  );
+  eq('a neutral approach is unscaled', approachMultiplier('soothe', 'confront', 'outwit'), 1);
+  check(
+    'Soothe works off the kindness stat (a kinder horse soothes harder, clamped to the stat scale)',
+    kindnessStat(90) > kindnessStat(40) && kindnessStat(50) === 10 && kindnessStat(100) <= STAT_MAX,
+  );
+
+  // One controlled strike, returning the damage dealt to the (lone) foe.
+  const oneStrike = async (
+    approach: 'soothe' | 'endure' | 'confront',
+    seed: number,
+    horseId: string,
+  ): Promise<number> => {
+    const s = await startBattle(db, herdId, ['snappish-gander'], [horseId], { seed });
+    if (!s.ok) return -1;
+    const r = await actInBattle(db, herdId, s.battleId, {
+      type: 'attack',
+      targetId: 'foe0',
+      approach,
+    });
+    if (!r.ok) return -1;
+    const g = r.view.combatants.find((c) => c.side === 'foe') as BattleView['combatants'][number];
+    return g.maxHp - g.hp;
+  };
+
+  // Same kind horse, same foe, same seed — Soothe (the gander's weakness) vs a neutral Endure differ
+  // ONLY by the weakness multiplier (con 16 == the kindness from A 80, so the base roll is identical).
+  const gentle = await combatHorse({ con: 16, a: 80, dex: 8, name: 'Gentle' });
+  const sootheDmg = await oneStrike('soothe', 77, gentle);
+  const endureDmg = await oneStrike('endure', 77, gentle);
+  check(
+    'Soothe on a Soothe-weak foe deals the weakness multiplier over a neutral approach',
+    sootheDmg === Math.round(endureDmg * COMBAT_WEAKNESS_MULT) && sootheDmg > endureDmg,
+  );
+
+  // The headline: a Benevolent horse (kindness 18) Soothing a Soothe-weak / Confront-resistant foe
+  // out-damages a bruiser (STR 18) Confronting it — reading the tell + the right horse wins.
+  const benevolent = await combatHorse({ con: 12, a: 90, dex: 14, luck: 16, name: 'Benevolent' });
+  const bruiser = await combatHorse({
+    str: 18,
+    con: 12,
+    a: 30,
+    dex: 14,
+    luck: 16,
+    name: 'Bruiser',
+  });
+  const benevSoothe = await oneStrike('soothe', 31, benevolent);
+  const bruiserConfront = await oneStrike('confront', 31, bruiser);
+  check(
+    'a Benevolent horse out-soothes a bruiser who confronts a Soothe-weak, Confront-resistant foe',
+    benevSoothe > bruiserConfront,
+  );
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

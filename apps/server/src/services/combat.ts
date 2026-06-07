@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   abilityMod,
+  type Approach,
   APPROACH_SKILL,
   APPROACH_STAT,
   APPROACHES,
@@ -11,12 +12,17 @@ import {
   COMBAT_DMG_GLANCE,
   COMBAT_FLEE_DC,
   COMBAT_GUARD_BASE,
+  COMBAT_RESIST_MULT,
+  COMBAT_WEAKNESS_MULT,
   HP_BASE,
   HP_PER_CON,
+  KINDNESS_STAT_DIV,
   PARTY_MAX,
   POTION_HEAL_HP,
   POTION_REVIVE_HP,
   REWARD_RETREAT_FRACTION,
+  STAT_MAX,
+  STAT_MIN,
 } from '@blorse/balance';
 import { ENEMY_BY_ID, type EnemyDef } from '../content/enemies.js';
 import type { DB } from '../db/client.js';
@@ -38,9 +44,10 @@ import { skillCheck } from './stats.js';
 // and survives a restart. Cozy: 0 HP = "spooked" (out for the fight, fine after); a full wipe is a
 // retreat with reduced rewards — never a loss. HP is battle-scoped (fresh full HP every fight).
 //
-// v1 MINIMUM: Attack (a generic strike on a horse's best approach stat — no approach choice /
-// weakness yet), Item (Healing Potion), Defend, Flee, two-sided HP, KO + retreat. Deferred:
-// approaches/weaknesses, statuses, harmony, the Skill menu, the run→battle handoff.
+// Attack picks one of the four **approaches** (Confront/Outwit/Soothe/Endure) and earns the foe's
+// weakness ×WEAKNESS / resist ×RESIST multiplier — the tactical heart. Soothe keys off **kindness**
+// (Agreeableness), giving Benevolent horses a real role. Plus Item (Healing Potion), Defend, Flee,
+// two-sided HP, KO + retreat. Deferred: statuses, harmony, the Skill menu, the run→battle handoff.
 
 const POTION_ID = 'healing-potion';
 const MAX_LOG = 60;
@@ -58,7 +65,7 @@ function rngAt(seed: number, round: number, turnIndex: number, salt: number): ()
 }
 
 export type BattleAction =
-  | { type: 'attack'; targetId: string }
+  | { type: 'attack'; targetId: string; approach?: Approach }
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };
@@ -83,6 +90,7 @@ function partyCombatant(h: HorseRow): Combatant {
     stats,
     skills,
     luck: h.luck,
+    kindness: (h.personality as Record<string, number>).a ?? 50, // Benevolence drives Soothe (§9.4a)
     statuses: [],
     defending: false,
   };
@@ -124,18 +132,53 @@ function guardOf(c: Combatant): number {
   return COMBAT_GUARD_BASE + abilityMod(c.stats.con ?? 10);
 }
 
-/** A horse attacks with its *best approach* (str/int/cha/con) + that approach's job-skill; a foe
- *  attacks with its authored power. (The minimum auto-picks; the approach layer makes it a choice.) */
-function attackProfile(c: Combatant): { statValue: number; skillLevel: number } {
-  if (c.side === 'foe') return { statValue: enemyDefOf(c)?.power ?? 10, skillLevel: 0 };
-  let best = { statValue: -Infinity, skillLevel: 0 };
-  for (const ap of APPROACHES) {
-    const sv = c.stats[APPROACH_STAT[ap]] ?? 10;
-    if (sv > best.statValue)
-      best = { statValue: sv, skillLevel: c.skills[APPROACH_SKILL[ap]] ?? 0 };
-  }
-  return best.statValue === -Infinity ? { statValue: 10, skillLevel: 0 } : best;
+/** Soothe is the **kind** approach — its power is Benevolence (Agreeableness ÷ DIV, on the 0–20 stat
+ *  scale), so kind/Benevolent horses get a real combat role. (§9.4a) */
+export function kindnessStat(agreeableness: number): number {
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, Math.round(agreeableness / KINDNESS_STAT_DIV)));
 }
+
+/** Damage ×: WEAKNESS if the approach hits the foe's weakness, RESIST if it's resisted, else 1. Pure. */
+export function approachMultiplier(
+  weakness: Approach | undefined,
+  resist: Approach | undefined,
+  approach: Approach,
+): number {
+  if (weakness === approach) return COMBAT_WEAKNESS_MULT;
+  if (resist === approach) return COMBAT_RESIST_MULT;
+  return 1;
+}
+
+/** A combatant's attack value for one approach: the approach's stat (Soothe = kindness) + its skill. */
+function approachAttack(
+  c: Combatant,
+  approach: Approach,
+): { statValue: number; skillLevel: number } {
+  const skillLevel = c.skills[APPROACH_SKILL[approach]] ?? 0;
+  if (approach === 'soothe') return { statValue: kindnessStat(c.kindness ?? 50), skillLevel };
+  return { statValue: c.stats[APPROACH_STAT[approach]] ?? 10, skillLevel };
+}
+
+/** The approach a horse is naturally best at — used when the player doesn't pick one. */
+function bestApproach(c: Combatant): Approach {
+  let best: Approach = APPROACHES[0]!;
+  let bestVal = -Infinity;
+  for (const ap of APPROACHES) {
+    const v = approachAttack(c, ap).statValue;
+    if (v > bestVal) {
+      bestVal = v;
+      best = ap;
+    }
+  }
+  return best;
+}
+
+const APPROACH_VERB: Record<Approach, string> = {
+  confront: 'charges',
+  outwit: 'outfoxes',
+  soothe: 'gentles',
+  endure: 'wears down',
+};
 
 function pushEvent(snap: BattleSnapshot, text: string, kind?: string): void {
   snap.log.push({ round: snap.round, text, kind });
@@ -152,22 +195,42 @@ function applyDamage(target: Combatant, dmg: number): boolean {
   return false;
 }
 
-/** A single strike (reuses skillCheck): clean hit scales with the attacker's stat mod + crit; a
- *  miss still chips (cozy); a Defending target halves it. (No approach/weakness multiplier yet.) */
+/** A single strike (reuses skillCheck): clean hit scales with the attacker's stat mod + crit; a miss
+ *  still chips (cozy). A **party** attack picks an *approach* and earns the foe's weakness/resist
+ *  multiplier; a foe just swings with its power. A Defending target halves it. A resisted hit still
+ *  lands for ≥1 (never a 0-damage punish). */
 function resolveStrike(
   attacker: Combatant,
   target: Combatant,
   rng: () => number,
-): { dmg: number; crit: boolean } {
-  const atk = attackProfile(attacker);
-  const check = skillCheck(atk.statValue, atk.skillLevel, attacker.luck, guardOf(target), rng);
+  approach?: Approach,
+): { dmg: number; crit: boolean; mult: number; approach: Approach | null } {
+  let statValue: number;
+  let skillLevel: number;
+  let used: Approach | null = null;
+  let mult = 1;
+  if (attacker.side === 'foe') {
+    statValue = enemyDefOf(attacker)?.power ?? 10;
+    skillLevel = 0;
+  } else {
+    used = approach ?? bestApproach(attacker);
+    ({ statValue, skillLevel } = approachAttack(attacker, used));
+    if (target.side === 'foe') mult = approachMultiplier(target.weakness, target.resist, used);
+  }
+  const check = skillCheck(statValue, skillLevel, attacker.luck, guardOf(target), rng);
   let dmg = check.success
     ? COMBAT_DMG_BASE +
-      Math.max(0, abilityMod(atk.statValue)) +
+      Math.max(0, abilityMod(statValue)) +
       (check.crit ? COMBAT_DMG_CRIT_BONUS : 0)
     : COMBAT_DMG_GLANCE;
-  if (target.defending) dmg = Math.ceil(dmg * COMBAT_DEFEND_MULT);
-  return { dmg, crit: check.success && check.crit };
+  dmg = dmg * mult;
+  if (target.defending) dmg = dmg * COMBAT_DEFEND_MULT;
+  return {
+    dmg: Math.max(1, Math.round(dmg)),
+    crit: check.success && check.crit,
+    mult,
+    approach: used,
+  };
 }
 
 // ── round / turn flow ────────────────────────────────────────────────────────
@@ -267,16 +330,26 @@ function applyAct(
     const target = byId(snap, action.targetId);
     if (!target || target.side !== 'foe' || target.ko)
       return { outcome: 'active', error: 'bad_target' };
-    const { dmg, crit } = resolveStrike(
+    const res = resolveStrike(
       cur,
       target,
       rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT),
+      action.approach,
     );
-    applyDamage(target, dmg);
+    applyDamage(target, res.dmg);
+    const verb = res.approach ? APPROACH_VERB[res.approach] : 'strikes';
+    const tag =
+      res.mult > 1
+        ? ' — a weak point! 💥'
+        : res.mult < 1
+          ? ' — it barely notices.'
+          : res.crit
+            ? ' — a clean hit!'
+            : '.';
     pushEvent(
       snap,
-      `${cur.name} strikes ${target.name} for ${dmg}${crit ? ' — a clean hit!' : '.'}`,
-      'attack',
+      `${cur.name} ${verb} ${target.name} for ${res.dmg}${tag}`,
+      res.mult > 1 ? 'weak' : res.mult < 1 ? 'resist' : 'attack',
     );
     if (target.ko) pushEvent(snap, `${target.name} reels back, done for the day.`, 'ko');
   } else if (action.type === 'defend') {
@@ -328,6 +401,10 @@ export interface CombatantView {
   maxHp: number;
   ko: boolean;
   defending: boolean;
+  /** Foe only — the readable hint at its weakness, so the puzzle isn't blind guesswork (§9.4a). */
+  tell?: string;
+  /** Party only — this horse's attack value per approach, so the player can match horse↔approach. */
+  approaches?: Record<Approach, number>;
 }
 export interface BattleView {
   battleId: string;
@@ -342,7 +419,7 @@ export interface BattleView {
 }
 
 function combatantView(c: Combatant): CombatantView {
-  return {
+  const base = {
     id: c.id,
     side: c.side,
     name: c.name,
@@ -350,6 +427,16 @@ function combatantView(c: Combatant): CombatantView {
     maxHp: c.maxHp,
     ko: c.ko,
     defending: c.defending,
+  };
+  if (c.side === 'foe') return { ...base, tell: enemyDefOf(c)?.tell };
+  return {
+    ...base,
+    approaches: {
+      confront: approachAttack(c, 'confront').statValue,
+      outwit: approachAttack(c, 'outwit').statValue,
+      soothe: approachAttack(c, 'soothe').statValue,
+      endure: approachAttack(c, 'endure').statValue,
+    },
   };
 }
 

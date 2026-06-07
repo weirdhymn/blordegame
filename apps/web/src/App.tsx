@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.js';
 import { BreedPage } from './pages/BreedPage.js';
 import { DebugPage } from './pages/DebugPage.js';
-import { ExplorePage } from './pages/ExplorePage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
 import { HomePage } from './pages/HomePage.js';
 import { HorseDetailPage } from './pages/HorseDetailPage.js';
@@ -16,6 +15,7 @@ import { HerdPage } from './pages/HerdPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { SparPage } from './pages/SparPage.js';
+import { WorldPage } from './pages/WorldPage.js';
 import { useSession } from './session.js';
 
 /** Gate the authed area on a session; bounce to /login otherwise. */
@@ -43,7 +43,8 @@ export function App(): ReactElement {
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
         <Route path="/tavern" element={<TavernPage />} />
-        <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/world" element={<WorldPage />} />
+        <Route path="/explore" element={<Navigate to="/world" replace />} />
         <Route path="/spar" element={<SparPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/market" element={<MarketPage />} />

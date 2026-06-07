@@ -46,9 +46,13 @@ export interface ItemStack {
 }
 
 export interface RoamResult {
-  ok: boolean;
+  ok: true;
   regionId: string;
   found: ItemStack[];
+  /** How many horses foraged (each eligible adult once); the rest already gathered today. */
+  horsesGathered: number;
+  /** Total adult horses, so the UI can say "N of M foraged". */
+  herdSize: number;
   questCompletions: { questId: string; reward: { cubes?: number; items?: ItemStack[] } }[];
 }
 

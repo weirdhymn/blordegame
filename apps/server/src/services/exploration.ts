@@ -1,8 +1,11 @@
 import { randomInt } from 'node:crypto';
-import { ROAM_DROPS_MAX, ROAM_DROPS_MIN } from '@blorse/balance';
+import { GATHER_PER_HORSE_PER_DAY, ROAM_DROPS_MAX, ROAM_DROPS_MIN } from '@blorse/balance';
+import { and, eq, inArray } from 'drizzle-orm';
 import { ADVENTURE_POOLS } from '../content/adventures.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
 import type { DB } from '../db/client.js';
+import { horses } from '../db/schema.js';
+import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { isQuestCompleted, recordEvent, type QuestCompletion } from './quests.js';
@@ -43,18 +46,38 @@ function rollLoot(region: Region, rng: () => number): string {
 }
 
 export type RoamResult =
-  | { ok: false; code: 'not_found' | 'locked'; message: string }
-  | { ok: true; regionId: string; found: ItemStack[]; questCompletions: QuestCompletion[] };
+  | { ok: false; code: 'not_found' | 'locked' | 'no_horses' | 'already_gathered'; message: string }
+  | {
+      ok: true;
+      regionId: string;
+      found: ItemStack[];
+      /** How many horses foraged this gather (each eligible adult forages once). */
+      horsesGathered: number;
+      /** Total adult horses in the herd (so the UI can say "N of M foraged"). */
+      herdSize: number;
+      questCompletions: QuestCompletion[];
+    };
+
+/** A horse's gathers used today (timestamp model → 0 or 1; the v0 cap is 1). */
+function gathersToday(lastGatheredAt: Date | null, nowMs: number): number {
+  return lastGatheredAt && gameDay(lastGatheredAt.getTime()) >= gameDay(nowMs) ? 1 : 0;
+}
 
 /**
- * A paced roam in a region (BLORSE_PLAN.md §7): server-seeded loot roll → Materials
- * into the stash, and a 'roam' game event that advances any matching quest. Region
- * must be unlocked (quest-gated). No energy cap — pacing is one beat per action (§2).
+ * The daily gather (BLORSE_PLAN.md §7) — passive, capped at GATHER_PER_HORSE_PER_DAY per owned
+ * **adult** horse per calendar day. One action sends the whole stable foraging: every horse that is
+ * still under its daily cap rolls ROAM_DROPS_MIN..MAX Materials from the region's loot table, banked
+ * together, and is marked gathered for the day. So a bigger stable gathers more (every horse matters)
+ * and raw-material inflation is throttled at the source. Region must be unlocked (quest-gated).
+ *
+ * NOTE: the timestamp cursor enforces the v0 cap of exactly 1/day; raising GATHER_PER_HORSE_PER_DAY
+ * above 1 would need a same-day counter column (flagged follow-up).
  */
 export async function roam(
   db: DB,
   herdId: string,
   regionId: string,
+  nowMs: number,
   seed?: number,
 ): Promise<RoamResult> {
   const region = REGION_BY_ID.get(regionId);
@@ -63,16 +86,52 @@ export async function roam(
     return { ok: false, code: 'locked', message: 'That region is not open yet.' };
   }
 
+  const stable = await db.query.horses.findMany({
+    where: and(eq(horses.herdId, herdId), eq(horses.lifeStage, 'adult')),
+  });
+  if (stable.length === 0) {
+    return { ok: false, code: 'no_horses', message: 'You need a grown horse to send foraging.' };
+  }
+  const eligible = stable.filter(
+    (h) => gathersToday(h.lastGatheredAt, nowMs) < GATHER_PER_HORSE_PER_DAY,
+  );
+  if (eligible.length === 0) {
+    return {
+      ok: false,
+      code: 'already_gathered',
+      message: 'Your herd has already foraged today — back at the next sunrise.',
+    };
+  }
+
+  // Each eligible horse forages once (seeded; a bigger stable simply rolls more times).
   const rng = mulberry32(seed ?? randomInt(1, 2 ** 31));
-  const drops = ROAM_DROPS_MIN + Math.floor(rng() * (ROAM_DROPS_MAX - ROAM_DROPS_MIN + 1));
   const tally = new Map<string, number>();
-  for (let i = 0; i < drops; i++) {
-    const item = rollLoot(region, rng);
-    tally.set(item, (tally.get(item) ?? 0) + 1);
+  for (let h = 0; h < eligible.length; h++) {
+    const drops = ROAM_DROPS_MIN + Math.floor(rng() * (ROAM_DROPS_MAX - ROAM_DROPS_MIN + 1));
+    for (let i = 0; i < drops; i++) {
+      const item = rollLoot(region, rng);
+      tally.set(item, (tally.get(item) ?? 0) + 1);
+    }
   }
   const found: ItemStack[] = [...tally.entries()].map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, found);
+  await db
+    .update(horses)
+    .set({ lastGatheredAt: new Date(nowMs) })
+    .where(
+      inArray(
+        horses.id,
+        eligible.map((h) => h.id),
+      ),
+    );
   const questCompletions = await recordEvent(db, herdId, { type: 'roam', regionId });
 
-  return { ok: true, regionId, found, questCompletions };
+  return {
+    ok: true,
+    regionId,
+    found,
+    horsesGathered: eligible.length,
+    herdSize: stable.length,
+    questCompletions,
+  };
 }

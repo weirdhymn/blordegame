@@ -487,6 +487,16 @@ The pools grew from boss-only-combat to a **deliberate cozy-dominant mix**, so c
 - **Content-integrity tests** guard the pool: every script's `start` exists, every choice `next` resolves to a scene or `end`, no orphan scenes, every battle ref (boss **or** skirmish) resolves to a real enemy, and all three regions have a reachable pool.
 - **Flagged, deliberately not built (pure-content pass):** a **mid-run skirmish that the story continues *past*** needs a small engine change (an `in_battle` run state + a resume-after-battle endpoint, so a battle can sit *between* scenes rather than ending the run). Combat-forward stories ship as terminal skirmishes for now; the fight-then-continue nicety is a clean follow-up.
 
+### 7e Economy foundation: the per-horse daily gather cap
+
+The first real economy lever. Passive daily gathering was uncapped (roam infinitely → material/Cube inflation → trivial crafting); it confused players because it shared menu space with grindable adventuring. The fix throttles the **source**, not crafting costs:
+
+- **Gathering is capped at once per owned (adult) horse per day** (`GATHER_PER_HORSE_PER_DAY = 1`, balance.ts). One "Daily Gather" action sends the whole stable foraging — every horse still under its cap rolls `ROAM_DROPS_MIN..MAX` materials, banked together, then it's done until the next midnight-EST rollover (tracked by a per-horse `lastGatheredAt`, mirroring `lastCaredAt`). **A bigger stable gathers more** (every horse is mechanically valuable); raw materials are now finite/paced.
+- **Adventuring stays uncapped/grindable but pays Cubes/loot/story, not bulk materials.** The dice-adventure path now grants `ADVENTURE_CUBES_PER_SUCCESS` per win; the measured material yield of grindable adventuring is ~2–3 raws/run (Cube/loot/rare-dominant) — *not* an alternate material firehose.
+- **The two are now visibly different things in the UI.** Daily gathering (the chore + Quests) lives on the **Pasture**; grindable adventuring moved to its own **🗺 World** tab (`/world`, the old `/explore` redirects). Onboarding quests retuned from "roam 3×" to a single daily gather.
+- **Measured (3-day sim, 5-horse stable, 4 adventures/day):** ~34 raw mats from gathering vs ~28 from adventuring (gathering the majority); ~20 raws/day total; ~138 Cubes/day. So a day funds only a handful of ~5–7-raw products — crafting is no longer flooded. **Recommendation: hold crafting costs; the cap balanced the source.** Re-runnable via `apps/server/scripts/measure-economy.ts`.
+- **Render fix (orthogonal):** horse sprites are now capped to the native **150×126 at integer scale only** (the canvas's CSS size is locked to its bitmap size; `image-rendering: pixelated`), so upscaled pixel art is crisp instead of fractionally blurred.
+
 ### 9.5 Beta scope
 
 Ship: the six stats \+ hidden Luck, 4–6 skills, 2–3 jobs tied to starter structures, single-horse-and-small-party adventures with one encounter table per starter region, the **wild-encounter → party-recruit → Tavern** flow, dice resolution UI, accomplishments. Defer to **post-beta content waves**: large/strategic parties, deep job trees, multi-stage expeditions, and civil-society offices — all extend the same stat+dice+event spine.

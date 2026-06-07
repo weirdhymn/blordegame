@@ -84,6 +84,10 @@ export const PARTY_MAX = 4;
 export const dcForTier = (tier: number): number => 7 + 3 * tier; // T1=10 … T5=22
 export const ENCOUNTERS_MIN = 3;
 export const ENCOUNTERS_MAX = 5;
+/** Adventuring leans toward Cubes/loot/story — NOT raw crafting materials (those come from the
+ *  capped daily gather). A successful dice-adventure encounter pays this in Cubes so grindable
+ *  adventuring is a Cube/loot source, not an alternate infinite firehose of materials. */
+export const ADVENTURE_CUBES_PER_SUCCESS = 6;
 
 // ── Breeding (Phase 4) — v0 defaults; not pinned in §14 yet ──────────────────
 /** Per-parent breeding cooldown. Under a day so a daily-rhythm player can re-breed. */
@@ -92,8 +96,14 @@ export const BREED_COOLDOWN_MS = 20 * 60 * 60 * 1000; // 20h
 export const FOAL_TO_ADULT_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
 // ── Exploration (Phase 5) — v0 dials ────────────────────────────────────────
+/** Per-horse drops from one daily gather (each eligible horse forages once). */
 export const ROAM_DROPS_MIN = 1;
 export const ROAM_DROPS_MAX = 3;
+/** THE economy lever (§7): passive daily gathering is capped at this many gathers per owned (adult)
+ *  horse per calendar day. So a bigger stable gathers more — every horse is mechanically valuable —
+ *  and raw-material inflation is throttled at the source. Adventuring stays uncapped/grindable, but
+ *  pays Cubes/loot (see ADVENTURE_CUBES_PER_SUCCESS), not bulk materials. v0 = once per horse per day. */
+export const GATHER_PER_HORSE_PER_DAY = 1;
 
 // ── Daily rhythm (Phase 6) ──────────────────────────────────────────────────
 /** Cubes granted per daily rollover (login-catchup accrues one per missed day). */

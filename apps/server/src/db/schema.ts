@@ -77,6 +77,9 @@ export const horses = pgTable(
     /** Light-care counter (§7) — a hook for small bonuses once stats land (Phase 8). */
     careCount: integer('care_count').notNull().default(0),
     lastCaredAt: timestamp('last_cared_at', { withTimezone: true }),
+    /** Per-horse daily-gather cursor (§7) — the day's passive gather is capped at once per horse
+     *  (GATHER_PER_HORSE_PER_DAY). Compared via gameDay(); null = never gathered. */
+    lastGatheredAt: timestamp('last_gathered_at', { withTimezone: true }),
     // RPG (§9): six core stats, hidden Luck, skills, accomplishments. Set at mint.
     stats: jsonb('stats').$type<Record<string, number>>().notNull().default({}),
     luck: integer('luck').notNull().default(10),

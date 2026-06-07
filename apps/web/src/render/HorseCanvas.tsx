@@ -14,7 +14,10 @@ function sharedImages(): Promise<LayerImages> {
   return imagesPromise;
 }
 
-/** Render a horse from its RenderSpec onto a crisp, nearest-neighbour canvas. */
+/** Render a horse from its RenderSpec onto a crisp, nearest-neighbour canvas. Sprites are capped to
+ *  the native 150×126 at INTEGER scale only (1×, 2×, 3× …) — the bitmap is composited at `s×` with
+ *  smoothing off, and the CSS display size is locked to the bitmap size, so the browser never
+ *  fractionally rescales (which is what blurred upscaled pixel art). */
 export function HorseCanvas({
   spec,
   scale = 2,
@@ -22,6 +25,7 @@ export function HorseCanvas({
   spec: RenderSpec;
   scale?: number;
 }): ReactElement {
+  const s = Math.max(1, Math.round(scale)); // integer multiples of native only — never fractional
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let cancelled = false;
@@ -29,19 +33,20 @@ export function HorseCanvas({
       .then((images) => {
         if (cancelled) return;
         const ctx = ref.current?.getContext('2d');
-        if (ctx) compositeHorse(ctx, spec, images, scale);
+        if (ctx) compositeHorse(ctx, spec, images, s);
       })
       .catch((e: unknown) => console.error('layer load failed', e));
     return () => {
       cancelled = true;
     };
-  }, [spec, scale]);
+  }, [spec, s]);
 
   return (
     <canvas
       ref={ref}
-      width={W * scale}
-      height={H * scale}
+      width={W * s}
+      height={H * s}
+      style={{ width: `${W * s}px`, height: `${H * s}px` }}
       className="horse-canvas"
       aria-label={spec.displayName}
     />

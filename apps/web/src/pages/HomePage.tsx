@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { checkIn, type DailyResult } from '../api/daily.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
+import { DailyGather } from '../components/DailyGather.js';
 import { HorseCard } from '../components/HorseCard.js';
 import { useSession } from '../session.js';
 
@@ -71,6 +72,8 @@ export function HomePage(): ReactElement {
           {error}
         </div>
       )}
+      <DailyGather />
+      <h2 className="section-h">Your herd</h2>
       {horses === null && <div className="loading">Loading your herd…</div>}
       {horses && horses.length === 0 && (
         <div className="card placeholder">

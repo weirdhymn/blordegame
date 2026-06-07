@@ -199,8 +199,10 @@ a {
 }
 
 .horse-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* Flex-wrap so the fixed-size (integer-scaled) horse cards flow without stretching — stretching
+     a grid track would force the canvas off its native integer multiple and blur the pixel art. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
@@ -216,9 +218,10 @@ a {
 }
 
 .horse-canvas {
+  /* Size comes from the element's inline width/height (an integer multiple of 150×126); do NOT set
+     width:100% — that would rescale the bitmap to the container and blur it. Nearest-neighbour only. */
   image-rendering: pixelated;
-  width: 100%;
-  height: auto;
+  display: block;
   background: var(--sage);
   border-radius: 4px;
 }
@@ -496,8 +499,9 @@ a {
   font-size: 0.85rem;
 }
 .canvas-ph {
-  width: 100%;
-  aspect-ratio: 150 / 126;
+  /* Matches a 2× horse canvas (300×252) so the loading placeholder doesn't reflow the card. */
+  width: 300px;
+  height: 252px;
   background: var(--sage);
   border-radius: 4px;
 }

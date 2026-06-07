@@ -28,9 +28,11 @@ export function registerExplorationRoutes(app: FastifyInstance, db: DB): void {
     const herd = await requireHerd(db, req.cookies[SESSION_COOKIE]);
     if ('error' in herd) return reply.code(herd.error).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };
-    const result = await roam(db, herd.id, id);
+    const result = await roam(db, herd.id, id, Date.now());
     if (!result.ok) {
-      return reply.code(result.code === 'not_found' ? 404 : 403).send({ error: result.message });
+      const status =
+        result.code === 'not_found' ? 404 : result.code === 'already_gathered' ? 409 : 403;
+      return reply.code(status).send({ error: result.message, code: result.code });
     }
     return reply.send(result);
   });

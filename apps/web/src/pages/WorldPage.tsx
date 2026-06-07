@@ -1,40 +1,36 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
+import type { BattleView } from '../api/combat.js';
 import {
   adventure,
   chooseStory,
   getAdventures,
-  getQuests,
   getRegions,
-  roam,
   startStory,
   type AdventureOption,
   type AdventureResult,
   type ChooseStoryResult,
-  type QuestView,
   type RegionView,
-  type RoamResult,
   type SceneView,
   type StoryRunView,
 } from '../api/explore.js';
-import type { BattleView } from '../api/combat.js';
-import { StoryRunner, type StoryLogEntry } from '../components/StoryRunner.js';
-import { BattleArena } from '../components/BattleArena.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
+import { BattleArena } from '../components/BattleArena.js';
+import { StoryRunner, type StoryLogEntry } from '../components/StoryRunner.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
 type StoryEnding = Extract<ChooseStoryResult, { ended: true }>;
 
-export function ExplorePage(): ReactElement {
+/** The World map (§9.3/§9.4) — grindable expeditions: interactive stories, skirmishes, and the
+ *  region bosses. Distinct from the once-daily gather on the Pasture (that's the cozy chore). */
+export function WorldPage(): ReactElement {
   const { herd, refresh } = useSession();
   const [regions, setRegions] = useState<RegionView[]>([]);
   const [horses, setHorses] = useState<Horse[]>([]);
-  const [quests, setQuests] = useState<QuestView[]>([]);
   const [regionId, setRegionId] = useState('');
   const [party, setParty] = useState<string[]>([]);
   const [adv, setAdv] = useState<AdventureResult | null>(null);
-  const [roamRes, setRoamRes] = useState<RoamResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,13 +46,14 @@ export function ExplorePage(): ReactElement {
   const [scriptId, setScriptId] = useState('');
   const [bossBattle, setBossBattle] = useState<BattleView | null>(null);
 
-  const loadQuests = useCallback(() => {
-    getQuests()
-      .then(setQuests)
+  const loadHorses = useCallback(() => {
+    if (!herd) return;
+    listHerdHorses(herd.id)
+      .then((hs) => setHorses(hs.filter((h) => h.lifeStage === 'adult')))
       .catch(() => {
         /* ignore */
       });
-  }, []);
+  }, [herd]);
 
   useEffect(() => {
     if (!herd) return;
@@ -69,13 +66,8 @@ export function ExplorePage(): ReactElement {
       .catch(() => {
         /* ignore */
       });
-    listHerdHorses(herd.id)
-      .then((hs) => setHorses(hs.filter((h) => h.lifeStage === 'adult')))
-      .catch(() => {
-        /* ignore */
-      });
-    loadQuests();
-  }, [herd, loadQuests]);
+    loadHorses();
+  }, [herd, loadHorses]);
 
   // A region's expeditions, for the picker (so the boss expedition is reachable on purpose).
   useEffect(() => {
@@ -94,32 +86,15 @@ export function ExplorePage(): ReactElement {
     setParty((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < 4 ? [...p, id] : p));
   }
 
-  async function go(fn: () => Promise<void>): Promise<void> {
-    setBusy(true);
-    setError(null);
-    setAdv(null);
-    setRoamRes(null);
-    try {
-      await fn();
-      await refresh();
-      loadQuests();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not head out.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const selected = regions.find((r) => r.id === regionId);
   const storyActive = storyRunId !== null || ending !== null;
 
   async function setOut(): Promise<void> {
-    if (selected?.interactive) {
-      setBusy(true);
-      setError(null);
-      setAdv(null);
-      setRoamRes(null);
-      try {
+    setBusy(true);
+    setError(null);
+    setAdv(null);
+    try {
+      if (selected?.interactive) {
         const r = await startStory(regionId, party, scriptId || undefined);
         setStoryRunId(r.runId);
         setStoryRegion(selected.name);
@@ -127,14 +102,15 @@ export function ExplorePage(): ReactElement {
         setRun(r.run);
         setStoryLog([]);
         setEnding(null);
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Could not set out.');
-      } finally {
-        setBusy(false);
+      } else {
+        setAdv(await adventure(regionId, party));
+        await refresh();
       }
-      return;
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not set out.');
+    } finally {
+      setBusy(false);
     }
-    await go(async () => setAdv(await adventure(regionId, party)));
   }
 
   async function choose(choiceId: string): Promise<void> {
@@ -193,7 +169,7 @@ export function ExplorePage(): ReactElement {
             setBossBattle(null);
             closeStory();
           }}
-          onCloseLabel="Back to Explore"
+          onCloseLabel="Back to the World"
           title={`⚔ ${foe?.name ?? 'Boss'}`}
         />
       </div>
@@ -202,7 +178,11 @@ export function ExplorePage(): ReactElement {
 
   return (
     <div className="explore">
-      <h1>Explore</h1>
+      <h1>🗺 World</h1>
+      <p className="muted">
+        Head out on an expedition — cozy stories, skirmishes, and region bosses. Grind these as much
+        as you like; the daily gather (your raw materials) lives back on the Pasture.
+      </p>
       <label className="field">
         <span>Region</span>
         <select
@@ -234,27 +214,6 @@ export function ExplorePage(): ReactElement {
         </label>
       )}
 
-      <div className="row-actions">
-        <button
-          disabled={!regionId || busy || storyActive}
-          onClick={() => void go(async () => setRoamRes(await roam(regionId)))}
-        >
-          🧺 Roam (gather)
-        </button>
-      </div>
-      {roamRes && (
-        <div className="card">
-          <p>
-            Gathered:{' '}
-            {roamRes.found.length
-              ? roamRes.found.map((f) => `${pretty(f.id)} ×${f.qty}`).join(', ')
-              : 'nothing this time'}
-            .
-          </p>
-          {roamRes.questCompletions.length > 0 && <p className="rare">✦ Completed a quest!</p>}
-        </div>
-      )}
-
       {storyActive ? (
         <StoryRunner
           regionName={storyRegion}
@@ -269,7 +228,7 @@ export function ExplorePage(): ReactElement {
         />
       ) : (
         <>
-          <h2 className="section-h">Adventure — party ({party.length}/4)</h2>
+          <h2 className="section-h">Party ({party.length}/4)</h2>
           <div className="party-pick">
             {horses.map((h) => (
               <button
@@ -323,29 +282,6 @@ export function ExplorePage(): ReactElement {
             </div>
           )}
         </>
-      )}
-
-      <h2 className="section-h">Quests</h2>
-      {quests.length === 0 ? (
-        <p className="muted">No quests yet.</p>
-      ) : (
-        <ul className="list">
-          {quests.map((q) => (
-            <li key={q.questId}>
-              <span>
-                {q.status === 'completed' ? '✓ ' : ''}
-                {q.title}
-                {q.objectives.length > 0 && (
-                  <span className="muted">
-                    {' '}
-                    — {q.objectives.map((o) => `${o.label} ${o.have}/${o.need}`).join(', ')}
-                  </span>
-                )}
-              </span>
-              {q.reward.cubes ? <span className="muted">{q.reward.cubes} ⬡</span> : null}
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );

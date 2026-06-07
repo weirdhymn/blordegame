@@ -17,6 +17,7 @@ import {
   COMBAT_WEAKNESS_MULT,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
+  GATHER_PER_HORSE_PER_DAY,
   type HorseClass,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
@@ -76,6 +77,7 @@ import {
   type BattleView,
 } from '../src/services/combat.js';
 import { advanceHerd } from '../src/services/daily.js';
+import { roam } from '../src/services/exploration.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { consumeItems, grantItems, itemQty } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
@@ -377,20 +379,36 @@ async function main(): Promise<void> {
   });
   eq('roam locked region → 403', lockedRoam.statusCode, 403);
 
-  // roam Green Grass 3× → completes 'first-steps'
-  let firstStepsDone = false;
-  for (let i = 0; i < 3; i++) {
-    const r = await inject({
-      method: 'POST',
-      url: '/regions/green-grass/roam',
-      headers: { cookie },
-    });
-    eq(`roam ${i + 1} → 200`, r.statusCode, 200);
-    const body = r.json<{ found: unknown[]; questCompletions: { questId: string }[] }>();
-    check(`roam ${i + 1} found materials`, body.found.length > 0);
-    if (body.questCompletions.some((c) => c.questId === 'first-steps')) firstStepsDone = true;
-  }
-  check('roaming completed "First Steps"', firstStepsDone);
+  // The daily gather is capped at once per (adult) horse per day (§7): ONE action sends the whole
+  // stable foraging and completes 'first-steps', then it's done until tomorrow.
+  const gather1 = await inject({
+    method: 'POST',
+    url: '/regions/green-grass/roam',
+    headers: { cookie },
+  });
+  eq('daily gather → 200', gather1.statusCode, 200);
+  const g1 = gather1.json<{
+    found: unknown[];
+    horsesGathered: number;
+    herdSize: number;
+    questCompletions: { questId: string }[];
+  }>();
+  check('the gather found materials', g1.found.length > 0);
+  check(
+    'every adult foraged (horsesGathered === herdSize ≥ 1)',
+    g1.horsesGathered === g1.herdSize && g1.horsesGathered >= 1,
+  );
+  check(
+    'one daily gather completes "First Steps"',
+    g1.questCompletions.some((c) => c.questId === 'first-steps'),
+  );
+  // a second gather the same day is capped → 409, no second haul
+  const gather2 = await inject({
+    method: 'POST',
+    url: '/regions/green-grass/roam',
+    headers: { cookie },
+  });
+  eq('a second gather the same day → 409 (capped)', gather2.statusCode, 409);
 
   // inventory reflects roam loot
   const inv = (await inject({ method: 'GET', url: '/inventory', headers: { cookie } })).json<
@@ -417,12 +435,86 @@ async function main(): Promise<void> {
     'Dusty Dunes now unlocked',
     regions1.some((r) => r.id === 'dusty-dunes' && r.unlocked),
   );
+  // Dusty Dunes is unlocked now — gathering there is no longer 403-locked, just already-foraged-today
+  // (409), since the herd already gathered in Green Grass this day. Proves the unlock + the cap.
   const duneRoam = await inject({
     method: 'POST',
     url: '/regions/dusty-dunes/roam',
     headers: { cookie },
   });
-  eq('roam Dusty Dunes → 200', duneRoam.statusCode, 200);
+  eq(
+    'Dusty Dunes unlocked (no longer 403) but the herd already foraged today → 409',
+    duneRoam.statusCode,
+    409,
+  );
+
+  // --- per-horse daily gather cap (§7): controlled-clock service tests ---
+  eq('the gather cap is once per horse per day', GATHER_PER_HORSE_PER_DAY, 1);
+  {
+    const forager = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'forager', password: 'forage1horse' },
+    });
+    const fHerd = forager.json<{ herd: { id: string } }>().herd.id;
+    const G0 = Date.UTC(2026, 5, 1, 18);
+    const G1 = G0 + 86_400_000;
+    const G2 = G0 + 2 * 86_400_000;
+
+    const day0 = await roam(db, fHerd, 'green-grass', G0, 1);
+    check(
+      'day 0: the 2-adult stable forages (2 horses, real haul)',
+      day0.ok && day0.horsesGathered === 2 && day0.herdSize === 2 && day0.found.length > 0,
+    );
+    const day0Qty = day0.ok ? day0.found.reduce((s, f) => s + f.qty, 0) : 0;
+
+    const day0again = await roam(db, fHerd, 'green-grass', G0, 1);
+    check(
+      'same day again → already_gathered (each horse is capped to one gather)',
+      !day0again.ok && day0again.code === 'already_gathered',
+    );
+
+    const day1 = await roam(db, fHerd, 'green-grass', G1, 1);
+    check(
+      'next day → the cap resets and the stable forages again',
+      day1.ok && day1.horsesGathered === 2,
+    );
+
+    // a bigger stable gathers more: add 2 adults → 4 forage, strictly more drops (same seed)
+    await mintHorse(db, {
+      herdId: fHerd,
+      genotype: { E: 'Ee', A: 'Aa' } as Genotype,
+      origin: 'wild',
+      lifeStage: 'adult',
+    });
+    await mintHorse(db, {
+      herdId: fHerd,
+      genotype: { E: 'Ee', A: 'Aa' } as Genotype,
+      origin: 'wild',
+      lifeStage: 'adult',
+    });
+    const day2 = await roam(db, fHerd, 'green-grass', G2, 1);
+    const day2Qty = day2.ok ? day2.found.reduce((s, f) => s + f.qty, 0) : 0;
+    check(
+      'a bigger stable forages with every horse (4 of 4)',
+      day2.ok && day2.horsesGathered === 4,
+    );
+    check(
+      'a bigger stable gathers strictly more (4 horses > 2 horses, same seed)',
+      day2Qty > day0Qty,
+    );
+
+    // a herd with no adult horses → no_horses
+    const empty = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'emptyfold', password: 'emptyhorse1' },
+    });
+    const eHerd = empty.json<{ herd: { id: string } }>().herd.id;
+    await db.update(horses).set({ herdId: null }).where(drizzleEq(horses.herdId, eHerd));
+    const noHorses = await roam(db, eHerd, 'green-grass', G0, 1);
+    check('a herd with no adults → no_horses', !noHorses.ok && noHorses.code === 'no_horses');
+  }
 
   // --- Phase 6: aging, care & daily rhythm ---
   const DAY_MS = 86_400_000;

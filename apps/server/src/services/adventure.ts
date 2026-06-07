@@ -1,7 +1,8 @@
 import { randomInt } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   acceptChance,
+  ADVENTURE_CUBES_PER_SUCCESS,
   ADVENTURE_XP,
   dcForTier,
   ENCOUNTERS_MAX,
@@ -17,7 +18,7 @@ import {
 import { randomGenotype, resolve } from '@blorse/genetics';
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
-import { horses, type HorseRow } from '../db/schema.js';
+import { herds, horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
@@ -69,6 +70,8 @@ export type AdventureResult =
       encounters: Encounter[];
       successes: number;
       loot: ItemStack[];
+      /** Cubes earned (ADVENTURE_CUBES_PER_SUCCESS × successes) — adventuring's headline reward. */
+      cubes: number;
       rareFound: number;
       wild: WildOutcome | null;
     };
@@ -121,6 +124,7 @@ export async function adventure(
   const tally = new Map<string, number>();
   let successes = 0;
   let rareFound = 0;
+  let cubes = 0;
 
   for (let i = 0; i < nEnc; i++) {
     const stats = lead.stats as StatBlock;
@@ -138,6 +142,7 @@ export async function adventure(
     const pick = (idx: number): string => region.loot[idx]?.item ?? 'plant-fiber';
     if (check.success) {
       successes++;
+      cubes += ADVENTURE_CUBES_PER_SUCCESS; // adventuring pays Cubes, not a materials firehose
       const item = pick(Math.floor(rng() * region.loot.length));
       tally.set(item, (tally.get(item) ?? 0) + 1);
       if (rng() < rareItemChance(region.tier, check.margin, check.crit)) {
@@ -154,6 +159,12 @@ export async function adventure(
     .filter(([, qty]) => qty > 0)
     .map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, loot);
+  if (cubes > 0) {
+    await db
+      .update(herds)
+      .set({ cubes: sql`${herds.cubes} + ${cubes}` })
+      .where(eq(herds.id, herdId));
+  }
 
   // skill/stat growth for every party member
   for (const h of party) {
@@ -206,5 +217,5 @@ export async function adventure(
     }
   }
 
-  return { ok: true, regionId, encounters, successes, loot, rareFound, wild };
+  return { ok: true, regionId, encounters, successes, loot, cubes, rareFound, wild };
 }

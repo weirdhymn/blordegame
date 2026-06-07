@@ -32,7 +32,13 @@ export const QUESTS: QuestDef[] = [
     title: 'First Steps',
     requires: null,
     objectives: [
-      { type: 'roam', regionId: 'green-grass', count: 3, label: 'Roam Green Grass 3 times' },
+      // One daily gather (the gather is now a once-per-horse-per-day action, §7), not a 3× grind.
+      {
+        type: 'roam',
+        regionId: 'green-grass',
+        count: 1,
+        label: 'Send your herd foraging in Green Grass',
+      },
     ],
     reward: { cubes: 150 },
   },
@@ -48,7 +54,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Into the Dunes',
     requires: 'first-steps',
     objectives: [
-      { type: 'roam', regionId: 'dusty-dunes', count: 3, label: 'Roam Dusty Dunes 3 times' },
+      { type: 'roam', regionId: 'dusty-dunes', count: 1, label: 'Forage once in Dusty Dunes' },
     ],
     reward: { cubes: 300 },
   },

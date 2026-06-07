@@ -5,10 +5,10 @@ import type { Approach } from '@blorse/balance';
 // Combatant per enemy id passed in (so "1–2 enemies" is just a list). Cozy framing: these are
 // grumpy obstacles, not villains — at 0 HP they huff off, never die.
 //
-// NOTE (v1 minimum): `weakness` / `resist` / `tell` are authored now for forward-compat but the
-// minimum's generic Attack does NOT read them yet — the approach/weakness layer turns them on. The
-// region boss (the Hollow-Keeper) debuts *with* that layer so its puzzle isn't spoiled here.
-// Names are PLACEHOLDERS pending LORE.md (per the "ask before inventing names" rule).
+// `weakness` / `resist` (an Approach) drive the class/approach puzzle (§9.4a/b): a class that attacks
+// the weakness hits ×WEAKNESS, a resisted one ×RESIST; the `tell` is the readable hint. The region
+// boss, the Hollow-Keeper (§9.4c), is the climax of a deep adventure. Names are PLACEHOLDERS pending
+// LORE.md (per the "ask before inventing names" rule).
 
 export interface EnemyMove {
   id: string;
@@ -127,6 +127,42 @@ export const ENEMIES: EnemyDef[] = [
       { id: 'snap', kind: 'strike', weight: 1, text: 'A surprisingly fast snap of its beak.' },
     ],
     reward: { cubes: 28, items: [{ id: 'plant-fiber', qty: 1 }] },
+  },
+  {
+    // The Green Grass region boss (§9.4c) — the climax of a deep adventure. Weak to a Cleric's
+    // Soothe, resists a Knight's Confront: the reading-the-foe puzzle, debuting at boss scale.
+    id: 'gg-hollow-keeper',
+    name: 'the Hollow-Keeper',
+    maxHp: 92,
+    power: 14,
+    guard: 13,
+    speed: 9,
+    weakness: 'soothe', // it does not want a fight, only respect — a Cleric settles it
+    resist: 'confront', // a Knight just gives it the brawl it has been spoiling for
+    intro:
+      'The hollow narrows, the green closes overhead, and there it is: an enormous old stag, bedded down across the only way through, regarding you with the patience of geology. It does not look angry. It looks like it has been waiting a very long time for someone to be rude to it.',
+    tell: 'It lowers that vast rack of antlers and huffs — it *wants* the charge. Something tells you the worst thing you could do is give it the fight it is spoiling for; a calm, respectful word might move it where muscle never will.',
+    moves: [
+      {
+        id: 'antler-sweep',
+        kind: 'strike',
+        weight: 3,
+        text: 'It sweeps that great rack of antlers in a slow, contemptuous arc.',
+      },
+      {
+        id: 'bugle',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It throws back its head and BUGLES — a sound that rattles your back teeth.',
+      },
+    ],
+    reward: {
+      cubes: 120,
+      items: [
+        { id: 'rare-gem', qty: 1 },
+        { id: 'marsh-sage', qty: 2 },
+      ],
+    },
   },
 ];
 

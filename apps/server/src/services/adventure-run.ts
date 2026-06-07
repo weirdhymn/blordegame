@@ -27,6 +27,7 @@ import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { getRelationships } from './autonomy.js';
+import { startBattle, type BattleView } from './combat.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
@@ -375,6 +376,8 @@ export type ChooseResult =
       trained: TrainedView | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };
+      /** Set when this ending hands off to a boss battle (§9.4c) — the client switches to combat. */
+      battle: { battleId: string; view: BattleView } | null;
     };
 
 /** Resolve one choice in an active run: roll, accrue, branch — and bank everything on `end`. */
@@ -488,6 +491,14 @@ export async function chooseInRun(
       .update(horses)
       .set({ adventures: sql`${horses.adventures} + 1` })
       .where(inArray(horses.id, run.party));
+    // Boss handoff (§9.4c): the deepest push hands the party off to combat. The run has already
+    // banked its journey haul + ended; the boss's own reward is the big prize, granted on victory
+    // by the combat engine (and the retreat fraction on a cozy loss).
+    let battle: { battleId: string; view: BattleView } | null = null;
+    if (outcome.battle) {
+      const bs = await startBattle(db, herdId, [outcome.battle], run.party, { runId: run.id });
+      if (bs.ok) battle = { battleId: bs.battleId, view: bs.view };
+    }
     return {
       ok: true,
       ended: true,
@@ -497,6 +508,7 @@ export async function chooseInRun(
       trained: trainedView,
       befriended,
       summary,
+      battle,
     };
   }
 

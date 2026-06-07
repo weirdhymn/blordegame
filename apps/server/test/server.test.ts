@@ -1201,8 +1201,8 @@ async function main(): Promise<void> {
 
   // §2 pool mechanic: a region holds a pool of scripts; startRun draws one (seeded, reproducible).
   check(
-    'green-grass holds a pool of two scripts',
-    (ADVENTURE_POOLS.get('green-grass')?.length ?? 0) === 2,
+    'green-grass holds a pool of scripts (incl. the boss expedition)',
+    (ADVENTURE_POOLS.get('green-grass')?.length ?? 0) >= 3,
   );
   const pickA = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
   const pickB = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
@@ -2021,6 +2021,85 @@ async function main(): Promise<void> {
       "a Cleric's Mend heals a wounded ally (kindness-scaled)",
       !!r && r.ok && !!after && after.hp > before.hp,
     );
+  }
+
+  // boss handoff (§9.4c): a deep Green Grass adventure culminates in a boss battle ----------------
+  const cubesPreBoss = await herdCubes();
+  const bossParty = [
+    await combatHorse({ a: 95, con: 16, dex: 16, luck: 16, cls: 'cleric', name: 'Boss Cleric A' }),
+    await combatHorse({ a: 95, con: 16, dex: 14, luck: 16, cls: 'cleric', name: 'Boss Cleric B' }),
+    await combatHorse({ str: 18, con: 18, dex: 12, luck: 14, cls: 'knight', name: 'Boss Knight' }),
+  ];
+  const bossRun = await startRun(db, herdId, 'green-grass', bossParty, {
+    scriptId: 'hollow-keeper',
+    seed: 1,
+  });
+  check('the Hollow-Keeper expedition starts (a chosen script)', bossRun.ok);
+  if (bossRun.ok) {
+    await chooseInRun(db, herdId, bossRun.runId, 'press-quiet'); // meadow → fork
+    await chooseInRun(db, herdId, bossRun.runId, 'go-deeper'); // fork → clearing
+    const face = await chooseInRun(db, herdId, bossRun.runId, 'face-keeper'); // → boss battle
+    check(
+      'facing the boss ends the run and hands off to a battle vs the Hollow-Keeper',
+      face.ok &&
+        face.ended === true &&
+        !!face.battle &&
+        face.battle.view.combatants.some((c) => c.side === 'foe' && c.name === 'the Hollow-Keeper'),
+    );
+    if (face.ok && face.ended && face.battle) {
+      const won = await driveBattle(face.battle.battleId);
+      const keeper = ENEMY_BY_ID.get('gg-hollow-keeper')!;
+      check('a strong party defeats the Hollow-Keeper', won.status === 'won');
+      check(
+        'boss victory grants the big end-of-adventure reward',
+        won.reward !== null && (won.reward?.cubes ?? 0) === (keeper.reward.cubes ?? 0),
+      );
+      check(
+        'the herd banked the boss reward (the run already banked its journey haul)',
+        (await herdCubes()) - cubesPreBoss >= (keeper.reward.cubes ?? 0),
+      );
+    }
+  }
+
+  // Banking at the fork skips the boss entirely (the push-deeper/bank tension).
+  const skipRun = await startRun(
+    db,
+    herdId,
+    'green-grass',
+    [await combatHorse({ name: 'Skipper' })],
+    { scriptId: 'hollow-keeper', seed: 2 },
+  );
+  if (skipRun.ok) {
+    await chooseInRun(db, herdId, skipRun.runId, 'press-quiet'); // → fork
+    const banked = await chooseInRun(db, herdId, skipRun.runId, 'bank-home'); // → end, no boss
+    check(
+      'banking at the fork ends the run with no boss battle',
+      banked.ok && banked.ended === true && banked.battle === null,
+    );
+  }
+
+  // Losing the boss is cozy: a full-party KO → retreat home with a reduced reward, never a loss.
+  const loseRun = await startRun(
+    db,
+    herdId,
+    'green-grass',
+    [await combatHorse({ str: 4, con: 3, dex: 5, luck: 4, name: 'Wee One' })],
+    { scriptId: 'hollow-keeper', seed: 3 },
+  );
+  if (loseRun.ok) {
+    await chooseInRun(db, herdId, loseRun.runId, 'press-quiet');
+    await chooseInRun(db, herdId, loseRun.runId, 'go-deeper');
+    const face = await chooseInRun(db, herdId, loseRun.runId, 'face-keeper');
+    if (face.ok && face.ended && face.battle) {
+      const lost = await driveBattle(face.battle.battleId);
+      const keeper = ENEMY_BY_ID.get('gg-hollow-keeper')!;
+      check(
+        'losing the boss is a cozy retreat with a reduced reward (never a loss)',
+        lost.status === 'retreated' &&
+          (lost.reward?.cubes ?? -1) ===
+            Math.floor((keeper.reward.cubes ?? 0) * REWARD_RETREAT_FRACTION),
+      );
+    }
   }
 
   // --- Phase 9: The Living Herd ---

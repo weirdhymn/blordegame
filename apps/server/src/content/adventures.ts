@@ -21,6 +21,9 @@ export interface Outcome {
   fatigue?: number;
   /** Befriend a wild horse — it joins the herd as the narrative reward (no fee). */
   wild?: boolean;
+  /** A boss battle (§9.4c): banks the run's haul + ends the run, then drops the party into combat
+   *  against this enemy id — the deepest push. On victory the enemy's reward is the big prize. */
+  battle?: string;
   /** Next scene id, or 'end' to finish the run and bank everything gathered. */
   next: string;
 }
@@ -48,6 +51,8 @@ export interface Scene {
 export interface AdventureScript {
   /** Stable id — a run stores which script it picked from its region's pool (§9.3). */
   id: string;
+  /** Display name for the expedition picker (§9.4c). */
+  name: string;
   regionId: string;
   start: string;
   scenes: Record<string, Scene>;
@@ -59,6 +64,7 @@ export interface AdventureScript {
 // and the push-deeper/retreat fork (crossroads). Rising DCs across stages 1→3.
 const SUNNY_HOLLOW: AdventureScript = {
   id: 'sunny-hollow',
+  name: 'The Sunny Hollow',
   regionId: 'green-grass',
   start: 'meadow-edge',
   scenes: {
@@ -210,6 +216,7 @@ const SUNNY_HOLLOW: AdventureScript = {
 // feed-forward: the sage you bring out of the fen decides which brew scene (DC 11/14/16) you face.
 const HERB_HUNT: AdventureScript = {
   id: 'herb-hunt',
+  name: 'The Marsh-Sage Brew',
   regionId: 'green-grass',
   start: 'herb-meadow',
   scenes: {
@@ -398,7 +405,100 @@ const HERB_HUNT: AdventureScript = {
   },
 };
 
-export const ADVENTURE_SCRIPTS: AdventureScript[] = [SUNNY_HOLLOW, HERB_HUNT];
+// ── Green Grass — "The Hollow-Keeper" (the region boss, §9.4c) ──────────────
+// A deep expedition whose climax is a boss battle. Push deep enough (gather → fork → clearing) and
+// the deepest choice hands the party off to combat against the Hollow-Keeper; bank earlier to skip
+// it. The run banks its journey haul + ends at that choice; the boss's reward is the big prize.
+const HOLLOW_KEEPER: AdventureScript = {
+  id: 'hollow-keeper',
+  name: 'The Hollow-Keeper',
+  regionId: 'green-grass',
+  start: 'keeper-meadow',
+  scenes: {
+    'keeper-meadow': {
+      id: 'keeper-meadow',
+      stage: 1,
+      text: 'There is a part of the Green Grass the old herds speak of only in lowered voices: a deep hollow where something ancient keeps its own counsel. The way in is easy enough, and green, and far too quiet.',
+      choices: [
+        {
+          id: 'gather-way',
+          text: 'Gather as you go',
+          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          success: {
+            text: 'You work the verges as you walk — a tidy armful of good things for the road.',
+            items: [
+              { id: 'plant-fiber', qty: 2 },
+              { id: 'timber', qty: 1 },
+            ],
+            next: 'keeper-fork',
+          },
+          failure: {
+            text: 'Pickings are thin this deep; you pocket what little there is.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            next: 'keeper-fork',
+          },
+        },
+        {
+          id: 'press-quiet',
+          text: 'Save your strength and press on quietly',
+          success: {
+            text: 'You keep your heads down and your hooves soft, and the hollow swallows you whole.',
+            next: 'keeper-fork',
+          },
+        },
+      ],
+    },
+    'keeper-fork': {
+      id: 'keeper-fork',
+      stage: 2,
+      text: 'The hollow forks. One path climbs back toward the open meadow and an easy trip home. The other drops deeper, toward a stillness with a weight to it — toward whatever it is that keeps this place.',
+      choices: [
+        {
+          id: 'bank-home',
+          text: 'Bank your haul and head home',
+          success: {
+            text: 'Discretion, the better part. You turn for the light, content.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'go-deeper',
+          text: 'Go down, toward the keeper',
+          success: {
+            text: 'You go down. The green closes overhead. The quiet gets quieter.',
+            next: 'keeper-clearing',
+          },
+        },
+      ],
+    },
+    'keeper-clearing': {
+      id: 'keeper-clearing',
+      stage: 3,
+      text: 'The path opens into a sunlit clearing at the heart of the hollow — and the Hollow-Keeper is waiting, vast and unhurried, square across the only way through. There is no going round it. There is only through.',
+      choices: [
+        {
+          id: 'face-keeper',
+          text: 'Stand your ground and face the Hollow-Keeper',
+          success: {
+            text: 'You square up. The great stag rises to meet you, and the whole clearing holds its breath.',
+            battle: 'gg-hollow-keeper',
+            next: 'end',
+          },
+        },
+        {
+          id: 'slip-back',
+          text: 'Think better of it and slip back the way you came',
+          success: {
+            text: 'Some doors are better left closed. You back out quietly; the Keeper lets you go.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+export const ADVENTURE_SCRIPTS: AdventureScript[] = [SUNNY_HOLLOW, HERB_HUNT, HOLLOW_KEEPER];
 
 /** Each region's pool of adventure scripts; a run picks one (seeded) at startRun (§9.3). */
 export const ADVENTURE_POOLS = new Map<string, AdventureScript[]>();

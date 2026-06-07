@@ -1,4 +1,5 @@
 import { api } from './client.js';
+import type { BattleView } from './combat.js';
 
 export interface RegionView {
   id: string;
@@ -137,10 +138,24 @@ export type ChooseStoryResult =
       trained: StoryTrained | null;
       befriended: { id: string; name: string } | null;
       summary: { loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null };
+      /** Set when this ending hands off to a boss battle (§9.4c) — switch to the combat screen. */
+      battle: { battleId: string; view: BattleView } | null;
     };
 
-export const startStory = (regionId: string, party: string[]): Promise<StartStoryResult> =>
-  api.post<StartStoryResult>('/adventure/start', { regionId, party });
+/** A region's authored expeditions, for the picker (§9.4c). */
+export interface AdventureOption {
+  id: string;
+  name: string;
+}
+export const getAdventures = (regionId: string): Promise<AdventureOption[]> =>
+  api.get<AdventureOption[]>(`/regions/${regionId}/adventures`);
+
+export const startStory = (
+  regionId: string,
+  party: string[],
+  scriptId?: string,
+): Promise<StartStoryResult> =>
+  api.post<StartStoryResult>('/adventure/start', { regionId, party, scriptId });
 
 export const chooseStory = (runId: string, choiceId: string): Promise<ChooseStoryResult> =>
   api.post<ChooseStoryResult>(`/adventure/${runId}/choose`, { choiceId });

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
+import { ADVENTURE_POOLS } from '../content/adventures.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
 import { adventure } from '../services/adventure.js';
@@ -31,14 +32,22 @@ export function registerAdventureRoutes(app: FastifyInstance, db: DB): void {
 
   // ── Interactive "story" adventures (§9.3) — regions with an authored scene library.
   // The flat POST /adventure above stays for regions without one; nothing here touches it.
+  // List a region's authored expeditions (id + name) so the player can pick one (§9.4c).
+  app.get('/regions/:regionId/adventures', async (req) => {
+    const { regionId } = req.params as { regionId: string };
+    return (ADVENTURE_POOLS.get(regionId) ?? []).map((sc) => ({ id: sc.id, name: sc.name }));
+  });
+
   app.post('/adventure/start', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { regionId?: string; party?: unknown };
+    const body = (req.body ?? {}) as { regionId?: string; party?: unknown; scriptId?: string };
     if (!body.regionId || !Array.isArray(body.party)) {
       return reply.code(400).send({ error: 'regionId and party[] required' });
     }
-    const result = await startRun(db, herd.id, body.regionId, body.party as string[]);
+    const result = await startRun(db, herd.id, body.regionId, body.party as string[], {
+      scriptId: body.scriptId,
+    });
     if (!result.ok) {
       const status = result.code === 'no_script' ? 404 : result.code === 'locked' ? 403 : 400;
       return reply.code(status).send({ error: result.message, code: result.code });

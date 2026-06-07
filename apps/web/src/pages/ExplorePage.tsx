@@ -3,10 +3,12 @@ import { ApiError } from '../api/client.js';
 import {
   adventure,
   chooseStory,
+  getAdventures,
   getQuests,
   getRegions,
   roam,
   startStory,
+  type AdventureOption,
   type AdventureResult,
   type ChooseStoryResult,
   type QuestView,
@@ -15,7 +17,9 @@ import {
   type SceneView,
   type StoryRunView,
 } from '../api/explore.js';
+import type { BattleView } from '../api/combat.js';
 import { StoryRunner, type StoryLogEntry } from '../components/StoryRunner.js';
+import { BattleArena } from '../components/BattleArena.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
@@ -41,6 +45,10 @@ export function ExplorePage(): ReactElement {
   const [run, setRun] = useState<StoryRunView | null>(null);
   const [storyLog, setStoryLog] = useState<StoryLogEntry[]>([]);
   const [ending, setEnding] = useState<StoryEnding | null>(null);
+  // Expedition picker + the boss handoff (§9.4c).
+  const [adventures, setAdventures] = useState<AdventureOption[]>([]);
+  const [scriptId, setScriptId] = useState('');
+  const [bossBattle, setBossBattle] = useState<BattleView | null>(null);
 
   const loadQuests = useCallback(() => {
     getQuests()
@@ -68,6 +76,19 @@ export function ExplorePage(): ReactElement {
       });
     loadQuests();
   }, [herd, loadQuests]);
+
+  // A region's expeditions, for the picker (so the boss expedition is reachable on purpose).
+  useEffect(() => {
+    const r = regions.find((x) => x.id === regionId);
+    setScriptId('');
+    if (r?.interactive) {
+      getAdventures(regionId)
+        .then(setAdventures)
+        .catch(() => setAdventures([]));
+    } else {
+      setAdventures([]);
+    }
+  }, [regionId, regions]);
 
   function toggle(id: string): void {
     setParty((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < 4 ? [...p, id] : p));
@@ -99,7 +120,7 @@ export function ExplorePage(): ReactElement {
       setAdv(null);
       setRoamRes(null);
       try {
-        const r = await startStory(regionId, party);
+        const r = await startStory(regionId, party, scriptId || undefined);
         setStoryRunId(r.runId);
         setStoryRegion(selected.name);
         setScene(r.scene);
@@ -134,9 +155,11 @@ export function ExplorePage(): ReactElement {
       };
       setStoryLog((l) => [...l, line]);
       if (res.ended) {
-        setEnding(res);
         setScene(null);
         setRun(null);
+        if (res.battle)
+          setBossBattle(res.battle.view); // the deepest push → the boss fight
+        else setEnding(res);
         await refresh();
       } else {
         setScene(res.scene);
@@ -160,6 +183,23 @@ export function ExplorePage(): ReactElement {
     void refresh();
   }
 
+  if (bossBattle) {
+    const foe = bossBattle.combatants.find((c) => c.side === 'foe');
+    return (
+      <div className="explore">
+        <BattleArena
+          initial={bossBattle}
+          onClose={() => {
+            setBossBattle(null);
+            closeStory();
+          }}
+          onCloseLabel="Back to Explore"
+          title={`⚔ ${foe?.name ?? 'Boss'}`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="explore">
       <h1>Explore</h1>
@@ -179,6 +219,20 @@ export function ExplorePage(): ReactElement {
           ))}
         </select>
       </label>
+
+      {selected?.interactive && adventures.length > 0 && !storyActive && (
+        <label className="field">
+          <span>Expedition</span>
+          <select value={scriptId} onChange={(e) => setScriptId(e.target.value)}>
+            <option value="">Any (random) ✦</option>
+            {adventures.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="row-actions">
         <button

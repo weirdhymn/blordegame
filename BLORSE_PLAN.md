@@ -477,6 +477,16 @@ Combat stops being an isolated practice mode: a region's interactive adventure c
 - **Reaching it:** the boss is its own expedition in the Green Grass pool; `startRun` takes an optional `scriptId` and the client offers an **expedition picker** (`GET /api/regions/:id/adventures`) so a region's adventures are chosen on purpose, not only drawn at random. The battle screen is a shared **`BattleArena`** component used by both the Sparring Ring and the boss handoff.
 - **Deferred (after the full play-through):** statuses (Rattled/Heartened), harmony, the rest of each class's ability kit. Out of scope unchanged.
 
+### 9.4d Combat woven into the adventure pool (variety pass)
+
+The pools grew from boss-only-combat to a **deliberate cozy-dominant mix**, so combat shows up in regular adventures — not only the climax — while the cozy loop stays the default. **12 stories across 3 regions** (Green Grass 5, Dusty Dunes 4, Weird Woods 3):
+
+- **Ratio (by how combat appears):** **5 pure-cozy** (no fight) · **2 cozy + an *optional* fight** (a fully avoidable skirmish branch) · **2 combat-forward** (a short story whose climax is a non-boss skirmish) · **3 boss** (the grand terminal climax). So **7 / 12 are cozy-or-avoidable** and a player can clear ~9/12 with no forced fight — combat stays earned and special.
+- **Enemy variety exercises the whole roster** — no class is the universal answer. Non-boss fights span all four: a Bramble-Tangle (Knight), a Snappish Gander (Cleric), a Thistle-Whirl (Wizard), a Mossback Tortoise (Rogue); bosses add Cleric/Knight/Wizard. Different stories demand different classes.
+- **Same bar as Sunny Hollow:** every script has distinct stat checks across its scenes, ≥1 **personality gate** (a `requires` choice — listed but `available:false`, and `chooseInRun`-enforced, when no party member qualifies), and the push/bank fork. A **written voice & tone standard** (derived from Sunny Hollow + the Hollow-Keeper) now heads `adventures.ts` so new content can't drift flatter than the hand-crafted scripts.
+- **Content-integrity tests** guard the pool: every script's `start` exists, every choice `next` resolves to a scene or `end`, no orphan scenes, every battle ref (boss **or** skirmish) resolves to a real enemy, and all three regions have a reachable pool.
+- **Flagged, deliberately not built (pure-content pass):** a **mid-run skirmish that the story continues *past*** needs a small engine change (an `in_battle` run state + a resume-after-battle endpoint, so a battle can sit *between* scenes rather than ending the run). Combat-forward stories ship as terminal skirmishes for now; the fight-then-continue nicety is a clean follow-up.
+
 ### 9.5 Beta scope
 
 Ship: the six stats \+ hidden Luck, 4–6 skills, 2–3 jobs tied to starter structures, single-horse-and-small-party adventures with one encounter table per starter region, the **wild-encounter → party-recruit → Tavern** flow, dice resolution UI, accomplishments. Defer to **post-beta content waves**: large/strategic parties, deep job trees, multi-stage expeditions, and civil-society offices — all extend the same stat+dice+event spine.

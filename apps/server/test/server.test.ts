@@ -1214,24 +1214,47 @@ async function main(): Promise<void> {
     (ADVENTURE_POOLS.get('dusty-dunes')?.length ?? 0) >= 1 &&
       (ADVENTURE_POOLS.get('weird-woods')?.length ?? 0) >= 1,
   );
-  // Content integrity: every boss handoff references a real enemy (no orphan battle id, any region).
-  let bossCount = 0;
-  let allBossesResolve = true;
+  // Content integrity (§9.3/§9.4): every script is well-formed, reachable, and references real enemies.
+  let badStart = 0;
+  let danglingNext = 0;
+  let badBattle = 0;
+  let battleRefs = 0;
+  let orphanScenes = 0;
   for (const sc of ADVENTURE_SCRIPTS) {
-    for (const scene of Object.values(sc.scenes)) {
+    if (!sc.scenes[sc.start]) badStart += 1;
+    const seen = new Set<string>([sc.start]);
+    const queue: string[] = [sc.start];
+    while (queue.length > 0) {
+      const sceneId = queue.shift()!;
+      const scene = sc.scenes[sceneId];
+      if (!scene) continue;
       for (const ch of scene.choices) {
         for (const out of [ch.success, ch.failure]) {
-          if (out?.battle) {
-            bossCount += 1;
-            if (!ENEMY_BY_ID.has(out.battle)) allBossesResolve = false;
+          if (!out) continue;
+          if (out.battle) {
+            battleRefs += 1;
+            if (!ENEMY_BY_ID.has(out.battle)) badBattle += 1;
+          }
+          if (out.next !== 'end' && !sc.scenes[out.next]) danglingNext += 1;
+          if (out.next !== 'end' && !seen.has(out.next)) {
+            seen.add(out.next);
+            queue.push(out.next);
           }
         }
       }
     }
+    for (const sceneId of Object.keys(sc.scenes)) if (!seen.has(sceneId)) orphanScenes += 1;
   }
+  check('every script’s start scene exists', badStart === 0);
+  check('every choice’s next resolves to a scene or "end" (no dangling refs)', danglingNext === 0);
+  check('no orphan scenes — every scene is reachable from its start', orphanScenes === 0);
+  check('every battle ref (boss or skirmish) resolves to a real enemy', badBattle === 0);
+  check('combat is woven across the pool (≥6 battle refs: bosses + skirmishes)', battleRefs >= 6);
   check(
-    'every adventure boss references a real enemy (≥3 bosses across regions, all resolve)',
-    bossCount >= 3 && allBossesResolve,
+    'all three regions have a reachable expedition pool',
+    ['green-grass', 'dusty-dunes', 'weird-woods'].every(
+      (r) => (ADVENTURE_POOLS.get(r)?.length ?? 0) >= 1,
+    ),
   );
   const pickA = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
   const pickB = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });

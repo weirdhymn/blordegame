@@ -58,6 +58,22 @@ export interface AdventureScript {
   scenes: Record<string, Scene>;
 }
 
+// ── VOICE & TONE STANDARD (the bar for every adventure script) ─────────────
+// Benchmarks: "The Sunny Hollow" and "The Hollow-Keeper". Hold this bar — new stories must NOT drift
+// flatter than the hand-crafted ones. The register:
+//   • Second person, present tense. The party is "you / your party"; creatures are "it / its".
+//   • Sensory and concrete FIRST — a specific smell, sound, or texture per beat ("warm and humming",
+//     "ringing faintly underhoof like a struck bell"). Earn the whimsy with detail.
+//   • Wry, deadpan understatement for the buttons — fond, never mean, never grim ("It is not
+//     malicious. It is just extremely a bramble."). Aim for one good dry line per scene.
+//   • Foes are characters with inner lives, not monsters — sympathetic even in opposition (the Keeper
+//     "has been waiting a very long time for someone to be rude to it").
+//   • Cozy stakes: a failed check is a meagre haul + a story, never a loss. Combat is opt-in & earned.
+//   • Choices read as vivid verbs ("Shoulder the old gate aside", "Strike up a duet with the frogs").
+//   • Outcomes are 1–2 sentences with a turn of phrase — no purple paragraphs.
+// Every script MUST have: distinct stat checks across its scenes, ≥1 personality gate, and the
+// push/bank fork (a "head home with your haul" option opposite a "press deeper" one).
+//
 // ── Green Grass — "The Sunny Hollow" (v1 vertical slice) ────────────────────
 // Hits every slice requirement: a personality-gated choice (call-bold needs Extraversion≥60),
 // harmony-buffed checks (approach, gather-bloom), a wild-horse befriend (approach/call-bold),
@@ -783,12 +799,647 @@ const MISTWOOD_MIMIC: AdventureScript = {
   },
 };
 
+// ── Green Grass — "The Bramble Gate" (combat-forward: a Knight-weak skirmish) ─
+const BRAMBLE_GATE: AdventureScript = {
+  id: 'bramble-gate',
+  name: 'The Bramble Gate',
+  regionId: 'green-grass',
+  start: 'gate-lane',
+  scenes: {
+    'gate-lane': {
+      id: 'gate-lane',
+      stage: 1,
+      text: 'An old drystone lane runs off between two meadows toward a forgotten orchard gone gloriously to seed. Somewhere down it, too, is whatever has been snapping branches after dark.',
+      choices: [
+        {
+          id: 'glean-lane',
+          text: 'Glean the hedgerows as you go',
+          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          success: {
+            text: 'You strip the hedge of late berries and good straight withies.',
+            items: [
+              { id: 'plant-fiber', qty: 2 },
+              { id: 'timber', qty: 1 },
+            ],
+            next: 'gate-fork',
+          },
+          failure: {
+            text: 'Thornier than it looks; you come away with a modest handful and a few scratches.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            next: 'gate-fork',
+          },
+        },
+        {
+          id: 'march-on',
+          text: 'Save your strength and march straight for the orchard',
+          success: { text: 'You pick up the pace down the green lane.', next: 'gate-fork' },
+        },
+      ],
+    },
+    'gate-fork': {
+      id: 'gate-fork',
+      stage: 2,
+      text: 'The lane ends where the orchard gate used to be. A bramble has eaten it: a wall of thorn as tall as a horse, bristling, and — you would swear — breathing. Beyond it the old trees hang heavy with fruit nobody has picked in years.',
+      choices: [
+        {
+          id: 'turn-back',
+          text: 'Decide the berries you have are plenty, and turn back',
+          success: {
+            text: 'A wise, unscratched retreat. You amble home with your hedgerow haul.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'press-gate',
+          text: 'Step up for a closer look at what you are dealing with',
+          success: {
+            text: 'You approach the thorn-wall. It shivers, shakes off a season of dust, and hauls itself upright to meet you. Ah.',
+            next: 'gate-stand',
+          },
+        },
+      ],
+    },
+    'gate-stand': {
+      id: 'gate-stand',
+      stage: 3,
+      text: 'The bramble fills the gateway, thorns combing the air, entirely and uncomplicatedly in your way. There is a great deal of fruit on the other side of it.',
+      choices: [
+        {
+          id: 'pick-through',
+          text: 'Thread a careful path through the gaps',
+          requires: { trait: 'c', min: 60 },
+          check: { stat: 'dex', skill: 'athletics', dc: 14 },
+          success: {
+            text: 'Patient, exact, not a wasted step — you thread the whole party through and raid the orchard clean.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'plant-fiber', qty: 2 },
+            ],
+            cubes: 20,
+            next: 'end',
+          },
+          failure: {
+            text: 'Three steps in, the thorns have other ideas; you back out the way you came, prickled and laughing.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'shoulder-in',
+          text: 'Put your shoulders into it and force the gate',
+          success: {
+            text: 'No more finesse, then. You square up to the thing and shove — and it shoves back.',
+            battle: 'bramble-tangle',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Green Grass — "Frogmarch Pond" (cozy, with an optional Cleric-weak fight) ─
+const FROGMARCH_POND: AdventureScript = {
+  id: 'frogmarch-pond',
+  name: 'Frogmarch Pond',
+  regionId: 'green-grass',
+  start: 'pond-edge',
+  scenes: {
+    'pond-edge': {
+      id: 'pond-edge',
+      stage: 1,
+      text: 'Frogmarch Pond is exactly as advertised: a wide, warm, weed-green pond, and several hundred frogs conducting some enormous froggy business across it in tremendous voice. The reeds grow tall and useful here, and something is glinting out on the little island.',
+      choices: [
+        {
+          id: 'cut-reeds',
+          text: 'Wade in and cut the tall reeds',
+          check: { stat: 'con', skill: 'athletics', dc: 10 },
+          success: {
+            text: 'Cold to the hocks but worth it — you come out laden with the best reeds of the year.',
+            items: [{ id: 'plant-fiber', qty: 3 }],
+            next: 'pond-middle',
+          },
+          failure: {
+            text: 'The mud has opinions about your footing. You salvage an armful and most of your dignity.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            fatigue: 1,
+            next: 'pond-middle',
+          },
+        },
+        {
+          id: 'charm-frogs',
+          text: 'Strike up a duet with the frog chorus',
+          requires: { trait: 'e', min: 60 },
+          check: { stat: 'cha', skill: 'performance', dc: 12 },
+          success: {
+            text: 'You add a baritone the chorus did not know it needed. Delighted, the frogs escort you to the choicest reed-beds.',
+            items: [
+              { id: 'plant-fiber', qty: 3 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            next: 'pond-middle',
+          },
+          failure: {
+            text: 'You are, it turns out, no frog. The chorus falls into appalled silence, then resumes without you.',
+            next: 'pond-middle',
+          },
+        },
+      ],
+    },
+    'pond-middle': {
+      id: 'pond-middle',
+      stage: 2,
+      text: 'The glint is real: something bright, snagged in the reeds out on the island. The only dry way across is a fallen log — currently occupied, end to end, by a single enormous grey goose, who has watched your entire approach with the cold patience of a customs official.',
+      choices: [
+        {
+          id: 'leave-glint',
+          text: 'Decide the island can keep its secret, and head home',
+          success: {
+            text: 'You bank your good green haul and leave the goose to its bridge. Everyone keeps their feathers.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'cross-log',
+          text: 'Try the log anyway',
+          success: {
+            text: 'You set one hoof on the log. The goose rises, spreads wings the span of a barn door, and informs you — at volume — that you have made a grave mistake.',
+            next: 'goose-stand',
+          },
+        },
+      ],
+    },
+    'goose-stand': {
+      id: 'goose-stand',
+      stage: 3,
+      text: 'The gander plants itself dead-centre of the log, hissing like a punctured kettle, absolutely prepared to defend this damp stick with its life. The glint winks at you from the island just beyond.',
+      choices: [
+        {
+          id: 'soothe-goose',
+          text: 'Talk it down, slow and kind',
+          requires: { trait: 'a', min: 60 },
+          check: { stat: 'cha', dc: 13, harmony: true },
+          success: {
+            text: 'You go gentle, and gentler, until the great bird deflates, grumbles, and waddles aside to let you pass. The island gives up its treasure.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'plant-fiber', qty: 1 },
+            ],
+            cubes: 15,
+            next: 'end',
+          },
+          failure: {
+            text: 'It is having precisely none of it. You retreat down the log with your haul and your ears ringing.',
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'shoo-goose',
+          text: 'Stand your ground and settle this properly',
+          success: {
+            text: 'Fine. If the goose wants a debate, you will give it one. It drops off the log to meet you, wings wide.',
+            battle: 'snappish-gander',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Dusty Dunes — "The Whirling Waste" (combat-forward: a Wizard-weak skirmish) ─
+const WHIRLING_WASTE: AdventureScript = {
+  id: 'whirling-waste',
+  name: 'The Whirling Waste',
+  regionId: 'dusty-dunes',
+  start: 'waste-rim',
+  scenes: {
+    'waste-rim': {
+      id: 'waste-rim',
+      stage: 1,
+      text: 'A flat pan of cracked earth runs to the horizon, scoured by a wind that never quite stops. Dust-devils stalk across it in twos and threes, and out in the middle of it all stands a lone dead tree, hung with something that catches the light.',
+      choices: [
+        {
+          id: 'read-wind',
+          text: 'Read the wind before you commit to crossing',
+          requires: { trait: 'o', min: 60 },
+          check: { stat: 'int', dc: 12 },
+          success: {
+            text: 'You watch the devils long enough to learn their habits, and pick a clean line between them.',
+            items: [{ id: 'clay', qty: 2 }],
+            next: 'waste-tree',
+          },
+          failure: {
+            text: 'The wind keeps its own counsel. You set off into it on a guess.',
+            next: 'waste-tree',
+          },
+        },
+        {
+          id: 'gather-pan',
+          text: 'Work the cracked pan for what it is worth',
+          check: { stat: 'str', skill: 'athletics', dc: 11 },
+          success: {
+            text: 'You lever up slabs of good clay and a surprising seam of ore.',
+            items: [
+              { id: 'clay', qty: 2 },
+              { id: 'ore', qty: 1 },
+            ],
+            next: 'waste-tree',
+          },
+          failure: {
+            text: 'Hard, hot work for one honest lump of clay.',
+            items: [{ id: 'clay', qty: 1 }],
+            fatigue: 1,
+            next: 'waste-tree',
+          },
+        },
+      ],
+    },
+    'waste-tree': {
+      id: 'waste-tree',
+      stage: 2,
+      text: 'The dead tree is closer now, and the thing hung in its branches is unmistakable: a knot of old harness-brass, desert-polished to a shine. Between you and it, one of the dust-devils has stopped wandering. It has noticed you — and it is not made of dust at all, but of a vast, bone-dry tumble of thistle, spinning where it stands.',
+      choices: [
+        {
+          id: 'leave-brass',
+          text: 'Leave the brass to the wind and bank what you have',
+          success: {
+            text: 'Not worth the bother. You pocket your clay and angle away for home.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'go-for-brass',
+          text: 'Make for the tree and the brass',
+          success: {
+            text: 'You break for the tree. The thistle-whirl shrieks up to full height and bowls straight at you, prickling and gleeful.',
+            next: 'waste-whirl',
+          },
+        },
+      ],
+    },
+    'waste-whirl': {
+      id: 'waste-whirl',
+      stage: 3,
+      text: 'The thistle-whirl careens between you and the tree, all spin and spite and not one single thought, daring you to get past it.',
+      choices: [
+        {
+          id: 'sidestep',
+          text: 'Time it and slip past while it over-spins',
+          requires: { trait: 'c', min: 55 },
+          check: { stat: 'dex', skill: 'athletics', dc: 14 },
+          success: {
+            text: 'You wait for it to commit, then dance through the gap and pluck the brass clean off the tree.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'ore', qty: 1 },
+            ],
+            cubes: 18,
+            next: 'end',
+          },
+          failure: {
+            text: 'You mistime it, get a faceful of thistle for your trouble, and back off to regroup.',
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'face-whirl',
+          text: 'Stop dodging and deal with it head-on',
+          success: {
+            text: 'Enough. You plant your hooves and square up to the spinning thing.',
+            battle: 'thistle-whirl',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Dusty Dunes — "The Glasslands" (cozy, no combat) ───────────────────────
+const GLASSLANDS: AdventureScript = {
+  id: 'glasslands',
+  name: 'The Glasslands',
+  regionId: 'dusty-dunes',
+  start: 'glass-flat',
+  scenes: {
+    'glass-flat': {
+      id: 'glass-flat',
+      stage: 1,
+      text: 'Where some ancient heat once kissed the desert, the sand has run to glass: a shining flat of it, green and gold and treacherous, ringing faintly underhoof like a struck bell. Selenite blades grow up out of it in clusters, clear as ice and twice as sharp.',
+      choices: [
+        {
+          id: 'harvest-selenite',
+          text: 'Harvest the selenite blades',
+          check: { stat: 'dex', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'Careful teeth, careful hooves — you snap free a double handful of flawless crystal.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'clay', qty: 1 },
+            ],
+            next: 'glass-deep',
+          },
+          failure: {
+            text: 'It shatters more than it yields. You salvage a few cloudy shards.',
+            items: [{ id: 'clay', qty: 1 }],
+            next: 'glass-deep',
+          },
+        },
+        {
+          id: 'map-safe',
+          text: 'Map the safe footing before anyone gets cut',
+          requires: { trait: 'c', min: 60 },
+          check: { stat: 'int', dc: 11 },
+          success: {
+            text: 'You read the glass like a frozen pond and chart a path that spares every fetlock. The party crosses easy and gleans as it goes.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'ore', qty: 1 },
+            ],
+            next: 'glass-deep',
+          },
+          failure: {
+            text: 'The pattern will not resolve. You pick across on instinct and gather what is in reach.',
+            items: [{ id: 'clay', qty: 1 }],
+            next: 'glass-deep',
+          },
+        },
+      ],
+    },
+    'glass-deep': {
+      id: 'glass-deep',
+      stage: 2,
+      text: 'Deeper in, the glass darkens and dips into a bowl, and at the bottom of the bowl something is frozen mid-shine — a great bubble of the old glass, and trapped inside it, impossibly, a single perfect desert flower.',
+      choices: [
+        {
+          id: 'bank-glass',
+          text: 'Leave the bowl be and head home with good crystal',
+          success: {
+            text: 'Some things are prettier left where they are. You climb out of the bowl, pockets singing.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'free-flower',
+          text: 'Climb down to free the flower in the glass',
+          success: {
+            text: 'You ease down the slope of the bowl toward the trapped bloom.',
+            next: 'glass-bloom',
+          },
+        },
+      ],
+    },
+    'glass-bloom': {
+      id: 'glass-bloom',
+      stage: 3,
+      text: 'Up close the bubble is thin as an eggshell and humming with stored heat. One wrong move shatters it; one right one might lift the whole flower free, glass and all.',
+      choices: [
+        {
+          id: 'ease-free',
+          text: 'Ease it loose together, slow and sure',
+          check: { stat: 'wis', skill: 'foraging', dc: 15, harmony: true },
+          success: {
+            text: 'Breath held, the whole party moving as one — the bubble lifts free whole, the flower caught forever mid-bloom inside it. A wonder, and worth a small fortune.',
+            items: [{ id: 'rare-gem', qty: 2 }],
+            cubes: 28,
+            next: 'end',
+          },
+          failure: {
+            text: 'It chimes once, beautifully, and falls to glittering dust. You carry home the memory and a few bright shards.',
+            items: [{ id: 'clay', qty: 1 }],
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'leave-bloom',
+          text: 'Think better of it and back away',
+          success: {
+            text: 'You leave it shining in its bowl for the next wanderer to gasp at. Home you go.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Weird Woods — "The Lantern-Fly Hunt" (cozy, no combat) ─────────────────
+const LANTERN_FLY_HUNT: AdventureScript = {
+  id: 'lantern-fly-hunt',
+  name: 'The Lantern-Fly Hunt',
+  regionId: 'weird-woods',
+  start: 'lantern-eaves',
+  scenes: {
+    'lantern-eaves': {
+      id: 'lantern-eaves',
+      stage: 1,
+      text: 'Dusk in the Weird Woods, and the lantern-flies are rising: fat, slow, gloriously luminous bugs that drift up out of the leaf-litter by the hundred, each glowing a different impossible colour. Bottle a few and they will light a stable for a month. Catch them wrong and they simply pop, with a small offended flash.',
+      choices: [
+        {
+          id: 'net-flies',
+          text: 'Net the drifting flies',
+          check: { stat: 'dex', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'Slow hooves, slower breath — you cup a dozen of the gentle glowing things without a single pop.',
+            items: [
+              { id: 'timber', qty: 1 },
+              { id: 'plant-fiber', qty: 1 },
+            ],
+            cubes: 8,
+            next: 'lantern-hollow',
+          },
+          failure: {
+            text: 'Pop. Pop-pop. Pop. The grove fills with tiny indignant flashes; you salvage a couple of the slower ones.',
+            cubes: 3,
+            next: 'lantern-hollow',
+          },
+        },
+        {
+          id: 'follow-colour',
+          text: 'Follow the strangest colour deeper in',
+          requires: { trait: 'o', min: 60 },
+          check: { stat: 'wis', dc: 12 },
+          success: {
+            text: 'You chase a fly that glows a colour you have no name for, and it leads you to a whole hidden bloom of its kin.',
+            items: [{ id: 'timber', qty: 2 }],
+            cubes: 12,
+            next: 'lantern-hollow',
+          },
+          failure: {
+            text: 'The colour leads you in a large, undignified circle and winks out. Back where you started, then.',
+            next: 'lantern-hollow',
+          },
+        },
+      ],
+    },
+    'lantern-hollow': {
+      id: 'lantern-hollow',
+      stage: 2,
+      text: 'The flies are thickest over a mossy hollow where an old well has half-collapsed. Down in the dark of it, something glows steadier and brighter than any lantern-fly — a light that does not drift, but waits.',
+      choices: [
+        {
+          id: 'bank-flies',
+          text: 'Be content with your jar of stars and head home',
+          success: {
+            text: "A good evening's work, glowing softly all the way home. No need to go poking down strange wells.",
+            next: 'end',
+          },
+        },
+        {
+          id: 'peer-well',
+          text: 'Peer down into the well',
+          success: {
+            text: 'You lean over the broken rim and look down into the patient glow.',
+            next: 'lantern-well',
+          },
+        },
+      ],
+    },
+    'lantern-well': {
+      id: 'lantern-well',
+      stage: 3,
+      text: 'It is the queen of them: one vast, ancient lantern-fly — the size of an actual lantern — glowing like a trapped moon at the bottom of the dry well, too big and too grand to rise on its own. It regards you with what might be hope.',
+      choices: [
+        {
+          id: 'lift-queen',
+          text: 'Work together to lift the old queen out',
+          requires: { trait: 'a', min: 55 },
+          check: { stat: 'str', skill: 'athletics', dc: 14, harmony: true },
+          success: {
+            text: 'Gently, gently, the whole party hauling as one, you lift the great soft creature into the air — and it goes up like a lifted lamp, raining glowing dust over you in thanks. You will be finding fortune in your manes for weeks.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'timber', qty: 1 },
+            ],
+            cubes: 30,
+            next: 'end',
+          },
+          failure: {
+            text: 'It is heavier than it looks and the old well is crumbling; you let it settle back with an apologetic glow and climb out empty-hooved but fond.',
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'leave-queen',
+          text: 'Leave the old queen to her well',
+          success: {
+            text: 'Some lights are not yours to carry. You tip her a respectful nod and head home aglow.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Weird Woods — "The Toll-Keeper" (cozy, with an optional Rogue-weak fight) ─
+const TOLL_KEEPER: AdventureScript = {
+  id: 'toll-keeper',
+  name: 'The Toll-Keeper',
+  regionId: 'weird-woods',
+  start: 'toll-path',
+  scenes: {
+    'toll-path': {
+      id: 'toll-path',
+      stage: 1,
+      text: 'The good mushrooming is all on the far side of the Snigglewick Brook, and the only dry crossing is the old mossy footbridge — which, the woods being the woods, has a keeper. You can already hear it: a slow, ponderous voice rehearsing what it clearly considers some very good riddles.',
+      choices: [
+        {
+          id: 'forage-near',
+          text: 'Forage this side of the brook first',
+          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          success: {
+            text: 'The near bank is no slouch: you fill up on fat woodland mushrooms and good dry timber.',
+            items: [
+              { id: 'timber', qty: 2 },
+              { id: 'plant-fiber', qty: 1 },
+            ],
+            next: 'toll-bridge',
+          },
+          failure: {
+            text: 'Slim pickings on the trodden side. A little timber, and on you go.',
+            items: [{ id: 'timber', qty: 1 }],
+            next: 'toll-bridge',
+          },
+        },
+        {
+          id: 'stroll-up',
+          text: 'Just stroll up to the bridge and see what is what',
+          success: {
+            text: 'You amble down to the brook to meet the famous keeper.',
+            next: 'toll-bridge',
+          },
+        },
+      ],
+    },
+    'toll-bridge': {
+      id: 'toll-bridge',
+      stage: 2,
+      text: '"NONE SHALL PASS," announces the Toll-Keeper — a mossback tortoise the size of a wheelbarrow, settled dead-centre of the footbridge it entirely fills — "WHO CANNOT ANSWER ME THIS." It has clearly been waiting all year. The mushrooming beyond is, frankly, spectacular.',
+      choices: [
+        {
+          id: 'answer-riddle',
+          text: 'Play along and answer its riddle',
+          requires: { trait: 'o', min: 55 },
+          check: { stat: 'int', dc: 13 },
+          success: {
+            text: 'The riddle is terrible and the answer is "a turnip," obviously. The tortoise is so thrilled someone finally played along that it waves you across and tips you a hoard it has been sitting on for a decade.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'timber', qty: 2 },
+            ],
+            cubes: 20,
+            next: 'end',
+          },
+          failure: {
+            text: 'You guess "a turnip." It was not a turnip. The tortoise is delighted to explain, at length; you settle in to wait it out before crossing.',
+            items: [{ id: 'timber', qty: 1 }],
+            next: 'end',
+          },
+        },
+        {
+          id: 'turn-around',
+          text: 'Decide the near bank was plenty and turn around',
+          success: {
+            text: 'You leave the keeper to its riddles. The mushrooms can keep; you have a good load already.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'rush-bridge',
+          text: 'Lose patience and simply barge across',
+          success: {
+            text: 'You have heard enough riddles for one lifetime, and make a break for the far bank — and the tortoise, scandalised, heaves up to block you.',
+            battle: 'mossback-tortoise',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
 export const ADVENTURE_SCRIPTS: AdventureScript[] = [
+  // Green Grass
   SUNNY_HOLLOW,
   HERB_HUNT,
+  BRAMBLE_GATE,
+  FROGMARCH_POND,
   HOLLOW_KEEPER,
+  // Dusty Dunes
   BLEACHING_WASH,
+  WHIRLING_WASTE,
+  GLASSLANDS,
   SANDSTONE_SENTINEL,
+  // Weird Woods
+  LANTERN_FLY_HUNT,
+  TOLL_KEEPER,
   MISTWOOD_MIMIC,
 ];
 

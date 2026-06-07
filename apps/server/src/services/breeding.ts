@@ -1,12 +1,19 @@
 import { randomInt } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { BREED_COOLDOWN_MS } from '@blorse/balance';
+import {
+  BONDED_BREED_STAT_BONUS,
+  BONDED_THRESHOLD,
+  BREED_COOLDOWN_MS,
+  STAT_KEYS,
+  STAT_MAX,
+} from '@blorse/balance';
 import { breedFoal, punnett, resolve } from '@blorse/genetics';
 import type { PunnettColor } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
 import { horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
 import { logAudit } from './audit.js';
+import { getRelationships } from './autonomy.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from './horse.js';
 import { recordEvent } from './quests.js';
 
@@ -18,10 +25,17 @@ export type BreedRejection =
   | 'related'
   | 'same_horse';
 
+/** How the parents' bond lifted the foal — only present (non-null) when the bonus is > 0. */
+export interface BondBreed {
+  bonus: number;
+  affinity: number;
+  type: string | null;
+}
+
 export type BreedResult =
   | { ok: false; code: BreedRejection; message: string }
   | { ok: true; viable: false; message: string }
-  | { ok: true; viable: true; foal: HorseRow };
+  | { ok: true; viable: true; foal: HorseRow; bond: BondBreed | null };
 
 export interface BreedOptions {
   /** Inject the breeding RNG seed for deterministic/testable outcomes. */
@@ -30,6 +44,32 @@ export interface BreedOptions {
 
 function onCooldown(h: HorseRow, now: number): boolean {
   return h.lastBredAt !== null && now - h.lastBredAt.getTime() < BREED_COOLDOWN_MS;
+}
+
+const pairKey = (x: string, y: string): string => (x < y ? `${x}|${y}` : `${y}|${x}`);
+
+/**
+ * Per-stat uplift a foal inherits from its parents' bond, graded by affinity (÷ BONDED_THRESHOLD,
+ * capped at 1) — the same rapport reading the adventure harmony buff uses. A tight bond gives the
+ * full {@link BONDED_BREED_STAT_BONUS}; strangers and rivals (≤ 0 affinity) give 0: cozy,
+ * buff-only, never a penalty for breeding an un-bonded pair.
+ */
+export function bondedBreedBonus(affinity: number): number {
+  const rapport = Math.max(0, Math.min(1, affinity / BONDED_THRESHOLD));
+  return Math.round(BONDED_BREED_STAT_BONUS * rapport);
+}
+
+/** The stored relationship between two herd-mates, if one exists (order-independent). */
+async function parentBond(
+  db: DB,
+  herdId: string,
+  a: string,
+  b: string,
+): Promise<{ affinity: number; type: string | null } | null> {
+  const key = pairKey(a, b);
+  const rels = await getRelationships(db, herdId);
+  const r = rels.find((x) => pairKey(x.horseA, x.horseB) === key);
+  return r ? { affinity: r.affinity, type: r.type } : null;
 }
 
 /**
@@ -83,17 +123,49 @@ export async function breedHorses(
     parentA: a.id,
     parentB: b.id,
     // glitch intentionally omitted — foals never inherit one (§5.4a/§5.7).
-    // personality + stats inheritance land with those systems (Phase 8/9).
+    // stats/personality inheritance happens inside mintHorse → generateStatBlock (§9.1/§14.2).
   });
+
+  // Bonds shape breeding (§8 → §14.2): a foal born to a close pair starts a little stronger. Reuses
+  // the stored relationship graph — the same affinity the adventure harmony buff reads — on top of
+  // the inheritance mintHorse already applied. Strangers/rivals add nothing (cozy, buff-only).
+  const rel = await parentBond(db, herdId, a.id, b.id);
+  const bonus = rel ? bondedBreedBonus(rel.affinity) : 0;
+  let bornFoal = foal;
+  if (bonus > 0) {
+    const stats = foal.stats as Record<string, number>;
+    const boosted: Record<string, number> = { ...stats };
+    for (const k of STAT_KEYS) boosted[k] = Math.min(STAT_MAX, (stats[k] ?? 10) + bonus);
+    const [updated] = await db
+      .update(horses)
+      .set({ stats: boosted })
+      .where(eq(horses.id, foal.id))
+      .returning();
+    if (updated) bornFoal = updated;
+  }
+  const bond: BondBreed | null =
+    bonus > 0 && rel ? { bonus, affinity: rel.affinity, type: rel.type } : null;
 
   const bredAt = new Date(now);
   await db.update(horses).set({ lastBredAt: bredAt }).where(eq(horses.id, a.id));
   await db.update(horses).set({ lastBredAt: bredAt }).where(eq(horses.id, b.id));
 
   await recordEvent(db, herdId, { type: 'breed' }); // advances breeding quests (§7)
-  await logAudit(db, herdId, 'breed', { foal: foal.id, parentA: a.id, parentB: b.id });
+  await logAudit(db, herdId, 'breed', {
+    foal: bornFoal.id,
+    parentA: a.id,
+    parentB: b.id,
+    bondBonus: bonus,
+  });
 
-  return { ok: true, viable: true, foal };
+  return { ok: true, viable: true, foal: bornFoal, bond };
+}
+
+/** A preview of the bond bonus these two would pass to a foal (only when statBonus > 0). */
+export interface BondPreview {
+  affinity: number;
+  type: string | null;
+  statBonus: number;
 }
 
 export interface BreedingOdds {
@@ -102,6 +174,7 @@ export interface BreedingOdds {
   distribution: PunnettColor[];
   lethalFraction: number;
   method: string;
+  bond: BondPreview | null;
 }
 
 /** Foal-color odds preview (`punnett`) for the breeding UI (BLORSE_PLAN.md §5.3, Phase 4). */
@@ -114,12 +187,16 @@ export async function breedingOdds(
   const b = await getHorse(db, parentBId);
   if (!a || !b) return { ok: false };
   const dist = punnett(a.genotype, b.genotype);
+  // Preview the bond bonus too (§14.2) so the player sees the payoff before committing.
+  const rel = a.herdId ? await parentBond(db, a.herdId, a.id, b.id) : null;
+  const statBonus = rel ? bondedBreedBonus(rel.affinity) : 0;
   return {
     ok: true,
     related: await shareLineage(db, a.id, b.id),
     distribution: dist.distribution,
     lethalFraction: dist.lethalFraction,
     method: dist.method,
+    bond: statBonus > 0 && rel ? { affinity: rel.affinity, type: rel.type, statBonus } : null,
   };
 }
 

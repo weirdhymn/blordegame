@@ -8,6 +8,7 @@ import {
   ADVENTURE_MARK_THRESHOLD,
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
+  BONDED_BREED_STAT_BONUS,
   BONDED_THRESHOLD,
   CARE_BELOVED_THRESHOLD,
   CARE_CHECK_BONUS,
@@ -16,6 +17,7 @@ import {
   SKILL_KEYS,
   STARTING_CUBES,
   STAT_KEYS,
+  STAT_MAX,
   UPLOAD_BASE,
   UPLOAD_FOAL_FACTOR,
 } from '@blorse/balance';
@@ -49,7 +51,7 @@ import {
   startRun,
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
-import { breedHorses } from '../src/services/breeding.js';
+import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
@@ -598,6 +600,104 @@ async function main(): Promise<void> {
     const fStats = hsBreed.foal.stats;
     const avg = STAT_KEYS.reduce((s, k) => s + (fStats[k] ?? 0), 0) / STAT_KEYS.length;
     check('foal inherits high stats from maxed parents', avg > 12);
+  }
+
+  // bonds shape breeding (§8 → §14.2): a foal born to a bonded pair starts stronger ----------
+  // The pure bonus curve: full at a true bond, graded down, zero for strangers/rivals (cozy).
+  eq(
+    'a full bond passes the whole stat bonus',
+    bondedBreedBonus(BONDED_THRESHOLD),
+    BONDED_BREED_STAT_BONUS,
+  );
+  eq('strangers pass no bonus', bondedBreedBonus(0), 0);
+  eq('rivals pass no bonus — never a penalty', bondedBreedBonus(-50), 0);
+  check(
+    'a budding friendship passes a partial, capped bonus',
+    bondedBreedBonus(FRIEND_THRESHOLD) > 0 &&
+      bondedBreedBonus(FRIEND_THRESHOLD) <= BONDED_BREED_STAT_BONUS &&
+      bondedBreedBonus(FRIEND_THRESHOLD) <= bondedBreedBonus(BONDED_THRESHOLD),
+  );
+
+  // Mid-stat parents (so +bonus stays well under STAT_MAX and is plainly visible).
+  const midStats = { str: 12, dex: 12, con: 12, int: 12, wis: 12, cha: 12 };
+  const bp1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: midStats,
+  });
+  const bp2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee', A: 'aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: midStats,
+  });
+  const [bLo, bHi] = bp1.id < bp2.id ? [bp1.id, bp2.id] : [bp2.id, bp1.id];
+  await db
+    .insert(relationships)
+    .values({ herdId, horseA: bLo, horseB: bHi, affinity: BONDED_THRESHOLD, type: 'bonded' });
+  const bondBred = await breedHorses(db, herdId, bp1.id, bp2.id, { seed: 1 });
+  check('a bonded pair still produces a foal', bondBred.ok && bondBred.viable);
+  if (bondBred.ok && bondBred.viable) {
+    eq('the result surfaces the full bond bonus', bondBred.bond?.bonus, BONDED_BREED_STAT_BONUS);
+    // Re-mint the identical cross (same parents + foal seed) with no bond logic → the baseline.
+    const baseline = await mintHorse(db, {
+      herdId,
+      genotype: bondBred.foal.genotype,
+      origin: 'bred',
+      lifeStage: 'foal',
+      parentA: bp1.id,
+      parentB: bp2.id,
+      seed: bondBred.foal.seed,
+    });
+    check(
+      'every foal stat = inherited baseline + bond bonus (capped at STAT_MAX)',
+      STAT_KEYS.every(
+        (k) =>
+          (bondBred.foal.stats[k] ?? 0) ===
+          Math.min(STAT_MAX, (baseline.stats[k] ?? 0) + BONDED_BREED_STAT_BONUS),
+      ),
+    );
+    check(
+      'the bonded foal is genuinely stronger than its inherited baseline',
+      STAT_KEYS.some((k) => (bondBred.foal.stats[k] ?? 0) > (baseline.stats[k] ?? 0)),
+    );
+  }
+
+  // An un-bonded (stranger) pair breeds exactly as before — no bond surfaced, no stat bump.
+  const sp1 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'Ee', A: 'Aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: midStats,
+  });
+  const sp2 = await mintHorse(db, {
+    herdId,
+    genotype: { E: 'ee', A: 'aa' },
+    origin: 'wild',
+    lifeStage: 'adult',
+    stats: midStats,
+  });
+  const strangerBred = await breedHorses(db, herdId, sp1.id, sp2.id, { seed: 1 });
+  check('a stranger pair produces a foal', strangerBred.ok && strangerBred.viable);
+  if (strangerBred.ok && strangerBred.viable) {
+    check('no bond → no bonus surfaced', strangerBred.bond === null);
+    const baseline = await mintHorse(db, {
+      herdId,
+      genotype: strangerBred.foal.genotype,
+      origin: 'bred',
+      lifeStage: 'foal',
+      parentA: sp1.id,
+      parentB: sp2.id,
+      seed: strangerBred.foal.seed,
+    });
+    check(
+      'a stranger foal inherits with no bond bump (unchanged behavior)',
+      STAT_KEYS.every((k) => (strangerBred.foal.stats[k] ?? 0) === (baseline.stats[k] ?? 0)),
+    );
   }
 
   // jobs (§9.2): structure-gated assignment

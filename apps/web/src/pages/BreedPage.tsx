@@ -108,6 +108,12 @@ export function BreedPage(): ReactElement {
               {Math.round(odds.lethalFraction * 100)}% of crosses don&apos;t take.
             </p>
           )}
+          {odds.bond && (
+            <p className="wild">
+              💞 These two are {odds.bond.type === 'bonded' ? 'inseparable' : 'close'} — their foal
+              would start <strong>+{odds.bond.statBonus} in every stat</strong>.
+            </p>
+          )}
         </div>
       )}
 
@@ -130,6 +136,12 @@ export function BreedPage(): ReactElement {
           <HorseCanvas spec={foalSpec} scale={3} />
           <p className="horse-name">{result.foal.name ?? 'Unnamed'}</p>
           <p className="sub">It renders white until it grows up.</p>
+          {result.bond && (
+            <p className="wild">
+              💞 Born of a bond — it starts life <strong>+{result.bond.bonus} in every stat</strong>
+              .
+            </p>
+          )}
         </div>
       )}
       {result && !result.viable && (

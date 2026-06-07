@@ -32,6 +32,15 @@ export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight
 export const LUCK_INHERIT = 0.5;
 export const STAT_TRAIN_SOFTCAP = 18; // 19–20 only by breeding/rare items
+/**
+ * A foal born to a genuinely bonded pair starts life a little stronger: each stat gets up to this
+ * many points, graded by the parents' stored affinity (÷ BONDED_THRESHOLD, capped at 1) — so a
+ * tight bond gives the full bonus, a budding rapport a fraction, and strangers/rivals nothing
+ * (cozy, buff-only — no penalty for breeding an un-bonded pair). This is a *breeding-path* boost,
+ * the sanctioned way past the training soft-cap toward 19–20 (see STAT_TRAIN_SOFTCAP). Reuses the
+ * same affinity→rapport reading as the adventure harmony buff (§8).
+ */
+export const BONDED_BREED_STAT_BONUS = 2;
 export const PERSONALITY_MUTATION = { chancePerTrait: 0.02, shiftMin: 15, shiftMax: 30 };
 
 // ── §14.3 Recruitment fee (Tavern) ──────────────────────────────────────────

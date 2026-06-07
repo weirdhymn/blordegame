@@ -41,7 +41,9 @@ export function registerBreedingRoutes(app: FastifyInstance, db: DB): void {
     if (!result.viable) {
       return reply.code(200).send({ viable: false, message: result.message });
     }
-    return reply.code(201).send({ viable: true, foal: publicHorse(result.foal) });
+    return reply
+      .code(201)
+      .send({ viable: true, foal: publicHorse(result.foal), bond: result.bond });
   });
 
   app.get('/breed/odds', async (req, reply) => {

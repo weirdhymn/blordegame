@@ -45,7 +45,12 @@ import {
   relationships,
   users,
 } from '../src/db/schema.js';
-import { ADVENTURE_BY_ID, ADVENTURE_POOLS, type Choice } from '../src/content/adventures.js';
+import {
+  ADVENTURE_BY_ID,
+  ADVENTURE_POOLS,
+  ADVENTURE_SCRIPTS,
+  type Choice,
+} from '../src/content/adventures.js';
 import { ENEMY_BY_ID } from '../src/content/enemies.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
@@ -1060,8 +1065,8 @@ async function main(): Promise<void> {
     regionsView.find((r) => r.id === 'green-grass')?.interactive === true,
   );
   check(
-    'a scriptless region is not interactive',
-    regionsView.find((r) => r.id === 'dusty-dunes')?.interactive === false,
+    'Dusty Dunes is interactive now (it has its own expeditions)',
+    regionsView.find((r) => r.id === 'dusty-dunes')?.interactive === true,
   );
 
   // The route does the seeded pool draw (no script override), so retry until it serves Sunny
@@ -1086,9 +1091,9 @@ async function main(): Promise<void> {
     method: 'POST',
     url: '/adventure/start',
     headers: { cookie },
-    payload: { regionId: 'dusty-dunes', party: [id] },
+    payload: { regionId: 'no-such-region', party: [id] },
   });
-  eq('start in a scriptless region → 404', noScript.statusCode, 404);
+  eq('start in a region with no scripts → 404', noScript.statusCode, 404);
 
   const step1 = await inject({
     method: 'POST',
@@ -1203,6 +1208,30 @@ async function main(): Promise<void> {
   check(
     'green-grass holds a pool of scripts (incl. the boss expedition)',
     (ADVENTURE_POOLS.get('green-grass')?.length ?? 0) >= 3,
+  );
+  check(
+    'Dusty Dunes and Weird Woods now have interactive expeditions too (not only Green Grass)',
+    (ADVENTURE_POOLS.get('dusty-dunes')?.length ?? 0) >= 1 &&
+      (ADVENTURE_POOLS.get('weird-woods')?.length ?? 0) >= 1,
+  );
+  // Content integrity: every boss handoff references a real enemy (no orphan battle id, any region).
+  let bossCount = 0;
+  let allBossesResolve = true;
+  for (const sc of ADVENTURE_SCRIPTS) {
+    for (const scene of Object.values(sc.scenes)) {
+      for (const ch of scene.choices) {
+        for (const out of [ch.success, ch.failure]) {
+          if (out?.battle) {
+            bossCount += 1;
+            if (!ENEMY_BY_ID.has(out.battle)) allBossesResolve = false;
+          }
+        }
+      }
+    }
+  }
+  check(
+    'every adventure boss references a real enemy (≥3 bosses across regions, all resolve)',
+    bossCount >= 3 && allBossesResolve,
   );
   const pickA = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
   const pickB = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });

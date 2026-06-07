@@ -164,6 +164,78 @@ export const ENEMIES: EnemyDef[] = [
       ],
     },
   },
+  {
+    // The Dusty Dunes region boss (§9.4c) — weak to a Knight's Confront (it is cracked rock you can
+    // shatter), resists a Cleric's Soothe (no heart in a landslide). The Knight's boss.
+    id: 'dd-sandstone-sentinel',
+    name: 'the Sandstone Sentinel',
+    maxHp: 100,
+    power: 15,
+    guard: 14,
+    speed: 7,
+    weakness: 'confront', // solid rock cracked clean through — a hard, honest charge shatters it
+    resist: 'soothe', // there is no heart in a landslide to soothe
+    intro:
+      'The canyon narrows to a slot, and the slot is filled: a weathered colossus of red sandstone hauls itself up out of the dune it was pretending to be, sand sheeting off its shoulders, and fixes you with two eyes like chips of flint.',
+    tell: 'All grit and grind, no give and no guile — but look closer: it is cracked clean through, fault-lines running deep. No charming a landslide; just a hard, honest shove at the right seam.',
+    moves: [
+      {
+        id: 'boulder-fist',
+        kind: 'strike',
+        weight: 3,
+        text: 'It brings a fist the size of a millstone down in a slow, grinding arc.',
+      },
+      {
+        id: 'sandblast',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It sloughs a wave of scouring sand across the whole party.',
+      },
+    ],
+    reward: {
+      cubes: 130,
+      items: [
+        { id: 'rare-gem', qty: 1 },
+        { id: 'ore', qty: 3 },
+      ],
+    },
+  },
+  {
+    // The Weird Woods region boss (§9.4c) — weak to a Wizard's Outwit (its tricks have a logic),
+    // resists a Knight's Confront (you only ever hit afterimage). The Wizard's boss.
+    id: 'ww-mistwood-mimic',
+    name: 'the Mistwood Mimic',
+    maxHp: 88,
+    power: 14,
+    guard: 13,
+    speed: 13,
+    weakness: 'outwit', // its trick has a pattern — read it and the real one stands plain
+    resist: 'confront', // meet it head-on and you hit fog and afterimage
+    intro:
+      'The trees lean in, the mist thickens to soup, and something steps out of it — and then out of it again, a little to the left, wearing a slightly different face. The Mistwood Mimic considers you with several sets of eyes, none of which are quite where you are looking.',
+    tell: 'It flickers and doubles and grins from three places at once; meet it head-on and you will only ever hit afterimage. But the trick has a pattern — read it, and the real one stands suddenly, obviously plain.',
+    moves: [
+      {
+        id: 'phantom-rush',
+        kind: 'strike',
+        weight: 3,
+        text: 'A dozen copies rush in; only one of them is real.',
+      },
+      {
+        id: 'bewilder',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It splits into a baffling crowd and rattles the whole party at once.',
+      },
+    ],
+    reward: {
+      cubes: 140,
+      items: [
+        { id: 'rare-gem', qty: 1 },
+        { id: 'timber', qty: 3 },
+      ],
+    },
+  },
 ];
 
 export const ENEMY_BY_ID = new Map(ENEMIES.map((e) => [e.id, e]));

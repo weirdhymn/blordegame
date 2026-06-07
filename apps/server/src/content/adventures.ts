@@ -498,7 +498,299 @@ const HOLLOW_KEEPER: AdventureScript = {
   },
 };
 
-export const ADVENTURE_SCRIPTS: AdventureScript[] = [SUNNY_HOLLOW, HERB_HUNT, HOLLOW_KEEPER];
+// ── Dusty Dunes — "The Bleaching Wash" (a regular tier-2 expedition) ────────
+const BLEACHING_WASH: AdventureScript = {
+  id: 'bleaching-wash',
+  name: 'The Bleaching Wash',
+  regionId: 'dusty-dunes',
+  start: 'wash-mouth',
+  scenes: {
+    'wash-mouth': {
+      id: 'wash-mouth',
+      stage: 1,
+      text: 'A dry wash cuts down out of the dunes — a road for water that has not seen rain in living memory, floored with cracked clay and bleached, faintly judgemental bones. Good gleaning, if you can stand the glare.',
+      choices: [
+        {
+          id: 'dig-clay',
+          text: 'Lever up the cracked clay-pan',
+          check: { stat: 'str', skill: 'athletics', dc: 11 },
+          success: {
+            text: 'You pry up good slabs of fire-ready clay.',
+            items: [{ id: 'clay', qty: 3 }],
+            next: 'wash-fork',
+          },
+          failure: {
+            text: 'The pan fights you; you lever loose a meagre lump.',
+            items: [{ id: 'clay', qty: 1 }],
+            next: 'wash-fork',
+          },
+        },
+        {
+          id: 'sift-shade',
+          text: 'Sift the shaded undercut for what the floods left',
+          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'Patience pays: a seam of good ore the water tucked away.',
+            items: [
+              { id: 'ore', qty: 2 },
+              { id: 'clay', qty: 1 },
+            ],
+            next: 'wash-fork',
+          },
+          failure: {
+            text: 'Mostly grit and old bone. You pocket a little ore.',
+            items: [{ id: 'ore', qty: 1 }],
+            next: 'wash-fork',
+          },
+        },
+      ],
+    },
+    'wash-fork': {
+      id: 'wash-fork',
+      stage: 2,
+      text: 'The wash splits around a great bleached boulder. The shaded fork looks cool and promising; or you could call it a good haul and climb out while the light still holds.',
+      choices: [
+        {
+          id: 'bank',
+          text: 'Climb out with your haul',
+          success: {
+            text: 'A sensible turn for home, pockets full of honest clay.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'push',
+          text: 'Press on up the shaded fork',
+          success: { text: 'You duck into the cool blue shade and press on.', next: 'wash-cache' },
+        },
+      ],
+    },
+    'wash-cache': {
+      id: 'wash-cache',
+      stage: 3,
+      text: 'The shade opens on a hollow where the last real flood piled its treasures: a glitter of something better than clay, half-buried where the wash gives up its secrets.',
+      choices: [
+        {
+          id: 'work-cache',
+          text: 'Work the flood-cache loose together',
+          check: { stat: 'dex', skill: 'foraging', dc: 14, harmony: true },
+          success: {
+            text: 'Careful hooves free it whole — a gem the desert kept for itself, and good ore besides.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'ore', qty: 2 },
+            ],
+            cubes: 18,
+            next: 'end',
+          },
+          failure: {
+            text: 'It shatters as it comes free; you salvage the ore and a story.',
+            items: [{ id: 'ore', qty: 1 }],
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+        {
+          id: 'leave',
+          text: 'Leave it and head for home',
+          success: {
+            text: 'Some treasures keep. You climb back into the light, content.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Dusty Dunes — "The Sandstone Sentinel" (the region boss, §9.4c) ─────────
+const SANDSTONE_SENTINEL: AdventureScript = {
+  id: 'sandstone-sentinel',
+  name: 'The Sandstone Sentinel',
+  regionId: 'dusty-dunes',
+  start: 'sentinel-flats',
+  scenes: {
+    'sentinel-flats': {
+      id: 'sentinel-flats',
+      stage: 1,
+      text: 'Out past the last good well, the dunes give way to a country of standing stones and slot canyons — and a story, old as the rock, of a guardian that walks when it is woken. The wind here sounds almost like breathing.',
+      choices: [
+        {
+          id: 'glean-stones',
+          text: 'Glean the standing stones as you go',
+          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'You chip free good ore and a few odd, heavy stones for the road.',
+            items: [
+              { id: 'ore', qty: 2 },
+              { id: 'clay', qty: 1 },
+            ],
+            next: 'sentinel-fork',
+          },
+          failure: {
+            text: 'The stones keep their counsel. You take what little flakes off.',
+            items: [{ id: 'ore', qty: 1 }],
+            next: 'sentinel-fork',
+          },
+        },
+        {
+          id: 'pace-quiet',
+          text: 'Save your strength and pace it quietly',
+          success: {
+            text: 'You go soft-hooved through the standing stones, and the country lets you pass.',
+            next: 'sentinel-fork',
+          },
+        },
+      ],
+    },
+    'sentinel-fork': {
+      id: 'sentinel-fork',
+      stage: 2,
+      text: 'The way forks at a slot canyon. One path skirts wide around it, an easy road home. The other goes in — into a deep red cleft where the breathing-wind is loudest and something very large is very still.',
+      choices: [
+        {
+          id: 'skirt-home',
+          text: 'Skirt wide and head for home',
+          success: {
+            text: 'Let sleeping mountains lie. You turn for the wells, content.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'into-slot',
+          text: 'Go in, down the slot canyon',
+          success: {
+            text: 'You step into the red cleft. The breathing stops. Something begins, very slowly, to stand.',
+            next: 'sentinel-slot',
+          },
+        },
+      ],
+    },
+    'sentinel-slot': {
+      id: 'sentinel-slot',
+      stage: 3,
+      text: 'The slot canyon ends in a wall — and the wall unfolds, sand sheeting off shoulders of red stone, into the Sandstone Sentinel. It fills the only way through. There is no skirting this one.',
+      choices: [
+        {
+          id: 'face-sentinel',
+          text: 'Stand your ground and face the Sentinel',
+          success: {
+            text: 'You set your hooves in the sand. The colossus raises a fist the size of a millstone.',
+            battle: 'dd-sandstone-sentinel',
+            next: 'end',
+          },
+        },
+        {
+          id: 'back-out',
+          text: 'Back out of the slot the way you came',
+          success: {
+            text: 'Wiser, if less glorious. You back into the light; the Sentinel settles, grain by grain, back into a dune.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Weird Woods — "The Mistwood Mimic" (the region boss, §9.4c) ─────────────
+const MISTWOOD_MIMIC: AdventureScript = {
+  id: 'mistwood-mimic',
+  name: 'The Mistwood Mimic',
+  regionId: 'weird-woods',
+  start: 'mist-eaves',
+  scenes: {
+    'mist-eaves': {
+      id: 'mist-eaves',
+      stage: 1,
+      text: 'Under the eaves of the Weird Woods the light goes green and strange and the mist never quite lifts. The trees here grow things they have no business growing, and a few of them are worth the taking.',
+      choices: [
+        {
+          id: 'harvest-odd',
+          text: 'Harvest the odd, glowing growths',
+          check: { stat: 'int', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'You read which lights are safe to touch and come away with good timber and stranger things.',
+            items: [
+              { id: 'timber', qty: 2 },
+              { id: 'ore', qty: 1 },
+            ],
+            next: 'mist-fork',
+          },
+          failure: {
+            text: 'Half of it bites back or simply vanishes. You keep what holds still.',
+            items: [{ id: 'timber', qty: 1 }],
+            next: 'mist-fork',
+          },
+        },
+        {
+          id: 'tread-careful',
+          text: 'Tread carefully and keep your wits about you',
+          success: {
+            text: 'You keep one eye on the path and one on the mist, and the woods, for now, behave.',
+            next: 'mist-fork',
+          },
+        },
+      ],
+    },
+    'mist-fork': {
+      id: 'mist-fork',
+      stage: 2,
+      text: 'The path forks at a leaning, lightning-split oak. One way leads back to the honest edge of the wood. The other goes down into a hollow where the mist pools thick as soup and something is laughing very quietly at a joke you cannot hear.',
+      choices: [
+        {
+          id: 'back-edge',
+          text: 'Head back to the wood-edge',
+          success: {
+            text: 'You leave the laughing to itself and turn for home, content.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'into-mist',
+          text: 'Go down, into the laughing mist',
+          success: {
+            text: 'You wade into the soup. The laughing gets closer, and then it is all around you.',
+            next: 'mist-heart',
+          },
+        },
+      ],
+    },
+    'mist-heart': {
+      id: 'mist-heart',
+      stage: 3,
+      text: 'The hollow at the heart of the mist is full of the Mistwood Mimic — which is to say full of a dozen of it, all grinning, none of them quite where you look. There is one real one in there somewhere, and it is between you and the way out.',
+      choices: [
+        {
+          id: 'face-mimic',
+          text: 'Hold your nerve and face the Mimic',
+          success: {
+            text: 'You plant your hooves and stop chasing afterimages. The crowd of grins turns, as one, to you.',
+            battle: 'ww-mistwood-mimic',
+            next: 'end',
+          },
+        },
+        {
+          id: 'slip-mist',
+          text: 'Slip back out through the mist',
+          success: {
+            text: 'You back out the way you came, following your own hoofprints; the laughing fades behind you.',
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+export const ADVENTURE_SCRIPTS: AdventureScript[] = [
+  SUNNY_HOLLOW,
+  HERB_HUNT,
+  HOLLOW_KEEPER,
+  BLEACHING_WASH,
+  SANDSTONE_SENTINEL,
+  MISTWOOD_MIMIC,
+];
 
 /** Each region's pool of adventure scripts; a run picks one (seeded) at startRun (§9.3). */
 export const ADVENTURE_POOLS = new Map<string, AdventureScript[]>();

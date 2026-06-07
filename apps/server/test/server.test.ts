@@ -1348,6 +1348,106 @@ async function main(): Promise<void> {
       (r) => (ADVENTURE_POOLS.get(r)?.length ?? 0) >= 1,
     ),
   );
+
+  // --- "The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on the scene-tree engine ---
+  {
+    const lamb = ADVENTURE_BY_ID.get('lost-lamb');
+    check('lost-lamb script exists in the Green Grass pool', !!lamb);
+    if (lamb) {
+      // BFS the branch graph from the start scene → which scenes are actually reachable.
+      const reached = new Set<string>([lamb.start]);
+      const queue: string[] = [lamb.start];
+      while (queue.length > 0) {
+        const scene = lamb.scenes[queue.shift()!];
+        if (!scene) continue;
+        for (const ch of scene.choices) {
+          for (const out of [ch.success, ch.failure]) {
+            if (out && out.next !== 'end' && !reached.has(out.next)) {
+              reached.add(out.next);
+              queue.push(out.next);
+            }
+          }
+        }
+      }
+      // (a) the opening fork reaches THREE genuinely different middles — none funnel away.
+      check(
+        'lost-lamb: the Creek route is reachable (both calm + tense arrivals)',
+        reached.has('creek-calm') && reached.has('creek-tense'),
+      );
+      check(
+        'lost-lamb: the Bramble-Hollow route is reachable (both normal + winded)',
+        reached.has('hollow') && reached.has('hollow-winded'),
+      );
+      check('lost-lamb: the SECRET Fence-Line route is reachable', reached.has('fence'));
+      check(
+        'lost-lamb: every scene is reachable from the start (no orphans)',
+        Object.keys(lamb.scenes).every((s) => reached.has(s)),
+      );
+      check(
+        'lost-lamb: every choice next resolves to a scene or "end"',
+        Object.values(lamb.scenes).every((sc) =>
+          sc.choices.every((ch) =>
+            [ch.success, ch.failure].every(
+              (out) => !out || out.next === 'end' || !!lamb.scenes[out.next],
+            ),
+          ),
+        ),
+      );
+
+      // (b) the Fence-Line is the Openness-gated replay hook; the creek/hollow openers are ungated.
+      const start = lamb.scenes[lamb.start]!;
+      const pip = start.choices.find((c) => c.success.next === 'fence');
+      check(
+        'lost-lamb: the Fence-Line is gated on Openness ≥ 60 (the replay hook)',
+        pip?.requires?.trait === 'o' && (pip?.requires?.min ?? 0) >= 60,
+      );
+      check(
+        'lost-lamb: the Creek + Hollow openers are ungated (everyone sees them)',
+        start.choices.some((c) => c.success.next === 'creek-calm' && !c.requires) &&
+          start.choices.some((c) => c.success.next === 'hollow' && !c.requires),
+      );
+
+      // (c) the echoes: an early outcome makes a LATER check harder.
+      const dcOf = (sceneId: string, choiceId: string): number =>
+        lamb.scenes[sceneId]!.choices.find((c) => c.id === choiceId)!.check!.dc;
+      check(
+        'lost-lamb: tense-arrival makes the later Befriend check harder (calm/tense echo)',
+        dcOf('creek-tense', 'coax-cross') > dcOf('creek-calm', 'coax-cross'),
+      );
+      check(
+        'lost-lamb: a Winded horse rolls the Hollow checks harder (winded echo)',
+        dcOf('hollow-winded', 'cut-path') > dcOf('hollow', 'cut-path') &&
+          dcOf('hollow-winded', 'find-gap') > dcOf('hollow', 'find-gap'),
+      );
+
+      // (d) the clever bramble path carries the marsh-sage bonus home (loot is the carried state).
+      const findGap = lamb.scenes['hollow']!.choices.find((c) => c.id === 'find-gap')!;
+      check(
+        'lost-lamb: the clever bramble path finds marsh-sage (cross-scene reward)',
+        (findGap.success.items ?? []).some((i) => i.id === 'marsh-sage'),
+      );
+
+      // (e) the ending FLAGS produce the right reward variations.
+      const cubesOf = (sceneId: string): number =>
+        lamb.scenes[sceneId]!.choices[0]!.success.cubes ?? 0;
+      check(
+        'lost-lamb: the full-flock ending pays the most (best route C reward)',
+        cubesOf('finale-flock') > cubesOf('finale-bonded'),
+      );
+      check(
+        'lost-lamb: befriending the lamb pays more than a plain rescue',
+        cubesOf('finale-bonded') > cubesOf('finale-clean'),
+      );
+      check(
+        'lost-lamb: the soggy ending still pays the FULL lamb reward (the penalty is flavor only)',
+        cubesOf('finale-soggy') === cubesOf('finale-clean'),
+      );
+      check(
+        'lost-lamb: banking with no lamb pays the least (the cozy out)',
+        cubesOf('finale-bank') < cubesOf('finale-clean'),
+      );
+    }
+  }
   const pickA = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
   const pickB = await startRun(db, herdId, 'green-grass', [id], { seed: 777 });
   check(

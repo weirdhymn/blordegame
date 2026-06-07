@@ -1425,12 +1425,374 @@ const TOLL_KEEPER: AdventureScript = {
   },
 };
 
+// ── Green Grass — "The Lost Lamb" (a deep branching study, §9.3) ───────────
+// The showcase for real branching + cross-scene consequence, all on the scene-tree engine via the
+// herb-hunt feed-forward mechanism (route to a consequence-specific variant; carry materials in loot;
+// carry the soft penalty as fatigue). NO combat by design. The echoes:
+//   • calm-arrival vs tense-arrival → `creek-calm` vs `creek-tense` (the Befriend DC differs: 11 vs 14).
+//   • a Winded horse (climb-failure) → `hollow` vs `hollow-winded` (Cut/Find DCs +2).
+//   • the lamb's state + what you carried → which `finale-*` you land on (flavor + reward), and the
+//     marsh-sage found in the bramble rides home in the loot.
+// The opening fork does NOT funnel back: creek (Swim/Befriend) and hollow (Force/Knowledge) are
+// genuinely different middles. The Openness-gated third route (the Fence-Line) is the replay hook.
+const LOST_LAMB: AdventureScript = {
+  id: 'lost-lamb',
+  name: 'The Lost Lamb',
+  regionId: 'green-grass',
+  start: 'lamb-bleating',
+  scenes: {
+    'lamb-bleating': {
+      id: 'lamb-bleating',
+      stage: 1,
+      text: "Somewhere in the tall grass, something small is crying. Not a horse — higher, sillier, more put-upon. A lamb, by the sound of it, separated from its flock and extremely unhappy about the arrangement. The bleating bounces off the hills; hard to tell if it's near the creek to the west or up in the bramble-hollow to the east.",
+      choices: [
+        {
+          id: 'head-creek',
+          text: 'Listen hard and head west, for the creek',
+          check: { stat: 'wis', skill: 'foraging', dc: 10, harmony: true },
+          success: {
+            text: 'You pin the sound to the creek and pad down unhurried, in no rush to spook a thing already having the worst day of its short life.',
+            next: 'creek-calm',
+          },
+          failure: {
+            text: "You crash west on a hunch — right creek, wrong approach. The bleating spikes to a shriek; whatever's down there now thinks you're the second-worst thing to happen today.",
+            next: 'creek-tense',
+          },
+        },
+        {
+          id: 'climb-hollow',
+          text: 'Scramble east, up to the bramble-hollow',
+          check: { stat: 'str', skill: 'athletics', dc: 11, harmony: true },
+          success: {
+            text: 'You haul up the slope, sure-hoofed, and crest into the hollow with breath to spare.',
+            next: 'hollow',
+          },
+          failure: {
+            text: 'The slope is loose and mean; someone takes a scraped knee on the way up and crests the rise winded, favouring a leg.',
+            fatigue: 1,
+            next: 'hollow-winded',
+          },
+        },
+        {
+          id: 'pip-knows',
+          text: '“Pip swears it knows this bleat.”',
+          requires: { trait: 'o', min: 60 },
+          success: {
+            text: 'Your most curious one plants its hooves and refuses to go west OR east — insists, with the certainty of the genuinely odd, that this is neither creek nor hollow but the old fence-line. Against your better judgement, you follow it.',
+            next: 'fence',
+          },
+        },
+      ],
+    },
+
+    // ROUTE A — the Creek. Two arrival variants; only the Befriend DC differs (the calm/tense echo).
+    'creek-calm': {
+      id: 'creek-calm',
+      stage: 2,
+      text: 'The lamb is on the wrong side of the creek, of course — stranded on a mud spit, ankle-deep and furious, as the water mutters past. It eyes you with the deep suspicion of a creature that has decided all of this is your fault. But you came in quiet, and it has not quite written you off.',
+      choices: [
+        {
+          id: 'cross-carry',
+          text: 'Wade across and carry it back',
+          check: { stat: 'str', skill: 'athletics', dc: 12 },
+          success: {
+            text: 'One steady push through the cold and you scoop the indignant thing up dry, holding it well clear of the splashing.',
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'The current has opinions. You get the lamb — you always get the lamb — but the whole party comes out the far side soaked to the belly and deeply grumpy.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'coax-cross',
+          text: 'Coax it to cross to you on its own',
+          check: { stat: 'cha', skill: 'performance', dc: 11, harmony: true },
+          success: {
+            text: 'Soft and low and endlessly patient, your kindest one talks the lamb down off the spit until it picks its own way across and presses, trembling, into a warm flank. It has decided you are People now.',
+            next: 'finale-bonded',
+          },
+          failure: {
+            text: 'It will not be talked into anything. In the end you wade out and carry it — and it makes very sure you are good and soaked for doubting it.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'bank-creek',
+          text: 'Decide it is beyond you, and head home',
+          success: {
+            text: 'Some rescues are not yours to make. You leave the lamb to luck and the ewe to find it, and amble home with a clear conscience and a modest day.',
+            next: 'finale-bank',
+          },
+        },
+      ],
+    },
+    'creek-tense': {
+      id: 'creek-tense',
+      stage: 2,
+      text: 'The lamb is on the wrong side of the creek, of course — stranded on a mud spit, ankle-deep and now genuinely beside itself after your noisy arrival. It eyes you with the deep suspicion of a creature that has decided all of this is, specifically and personally, your fault.',
+      choices: [
+        {
+          id: 'cross-carry',
+          text: 'Wade across and carry it back',
+          check: { stat: 'str', skill: 'athletics', dc: 12 },
+          success: {
+            text: 'One steady push through the cold and you scoop the indignant thing up dry, holding it well clear of the splashing.',
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'The current has opinions. You get the lamb — you always get the lamb — but the whole party comes out the far side soaked to the belly and deeply grumpy.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'coax-cross',
+          text: 'Coax it to cross to you on its own',
+          check: { stat: 'cha', skill: 'performance', dc: 14, harmony: true },
+          success: {
+            text: 'It takes everything your kindest one has — the lamb is wound tight as a spring — but slowly, slowly, it uncoils, picks its way across, and leans into a warm flank, forgiving you against its own better judgement.',
+            next: 'finale-bonded',
+          },
+          failure: {
+            text: 'Too rattled to be reasoned with. You wade out and carry it the hard way, and come back wet through for your trouble.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'bank-creek',
+          text: 'Decide it is beyond you, and head home',
+          success: {
+            text: 'Some rescues are not yours to make. You leave the lamb to luck and the ewe to find it, and amble home with a clear conscience and a modest day.',
+            next: 'finale-bank',
+          },
+        },
+      ],
+    },
+
+    // ROUTE B — the Bramble-Hollow. Two variants; the Winded one rolls Cut/Find at +2 (the echo).
+    hollow: {
+      id: 'hollow',
+      stage: 2,
+      text: "The lamb has wedged itself into a hollow ringed with bramble, the way panicking small animals do — choosing the one spot that makes everyone's life worse. The thorns are old and mean. The lamb has stopped crying, which is somehow more alarming.",
+      choices: [
+        {
+          id: 'cut-path',
+          text: 'Shoulder a path straight through the thorns',
+          check: { stat: 'str', skill: 'athletics', dc: 12 },
+          success: {
+            text: 'You break the brambles down by main force, reach in, and lift the silent little thing free. It blinks, remembers how to be outraged, and resumes crying at once.',
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'The thorns give as good as they get. You free the lamb in the end, but a horse comes away rattled and everyone comes away scratched and sorry.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'find-gap',
+          text: 'Read the bramble for the gap a clever creature would use',
+          check: { stat: 'int', skill: 'foraging', dc: 13 },
+          success: {
+            text: 'You trace the run a fox would take and slip in clean, lifting the lamb out without a single scratch — and there, tucked deep where the thorns kept it safe, a fat clutch of marsh-sage for the taking.',
+            items: [{ id: 'marsh-sage', qty: 2 }],
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'The clever way will not resolve, so you give up and shove through the hard way — lamb out, but the brambles take their toll on the way.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'bank-hollow',
+          text: 'Decide it is beyond you, and head home',
+          success: {
+            text: 'Some rescues are not yours to make. You leave the lamb to luck and the ewe to find it, and amble home with a clear conscience and a modest day.',
+            next: 'finale-bank',
+          },
+        },
+      ],
+    },
+    'hollow-winded': {
+      id: 'hollow-winded',
+      stage: 2,
+      text: 'The lamb has wedged itself into a hollow ringed with old, mean bramble — and it has gone quiet, which is the alarming kind of quiet. Worse: your scraped-up one is still favouring that leg, breathing hard, not much use for the heavy work ahead.',
+      choices: [
+        {
+          id: 'cut-path',
+          text: 'Shoulder a path straight through the thorns',
+          check: { stat: 'str', skill: 'athletics', dc: 14 },
+          success: {
+            text: 'Down a hand, you break the brambles the hard way and haul the silent little thing free. It blinks, remembers how to be outraged, and resumes crying at once.',
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'With your winded one labouring, the thorns win the exchange. You free the lamb, but everyone comes away rattled, scratched, and sorry.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'find-gap',
+          text: 'Read the bramble for the gap a clever creature would use',
+          check: { stat: 'int', skill: 'foraging', dc: 15 },
+          success: {
+            text: 'Short-handed but sharp-eyed, you trace the run a fox would take and slip in clean — lamb out unscratched, and a fat clutch of marsh-sage tucked deep where the thorns kept it safe.',
+            items: [{ id: 'marsh-sage', qty: 2 }],
+            next: 'finale-clean',
+          },
+          failure: {
+            text: 'Tired eyes miss the gap, so you shove through the hard way — lamb out, but the brambles take their toll on the way.',
+            fatigue: 1,
+            next: 'finale-soggy',
+          },
+        },
+        {
+          id: 'bank-hollow',
+          text: 'Decide it is beyond you, and head home',
+          success: {
+            text: 'Some rescues are not yours to make. You leave the lamb to luck and the ewe to find it, and amble home with a clear conscience and a modest day.',
+            next: 'finale-bank',
+          },
+        },
+      ],
+    },
+
+    // ROUTE C — the Fence-Line (secret, reached only via the Openness gate above).
+    fence: {
+      id: 'fence',
+      stage: 2,
+      text: "Pip was right — annoyingly. The lamb's flock got out through a rotted gate in an old fence nobody has mended in years, and the lamb simply could not find its way back through. The whole flock is here, milling about, vaguely embarrassed, the lamb among them.",
+      choices: [
+        {
+          id: 'mend-gate',
+          text: 'Mend the gate and shepherd the whole flock home',
+          check: { stat: 'dex', skill: 'smithing', dc: 13 },
+          success: {
+            text: 'Patient hooves and clever knots: you wire the old gate true, then sweep the entire silly flock back through it where they belong. Not one lamb but a dozen, delivered.',
+            next: 'finale-flock',
+          },
+          failure: {
+            text: 'The gate defeats you — too far gone to mend in a morning. So you do the next best thing: collar the lost lamb itself and leave the rest to drift home on their own time.',
+            next: 'finale-clean',
+          },
+        },
+        {
+          id: 'grab-lamb',
+          text: 'Just collect the lamb and go',
+          success: {
+            text: 'No sense fixing a fence that is not yours. You pluck the one lamb that wandered, leave the flock to its milling, and turn for home.',
+            next: 'finale-clean',
+          },
+        },
+      ],
+    },
+
+    // FINALE — all routes converge here, but which finale you reach (and so the flavor + reward) is
+    // decided entirely by the flags you carried in. Each is a terminal "head home" beat.
+    'finale-bonded': {
+      id: 'finale-bonded',
+      stage: 3,
+      text: 'You bring the lamb back over the last rise, where a frankly hysterical ewe is waiting. The reunion is loud, undignified, and brief — the lamb, reunited, immediately pretends it was never lost at all. Then it turns, trots back, and headbutts your soothing horse square in the knee: the highest honour a sheep can bestow.',
+      choices: [
+        {
+          id: 'home',
+          text: 'Head home, honoured',
+          success: {
+            text: 'You walk home a little taller, with a story and the warm, ridiculous glow of having been chosen by a sheep.',
+            items: [{ id: 'plant-fiber', qty: 2 }],
+            cubes: 35,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'finale-clean': {
+      id: 'finale-clean',
+      stage: 3,
+      text: 'You bring the lamb back over the last rise, where a frankly hysterical ewe is waiting. The reunion is loud, undignified, and brief — the lamb, reunited, immediately pretends it was never lost at all.',
+      choices: [
+        {
+          id: 'home',
+          text: 'Head home',
+          success: {
+            text: 'A good turn done and a clean job of it. You amble home in the long gold light, well pleased.',
+            items: [{ id: 'plant-fiber', qty: 2 }],
+            cubes: 25,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'finale-soggy': {
+      id: 'finale-soggy',
+      stage: 3,
+      text: 'You bring the lamb back over the last rise, where a frankly hysterical ewe is waiting. The reunion is loud, undignified, and brief. You all look like you lost a fight with the weather; the ewe does not seem to care in the slightest.',
+      choices: [
+        {
+          id: 'home',
+          text: 'Limp home, soggy but victorious',
+          success: {
+            text: 'Wet, scratched, and thoroughly bedraggled — but the lamb is home, and that is the whole of the job. You will dry out. You always do.',
+            items: [{ id: 'plant-fiber', qty: 2 }],
+            cubes: 25,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'finale-flock': {
+      id: 'finale-flock',
+      stage: 3,
+      text: 'You bring not one lamb but an entire flock back over the last rise, where a frankly hysterical ewe — and a frankly astonished shepherd — are waiting. An entire flock, reunited, by you. The shepherd will tell this story wrong for years.',
+      choices: [
+        {
+          id: 'home',
+          text: 'Head home, a legend (inaccurately)',
+          success: {
+            text: 'The shepherd presses a proper reward on you and shakes every hoof twice. You head home rich in coin and richer in a story that will only grow in the telling.',
+            items: [
+              { id: 'plant-fiber', qty: 3 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            cubes: 50,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'finale-bank': {
+      id: 'finale-bank',
+      stage: 3,
+      text: 'You head home without the lamb, but not empty-handed — there is always something to forage on a slow walk back, and no shame in knowing a job was beyond the day.',
+      choices: [
+        {
+          id: 'home',
+          text: 'Amble home',
+          success: {
+            text: 'A modest day, honestly spent. Somewhere behind you a ewe will sort out her own affairs; she usually does.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            cubes: 8,
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
 export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   // Green Grass
   SUNNY_HOLLOW,
   HERB_HUNT,
   BRAMBLE_GATE,
   FROGMARCH_POND,
+  LOST_LAMB,
   HOLLOW_KEEPER,
   // Dusty Dunes
   BLEACHING_WASH,

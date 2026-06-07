@@ -479,7 +479,10 @@ Combat stops being an isolated practice mode: a region's interactive adventure c
 
 ### 9.4d Combat woven into the adventure pool (variety pass)
 
-The pools grew from boss-only-combat to a **deliberate cozy-dominant mix**, so combat shows up in regular adventures — not only the climax — while the cozy loop stays the default. **12 stories across 3 regions** (Green Grass 5, Dusty Dunes 4, Weird Woods 3):
+The pools grew from boss-only-combat to a **deliberate cozy-dominant mix**, so combat shows up in regular adventures — not only the climax — while the cozy loop stays the default. **13 stories across 3 regions** (Green Grass 6, Dusty Dunes 4, Weird Woods 3):
+
+> **"The Lost Lamb" (Green Grass, no combat) is the depth-of-decision showcase (§9.3).** It proves the scene-tree engine already expresses *real* branching + cross-scene consequence with zero engine changes: the opening fork reaches three genuinely different middles — the **Creek** (Swim/Befriend), the **Bramble-Hollow** (Force/Knowledge), and a secret **Openness-gated Fence-Line** (Use-Tool) — that don't funnel back. Early outcomes echo late, all via the herb-hunt feed-forward mechanism (route to a consequence-specific variant): calm- vs tense-arrival → `creek-calm`/`creek-tense` (Befriend DC 11 vs 14); a Winded climb-failure → `hollow`/`hollow-winded` (checks +2); the lamb's state + carried marsh-sage → which of five `finale-*` you land on (flavor + reward: bonded 35 ⬡, clean/soggy 25, full-flock 50, bank 8). Worst case is a soggy party + carried fatigue, never a loss. Content-integrity tests assert all three branches (incl. the gated fence) are reachable and the ending rewards vary correctly.
+
 
 - **Ratio (by how combat appears):** **5 pure-cozy** (no fight) · **2 cozy + an *optional* fight** (a fully avoidable skirmish branch) · **2 combat-forward** (a short story whose climax is a non-boss skirmish) · **3 boss** (the grand terminal climax). So **7 / 12 are cozy-or-avoidable** and a player can clear ~9/12 with no forced fight — combat stays earned and special.
 - **Enemy variety exercises the whole roster** — no class is the universal answer. Non-boss fights span all four: a Bramble-Tangle (Knight), a Snappish Gander (Cleric), a Thistle-Whirl (Wizard), a Mossback Tortoise (Rogue); bosses add Cleric/Knight/Wizard. Different stories demand different classes.

@@ -14,6 +14,8 @@ import {
   CARE_CHECK_BONUS,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
+  JOB_DC,
+  JOB_SEASONED_DC_BONUS,
   SKILL_KEYS,
   STARTING_CUBES,
   STAT_KEYS,
@@ -55,6 +57,7 @@ import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { grantItems } from '../src/services/inventory.js';
+import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
 import {
@@ -731,6 +734,64 @@ async function main(): Promise<void> {
   }>();
   const reading = worked.skills.reading ?? { level: 0, xp: 0 };
   check('the worker gained Reading progress', reading.level + reading.xp > 0);
+
+  // jobs ↔ adventures (§9.3): a Seasoned adventurer works better -----------------------------
+  // Pure: the job DC is eased once a horse is Seasoned (≥ threshold), and not one adventure before.
+  eq(
+    'a Seasoned adventurer has an easier job check',
+    jobDc(ADVENTURE_MARK_THRESHOLD),
+    JOB_DC - JOB_SEASONED_DC_BONUS,
+  );
+  eq('an un-seasoned horse uses the base job DC', jobDc(0), JOB_DC);
+  eq(
+    'one adventure short of Seasoned → still the base DC',
+    jobDc(ADVENTURE_MARK_THRESHOLD - 1),
+    JOB_DC,
+  );
+
+  // A seed whose job roll FAILS at the base DC but CLEARS the eased DC — so the only thing that
+  // flips the outcome is the Seasoned mark.
+  let bandSeed = -1;
+  for (let s = 1; s < 600 && bandSeed < 0; s++) {
+    const base = skillCheck(10, 0, 10, JOB_DC, mulberry32(s)).success;
+    const eased = skillCheck(10, 0, 10, JOB_DC - JOB_SEASONED_DC_BONUS, mulberry32(s)).success;
+    if (!base && eased) bandSeed = s;
+  }
+  check('found a seed where the Seasoned bonus flips a job check', bandSeed >= 0);
+
+  // Each worker is the ONLY job in its own fresh herd → it rolls the seed's first value, so the
+  // run is deterministic and the two differ only by the mark.
+  const jobOnlyHerd = async (uname: string, adventures: number): Promise<number> => {
+    const reg = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: uname, password: 'jobtesthorse' },
+    });
+    const hId = reg.json<{ herd: { id: string } }>().herd.id;
+    const w = await mintHorse(db, {
+      herdId: hId,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      luck: 10,
+    });
+    await db.update(horses).set({ adventures }).where(drizzleEq(horses.id, w.id));
+    await db.insert(jobAssignments).values({
+      horseId: w.id,
+      herdId: hId,
+      structureType: 'library',
+      skill: 'reading',
+      stat: 'int',
+    });
+    return resolveJobsForDay(db, hId, mulberry32(bandSeed));
+  };
+  const seasonedCubes = await jobOnlyHerd('jobseasoned', ADVENTURE_MARK_THRESHOLD);
+  const homebodyCubes = await jobOnlyHerd('jobhomebody', 0);
+  check(
+    'a Seasoned worker out-earns an identical un-seasoned one on the same job roll',
+    seasonedCubes > homebodyCubes && homebodyCubes > 0,
+  );
 
   // --- Phase 8b: adventures & the Tavern ---
   const advRun = await inject({

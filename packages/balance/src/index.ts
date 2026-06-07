@@ -140,6 +140,14 @@ export const SKILL_STAT: Record<SkillKey, StatKey> = {
 export const JOB_DC = 12;
 export const JOB_CUBES_BASE = 10;
 export const JOB_XP_BASE = 20;
+/**
+ * Seasoned adventurers work better (§9.3, jobs↔adventures): a horse that has earned the cosmetic
+ * "Seasoned Adventurer" mark (adventures ≥ ADVENTURE_MARK_THRESHOLD) brings worldly experience to
+ * its day job — a small DC reduction on its daily job check, so it succeeds (and crits) a little
+ * more often. Buff-only (cozy — no penalty for a homebody), and the first real mechanical payoff
+ * for the mark, which until now was pure flavor. Adventuring now makes a horse a better worker.
+ */
+export const JOB_SEASONED_DC_BONUS = 2;
 /** XP needed to go from level L to L+1 = SKILL_XP_PER_LEVEL × (L + 1). */
 export const SKILL_XP_PER_LEVEL = 100;
 

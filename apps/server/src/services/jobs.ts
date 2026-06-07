@@ -1,5 +1,13 @@
 import { eq, sql } from 'drizzle-orm';
-import { JOB_CUBES_BASE, JOB_DC, JOB_XP_BASE, type SkillKey, type StatKey } from '@blorse/balance';
+import {
+  ADVENTURE_MARK_THRESHOLD,
+  JOB_CUBES_BASE,
+  JOB_DC,
+  JOB_SEASONED_DC_BONUS,
+  JOB_XP_BASE,
+  type SkillKey,
+  type StatKey,
+} from '@blorse/balance';
 import { STRUCTURE_BY_ID } from '../content/structures.js';
 import type { DB } from '../db/client.js';
 import { herds, horses, jobAssignments, structures } from '../db/schema.js';
@@ -59,6 +67,15 @@ export async function unassignJob(db: DB, horseId: string): Promise<void> {
   await db.delete(jobAssignments).where(eq(jobAssignments.horseId, horseId));
 }
 
+/**
+ * A horse's job-check DC, eased for **Seasoned** adventurers (§9.3, jobs↔adventures): once a horse
+ * has cleared `ADVENTURE_MARK_THRESHOLD` adventures it brings that experience to work and rolls
+ * against a slightly lower DC. Pure + buff-only (a homebody just uses the base `JOB_DC`).
+ */
+export function jobDc(adventures: number): number {
+  return JOB_DC - (adventures >= ADVENTURE_MARK_THRESHOLD ? JOB_SEASONED_DC_BONUS : 0);
+}
+
 export async function getJob(db: DB, horseId: string) {
   return (
     (await db.query.jobAssignments.findFirst({ where: eq(jobAssignments.horseId, horseId) })) ??
@@ -89,7 +106,8 @@ export async function resolveJobsForDay(
     const stat = job.stat as StatKey;
     const level = skills[skill]?.level ?? 0;
 
-    const check = skillCheck(stats[stat] ?? 10, level, h.luck, JOB_DC, rng);
+    // Seasoned adventurers work with a steadier hand — the mark's first real payoff (§9.3).
+    const check = skillCheck(stats[stat] ?? 10, level, h.luck, jobDc(h.adventures), rng);
     const earned = check.success
       ? JOB_CUBES_BASE + level * 2 + (check.crit ? JOB_CUBES_BASE : 0)
       : Math.floor(JOB_CUBES_BASE / 2);

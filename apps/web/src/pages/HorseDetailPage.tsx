@@ -246,14 +246,22 @@ export function HorseDetailPage(): ReactElement {
         <>
           <h2 className="section-h">Job</h2>
           {job ? (
-            <div className="row-actions">
-              <span>
-                Working the {pretty(job.structureType)} ({job.skill}) — earns Cubes each day.
-              </span>
-              <button disabled={jobBusy} onClick={() => void unassign()}>
-                Unassign
-              </button>
-            </div>
+            <>
+              <div className="row-actions">
+                <span>
+                  Working the {pretty(job.structureType)} ({job.skill}) — earns Cubes each day.
+                </span>
+                <button disabled={jobBusy} onClick={() => void unassign()}>
+                  Unassign
+                </button>
+              </div>
+              {horse.experienced && (
+                <p className="muted">
+                  🧭 Seasoned — its travels steady its hand at work, so its job checks come a little
+                  easier (it earns a bit more here).
+                </p>
+              )}
+            </>
           ) : jobStructures.length === 0 ? (
             <p className="muted">Build a Workshop structure with a job first.</p>
           ) : (

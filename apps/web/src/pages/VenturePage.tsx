@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import type { BattleView } from '../api/combat.js';
 import {
@@ -22,9 +23,10 @@ import { pretty } from '../util/format.js';
 
 type StoryEnding = Extract<ChooseStoryResult, { ended: true }>;
 
-/** The World map (§9.3/§9.4) — grindable expeditions: interactive stories, skirmishes, and the
- *  region bosses. Distinct from the once-daily gather on the Pasture (that's the cozy chore). */
-export function WorldPage(): ReactElement {
+/** Venture Out (§9.3/§9.4) — the real expeditions: region picker → expedition → party → set out,
+ *  interactive stories, skirmishes, and the region bosses. One of the two Adventure-hub paths (the
+ *  other is the no-stakes Sparring Ring). Distinct from the once-daily gather on the Pasture. */
+export function VenturePage(): ReactElement {
   const { herd, refresh } = useSession();
   const [regions, setRegions] = useState<RegionView[]>([]);
   const [horses, setHorses] = useState<Horse[]>([]);
@@ -169,7 +171,7 @@ export function WorldPage(): ReactElement {
             setBossBattle(null);
             closeStory();
           }}
-          onCloseLabel="Back to the World"
+          onCloseLabel="Back to Venturing"
           title={`⚔ ${foe?.name ?? 'Boss'}`}
         />
       </div>
@@ -178,10 +180,14 @@ export function WorldPage(): ReactElement {
 
   return (
     <div className="explore">
-      <h1>🗺 World</h1>
+      <Link to="/adventure" className="back-link">
+        ← Adventure
+      </Link>
+      <h1>🗺 Venture Out</h1>
       <p className="muted">
-        Head out on an expedition — cozy stories, skirmishes, and region bosses. Grind these as much
-        as you like; the daily gather (your raw materials) lives back on the Pasture.
+        Head to the three regions for real expeditions — cozy stories, skirmishes, and the region
+        bosses, with stakes and rewards. Grind these as much as you like; the daily gather (your raw
+        materials) lives back on the Pasture.
       </p>
       <label className="field">
         <span>Region</span>

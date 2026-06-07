@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { setHorseClass, startBattle, type BattleView, type HorseClass } from '../api/combat.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
@@ -107,6 +108,9 @@ export function SparPage(): ReactElement {
 
   return (
     <div className="spar">
+      <Link to="/adventure" className="back-link">
+        ← Adventure
+      </Link>
       <h1>⚔ Sparring Ring</h1>
       <p className="muted">
         Pick a party (1–4), give each a <strong>class</strong>, and choose a foe. A class fixes a

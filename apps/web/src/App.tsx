@@ -1,6 +1,7 @@
 import { type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.js';
+import { AdventurePage } from './pages/AdventurePage.js';
 import { BreedPage } from './pages/BreedPage.js';
 import { DebugPage } from './pages/DebugPage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
@@ -15,7 +16,7 @@ import { HerdPage } from './pages/HerdPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { SparPage } from './pages/SparPage.js';
-import { WorldPage } from './pages/WorldPage.js';
+import { VenturePage } from './pages/VenturePage.js';
 import { useSession } from './session.js';
 
 /** Gate the authed area on a session; bounce to /login otherwise. */
@@ -43,9 +44,13 @@ export function App(): ReactElement {
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
         <Route path="/tavern" element={<TavernPage />} />
-        <Route path="/world" element={<WorldPage />} />
-        <Route path="/explore" element={<Navigate to="/world" replace />} />
-        <Route path="/spar" element={<SparPage />} />
+        <Route path="/adventure" element={<AdventurePage />} />
+        <Route path="/adventure/venture" element={<VenturePage />} />
+        <Route path="/adventure/spar" element={<SparPage />} />
+        {/* Old routes redirect into the Adventure hub so existing links never break. */}
+        <Route path="/world" element={<Navigate to="/adventure/venture" replace />} />
+        <Route path="/explore" element={<Navigate to="/adventure/venture" replace />} />
+        <Route path="/spar" element={<Navigate to="/adventure/spar" replace />} />
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/herd" element={<HerdPage />} />

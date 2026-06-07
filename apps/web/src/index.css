@@ -121,6 +121,51 @@ a {
   margin-bottom: 1rem;
 }
 
+/* ── Adventure hub (§9 navigation) ── */
+.back-link {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.back-link:hover {
+  text-decoration: underline;
+}
+.hub-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.hub-card {
+  flex: 1 1 280px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+.hub-card:hover {
+  transform: translateY(-2px);
+  background: var(--sage);
+}
+.hub-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+.hub-card h2 {
+  margin: 0;
+}
+.hub-card p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+.hub-go {
+  font-weight: 700;
+}
+
 .field {
   display: flex;
   flex-direction: column;

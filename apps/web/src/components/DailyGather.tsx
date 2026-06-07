@@ -12,7 +12,7 @@ import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
 /** The daily chore (§7) — passive gathering, capped at once per (adult) horse per day. Distinct from
- *  the grindable adventuring on the World map: a bigger stable simply gathers more here, once a day. */
+ *  the grindable adventuring under the Adventure hub: a bigger stable simply gathers more, once a day. */
 export function DailyGather(): ReactElement {
   const { refresh } = useSession();
   const [regions, setRegions] = useState<RegionView[]>([]);
@@ -66,7 +66,7 @@ export function DailyGather(): ReactElement {
       <h2 className="section-h">🧺 Daily Gather</h2>
       <p className="muted">
         Send your stable out to forage — <strong>once per horse per day</strong>. A bigger herd
-        gathers more. (Grindable expeditions live on the <strong>World</strong> map.)
+        gathers more. (Grindable expeditions live under <strong>Adventure</strong>.)
       </p>
       <div className="row-actions">
         <select value={regionId} onChange={(e) => setRegionId(e.target.value)} disabled={busy}>

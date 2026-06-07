@@ -222,20 +222,36 @@ export const CLUB_MIN_MEMBERS = 2;
 // The four **approaches** — the damage "types" — map 1:1 onto existing stats + job-skills, so a
 // horse's specialization *is* its battle role (the weakness puzzle reads them; the minimum's
 // generic Attack just uses a horse's best approach stat).
-export type Approach = 'confront' | 'outwit' | 'soothe' | 'endure';
-export const APPROACHES: Approach[] = ['confront', 'outwit', 'soothe', 'endure'];
+export type Approach = 'confront' | 'outwit' | 'skirmish' | 'soothe';
+export const APPROACHES: Approach[] = ['confront', 'outwit', 'skirmish', 'soothe'];
 export const APPROACH_STAT: Record<Approach, StatKey> = {
-  confront: 'str', // meet it head-on
-  outwit: 'int', // feint, exploit, read it
-  soothe: 'cha', // calm it, charm it down
-  endure: 'con', // outlast, weather it
+  confront: 'str', // the Knight — meet it head-on
+  outwit: 'int', // the Wizard — feint, exploit, read it
+  skirmish: 'dex', // the Rogue — quick, nimble, precise
+  soothe: 'cha', // the Cleric — social stat; Soothe *damage* reads kindness (see KINDNESS_STAT_DIV)
 };
 export const APPROACH_SKILL: Record<Approach, SkillKey> = {
   confront: 'smithing', // the Forge
   outwit: 'reading', // the Library
+  skirmish: 'athletics', // the Track (agility)
   soothe: 'performance', // the Stage
-  endure: 'athletics', // the Track
 };
+
+// ── §9.4b Classes — an identity + themed-ability layer OVER the approaches, NOT a separate track.
+// A horse picks a class (freely re-assignable); each maps to a signature approach, but the horse's
+// existing STATS decide how good it is (a high-STR horse = a strong Knight; a kind horse = a strong
+// Cleric). So classes extend our emergent specialization — they don't replace it. No class XP,
+// multiclassing, or gear gating. The class is how party composition answers an enemy's weakness.
+export type HorseClass = 'knight' | 'wizard' | 'rogue' | 'cleric';
+export const HORSE_CLASSES: HorseClass[] = ['knight', 'wizard', 'rogue', 'cleric'];
+export const CLASS_APPROACH: Record<HorseClass, Approach> = {
+  knight: 'confront', // Strength
+  wizard: 'outwit', // Cleverness
+  rogue: 'skirmish', // Dexterity / evasion
+  cleric: 'soothe', // Benevolence (kindness) + the Mend heal
+};
+/** The Cleric's Mend restores this + the Cleric's kindness to an ally (kind Clerics heal harder). */
+export const CLERIC_MEND_BASE = 14;
 
 export const HP_BASE = 20; // every combatant's floor HP
 export const HP_PER_CON = 3; // + this per point of Constitution (horses); enemies author maxHp

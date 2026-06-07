@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { Approach } from '@blorse/balance';
+import type { Approach, HorseClass } from '@blorse/balance';
 import type { Genotype } from '@blorse/genetics';
 import type { GlitchKind, LifeStage } from '@blorse/render-core';
 
@@ -21,6 +21,7 @@ export const userRole = pgEnum('user_role', ['player', 'mod', 'admin']);
 export const lifeStageEnum = pgEnum('life_stage', ['foal', 'adult']);
 export const glitchKindEnum = pgEnum('glitch_kind', ['inverted', 'screen', 'shade']);
 export const horseOrigin = pgEnum('horse_origin', ['founder', 'wild', 'bred']);
+export const horseClassEnum = pgEnum('horse_class', ['knight', 'wizard', 'rogue', 'cleric']);
 export const questStatus = pgEnum('quest_status', ['active', 'completed']);
 export const listingStatus = pgEnum('listing_status', ['active', 'sold', 'cancelled']);
 export const tradeStatus = pgEnum('trade_status', ['pending', 'accepted', 'declined', 'cancelled']);
@@ -86,6 +87,8 @@ export const horses = pgTable(
     accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
     /** Completed interactive adventures (§9.3) — drives the cosmetic "Seasoned" mark. Flavor only. */
     adventures: integer('adventures').notNull().default(0),
+    /** Combat class (§9.4b) — identity + signature approach; null = unclassed. Freely re-assignable. */
+    class: horseClassEnum('class').$type<HorseClass>(),
     /** Big Five (OCEAN) temperament (§8.1) — set at mint, near-immutable. */
     personality: jsonb('personality').$type<Record<string, number>>().notNull().default({}),
     // Tavern (§10): set when an unrecruited wild horse walks to the shared pool.
@@ -220,6 +223,8 @@ export interface Combatant {
   luck: number;
   /** Benevolence (Agreeableness 0–100) — drives the Soothe approach (§9.4a). Party only. */
   kindness?: number;
+  /** Combat class (§9.4b) — fixes this horse's attack to its signature approach. Party only. */
+  class?: HorseClass;
   statuses: CombatStatus[];
   defending: boolean; // set by Defend, cleared at the start of this combatant's next turn
   enemyId?: string; // foe only — its EnemyDef id

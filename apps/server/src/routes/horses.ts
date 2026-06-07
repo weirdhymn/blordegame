@@ -35,6 +35,8 @@ export function publicHorse(h: HorseRow) {
     careCount: h.careCount,
     beloved: h.careCount >= CARE_BELOVED_THRESHOLD,
     caredToday: h.lastCaredAt ? gameDay(h.lastCaredAt.getTime()) === gameDay(Date.now()) : false,
+    /** Combat class (§9.4b) — identity + signature approach; null = unclassed. */
+    class: h.class,
     // `luck` is intentionally omitted — it is hidden (§9.1).
   };
 }

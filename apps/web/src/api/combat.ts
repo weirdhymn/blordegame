@@ -1,6 +1,7 @@
 import { api } from './client.js';
 
-export type Approach = 'confront' | 'outwit' | 'soothe' | 'endure';
+export type Approach = 'confront' | 'outwit' | 'skirmish' | 'soothe';
+export type HorseClass = 'knight' | 'wizard' | 'rogue' | 'cleric';
 
 export interface CombatantView {
   id: string;
@@ -14,6 +15,8 @@ export interface CombatantView {
   tell?: string;
   /** Party only — this horse's attack value per approach. */
   approaches?: Record<Approach, number>;
+  /** Party only — combat class (§9.4b). */
+  class?: HorseClass;
 }
 
 export interface BattleView {
@@ -32,6 +35,7 @@ export interface BattleView {
 
 export type BattleAction =
   | { type: 'attack'; targetId: string; approach?: Approach }
+  | { type: 'mend'; targetId: string }
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };
@@ -41,6 +45,13 @@ export const startBattle = (
   party: string[],
 ): Promise<{ battleId: string; battle: BattleView }> =>
   api.post<{ battleId: string; battle: BattleView }>('/battle/start', { enemies, party });
+
+/** Assign (or clear, with null) a horse's combat class — freely re-assignable (§9.4b). */
+export const setHorseClass = (
+  horseId: string,
+  cls: HorseClass | null,
+): Promise<{ ok: boolean; class: HorseClass | null }> =>
+  api.post<{ ok: boolean; class: HorseClass | null }>(`/horses/${horseId}/class`, { class: cls });
 
 export const actInBattle = (
   battleId: string,

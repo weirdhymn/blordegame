@@ -1,10 +1,16 @@
-import { APPROACHES, type Approach } from '@blorse/balance';
+import { APPROACHES, type Approach, HORSE_CLASSES, type HorseClass } from '@blorse/balance';
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
-import { actInBattle, getBattleView, startBattle, type BattleAction } from '../services/combat.js';
+import {
+  actInBattle,
+  getBattleView,
+  setHorseClass,
+  startBattle,
+  type BattleAction,
+} from '../services/combat.js';
 
 async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
   const user = await resolveSessionUser(db, cookie);
@@ -27,6 +33,8 @@ function parseAction(body: unknown): BattleAction | null {
         : undefined;
       return { type: 'attack', targetId: b.targetId, approach };
     }
+    case 'mend':
+      return b.targetId ? { type: 'mend', targetId: b.targetId } : null;
     case 'item':
       return b.targetId && b.itemId
         ? { type: 'item', itemId: b.itemId, targetId: b.targetId }
@@ -80,5 +88,20 @@ export function registerCombatRoutes(app: FastifyInstance, db: DB): void {
     const view = await getBattleView(db, herd.id, id);
     if (!view) return reply.code(404).send({ error: 'not found' });
     return reply.send({ battle: view });
+  });
+
+  // Assign (or clear) a horse's combat class — freely re-assignable (§9.4b).
+  app.post('/horses/:id/class', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    const raw = (req.body ?? {}) as { class?: string | null };
+    let cls: HorseClass | null;
+    if (raw.class == null) cls = null;
+    else if (HORSE_CLASSES.includes(raw.class as HorseClass)) cls = raw.class as HorseClass;
+    else return reply.code(400).send({ error: 'unknown class', code: 'bad_class' });
+    const r = await setHorseClass(db, herd.id, id, cls);
+    if (!r.ok) return reply.code(404).send({ error: 'not found' });
+    return reply.send({ ok: true, class: cls });
   });
 }

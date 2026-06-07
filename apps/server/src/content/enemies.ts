@@ -105,6 +105,29 @@ export const ENEMIES: EnemyDef[] = [
     ],
     reward: { cubes: 22, items: [{ id: 'plant-fiber', qty: 1 }] },
   },
+  {
+    id: 'mossback-tortoise',
+    name: 'a Mossback Tortoise',
+    maxHp: 52,
+    power: 10,
+    guard: 12,
+    speed: 6,
+    weakness: 'skirmish', // too slow to stop a nimble Rogue finding the gaps in its shell
+    resist: 'confront', // and far too armoured to simply bash head-on
+    intro:
+      'Something the size of a coffee table heaves itself into the path: an ancient tortoise, its shell furred with moss, regarding you with the unbothered contempt of a creature that has outlived every problem it has ever had.',
+    tell: 'Slow as continental drift and armoured like a vault — a head-on charge would only bruise your pride. But it cannot turn for toffee; quick feet could dance circles round it.',
+    moves: [
+      {
+        id: 'shell-slam',
+        kind: 'strike',
+        weight: 3,
+        text: 'It heaves up and drops its whole shell at you.',
+      },
+      { id: 'snap', kind: 'strike', weight: 1, text: 'A surprisingly fast snap of its beak.' },
+    ],
+    reward: { cubes: 28, items: [{ id: 'plant-fiber', qty: 1 }] },
+  },
 ];
 
 export const ENEMY_BY_ID = new Map(ENEMIES.map((e) => [e.id, e]));

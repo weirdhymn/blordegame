@@ -12,10 +12,12 @@ import {
   BONDED_THRESHOLD,
   CARE_BELOVED_THRESHOLD,
   CARE_CHECK_BONUS,
+  CLASS_APPROACH,
   COMBAT_RESIST_MULT,
   COMBAT_WEAKNESS_MULT,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
+  type HorseClass,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
   POTION_HEAL_HP,
@@ -1667,8 +1669,10 @@ async function main(): Promise<void> {
     str?: number;
     dex?: number;
     con?: number;
+    int?: number;
     luck?: number;
     a?: number; // Agreeableness (Benevolence) — drives Soothe
+    cls?: HorseClass; // combat class
     name?: string;
   }): Promise<string> => {
     const h = await mintHorse(db, {
@@ -1681,13 +1685,15 @@ async function main(): Promise<void> {
         str: over.str ?? 10,
         dex: over.dex ?? 10,
         con: over.con ?? 10,
-        int: 10,
+        int: over.int ?? 10,
         wis: 10,
         cha: 10,
       },
       luck: over.luck ?? 10,
       personality: over.a !== undefined ? { o: 50, c: 50, e: 50, a: over.a, n: 50 } : undefined,
     });
+    if (over.cls)
+      await db.update(horses).set({ class: over.cls }).where(drizzleEq(horses.id, h.id));
     return h.id;
   };
   // Drive an active battle to a terminal state (default strategy: bash the first standing foe).
@@ -1874,7 +1880,7 @@ async function main(): Promise<void> {
 
   // One controlled strike, returning the damage dealt to the (lone) foe.
   const oneStrike = async (
-    approach: 'soothe' | 'endure' | 'confront',
+    approach: 'confront' | 'outwit' | 'skirmish' | 'soothe',
     seed: number,
     horseId: string,
   ): Promise<number> => {
@@ -1890,14 +1896,14 @@ async function main(): Promise<void> {
     return g.maxHp - g.hp;
   };
 
-  // Same kind horse, same foe, same seed — Soothe (the gander's weakness) vs a neutral Endure differ
-  // ONLY by the weakness multiplier (con 16 == the kindness from A 80, so the base roll is identical).
-  const gentle = await combatHorse({ con: 16, a: 80, dex: 8, name: 'Gentle' });
+  // Same kind horse, same foe, same seed — Soothe (the gander's weakness) vs a neutral Skirmish differ
+  // ONLY by the weakness multiplier (DEX 16 == the kindness from A 80, so the base roll is identical).
+  const gentle = await combatHorse({ dex: 16, a: 80, name: 'Gentle' });
   const sootheDmg = await oneStrike('soothe', 77, gentle);
-  const endureDmg = await oneStrike('endure', 77, gentle);
+  const neutralDmg = await oneStrike('skirmish', 77, gentle);
   check(
     'Soothe on a Soothe-weak foe deals the weakness multiplier over a neutral approach',
-    sootheDmg === Math.round(endureDmg * COMBAT_WEAKNESS_MULT) && sootheDmg > endureDmg,
+    sootheDmg === Math.round(neutralDmg * COMBAT_WEAKNESS_MULT) && sootheDmg > neutralDmg,
   );
 
   // The headline: a Benevolent horse (kindness 18) Soothing a Soothe-weak / Confront-resistant foe
@@ -1917,6 +1923,105 @@ async function main(): Promise<void> {
     'a Benevolent horse out-soothes a bruiser who confronts a Soothe-weak, Confront-resistant foe',
     benevSoothe > bruiserConfront,
   );
+
+  // classes (§9.4b): an identity + ability layer over the approaches. class→approach mapping…
+  eq('Knight → Confront', CLASS_APPROACH.knight, 'confront');
+  eq('Wizard → Outwit', CLASS_APPROACH.wizard, 'outwit');
+  eq('Rogue → Skirmish (Dexterity)', CLASS_APPROACH.rogue, 'skirmish');
+  eq('Cleric → Soothe (kindness)', CLASS_APPROACH.cleric, 'soothe');
+
+  // A classed horse's strike — the engine fixes the approach from its class (no approach arg).
+  const classStrike = async (horseId: string, foe: string, seed: number): Promise<number> => {
+    const s = await startBattle(db, herdId, [foe], [horseId], { seed });
+    if (!s.ok) return -1;
+    const r = await actInBattle(db, herdId, s.battleId, { type: 'attack', targetId: 'foe0' });
+    if (!r.ok) return -1;
+    const g = r.view.combatants.find((c) => c.side === 'foe') as BattleView['combatants'][number];
+    return g.maxHp - g.hp;
+  };
+
+  // Stat-scaling per class: a strong-STR Knight out-cleaves a weak-STR one (same seed, neutral foe).
+  const strongKnight = await combatHorse({
+    str: 18,
+    dex: 16,
+    luck: 16,
+    cls: 'knight',
+    name: 'Sir Strong',
+  });
+  const weakKnight = await combatHorse({
+    str: 8,
+    dex: 16,
+    luck: 16,
+    cls: 'knight',
+    name: 'Sir Weak',
+  });
+  check(
+    "a class scales with the horse's stat — a strong Knight out-cleaves a weak one",
+    (await classStrike(strongKnight, 'thistle-whirl', 55)) >
+      (await classStrike(weakKnight, 'thistle-whirl', 55)),
+  );
+
+  // Class-vs-weakness headline: a Cleric out-fights a Knight against a Soothe-weak / Confront-resistant
+  // foe (the Cleric's Soothe ×1.5 vs the Knight's resisted Confront ×0.5) — matching class to foe wins.
+  const clericH = await combatHorse({
+    a: 90,
+    dex: 14,
+    luck: 16,
+    cls: 'cleric',
+    name: 'Sister Kind',
+  });
+  const knightH = await combatHorse({
+    str: 18,
+    dex: 14,
+    luck: 16,
+    cls: 'knight',
+    name: 'Sir Bruiser',
+  });
+  check(
+    'a Cleric out-fights a Knight against a Soothe-weak, Confront-resistant foe',
+    (await classStrike(clericH, 'snappish-gander', 31)) >
+      (await classStrike(knightH, 'snappish-gander', 31)),
+  );
+
+  // The Mend ability is the Cleric's alone — a Knight cannot cast it.
+  const noMend = await combatHorse({ str: 18, dex: 16, cls: 'knight', name: 'Sir Nomend' });
+  const nmStart = await startBattle(db, herdId, ['bramble-tangle'], [noMend], { seed: 4 });
+  if (nmStart.ok && nmStart.view.isPartyTurn) {
+    const r = await actInBattle(db, herdId, nmStart.battleId, { type: 'mend', targetId: noMend });
+    check("only a Cleric can Mend (a Knight can't)", !r.ok && r.code === 'bad_action');
+  }
+
+  // …and a Cleric's Mend actually heals a wounded ally (kindness-scaled). Take hits until clearly
+  // wounded (so +Mend isn't clipped), then Mend self and confirm the net gain.
+  const healer = await combatHorse({ a: 90, con: 12, dex: 6, cls: 'cleric', name: 'Healer' });
+  const mendStart = await startBattle(db, herdId, ['bramble-tangle'], [healer], { seed: 6 });
+  if (mendStart.ok) {
+    const me = (vw: BattleView): BattleView['combatants'][number] =>
+      vw.combatants.find((c) => c.id === healer) as BattleView['combatants'][number];
+    const mendHeal = 14 + kindnessStat(90); // CLERIC_MEND_BASE + kindness
+    let v: BattleView = mendStart.view;
+    for (let i = 0; i < 20 && v.status === 'active' && v.isPartyTurn; i++) {
+      const h = me(v);
+      if (h.ko || h.hp <= h.maxHp - mendHeal) break;
+      const r = await actInBattle(db, herdId, mendStart.battleId, {
+        type: 'attack',
+        targetId: 'foe0',
+      });
+      if (!r.ok) break;
+      v = r.view;
+    }
+    const before = me(v);
+    const canMend =
+      v.status === 'active' && v.isPartyTurn && !before.ko && before.hp <= before.maxHp - mendHeal;
+    const r = canMend
+      ? await actInBattle(db, herdId, mendStart.battleId, { type: 'mend', targetId: healer })
+      : null;
+    const after = r && r.ok ? me(r.view) : null;
+    check(
+      "a Cleric's Mend heals a wounded ally (kindness-scaled)",
+      !!r && r.ok && !!after && after.hp > before.hp,
+    );
+  }
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

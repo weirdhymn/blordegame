@@ -6,6 +6,9 @@ import {
   APPROACH_SKILL,
   APPROACH_STAT,
   APPROACHES,
+  CLASS_APPROACH,
+  CLERIC_MEND_BASE,
+  type HorseClass,
   COMBAT_DEFEND_MULT,
   COMBAT_DMG_BASE,
   COMBAT_DMG_CRIT_BONUS,
@@ -29,6 +32,7 @@ import type { DB } from '../db/client.js';
 import {
   battles,
   herds,
+  horses,
   type BattleSnapshot,
   type Combatant,
   type HorseRow,
@@ -44,10 +48,12 @@ import { skillCheck } from './stats.js';
 // and survives a restart. Cozy: 0 HP = "spooked" (out for the fight, fine after); a full wipe is a
 // retreat with reduced rewards — never a loss. HP is battle-scoped (fresh full HP every fight).
 //
-// Attack picks one of the four **approaches** (Confront/Outwit/Soothe/Endure) and earns the foe's
-// weakness ×WEAKNESS / resist ×RESIST multiplier — the tactical heart. Soothe keys off **kindness**
-// (Agreeableness), giving Benevolent horses a real role. Plus Item (Healing Potion), Defend, Flee,
-// two-sided HP, KO + retreat. Deferred: statuses, harmony, the Skill menu, the run→battle handoff.
+// A horse's **class** (Knight/Wizard/Rogue/Cleric, §9.4b) fixes its attack to a signature
+// **approach** (Confront/Outwit/Skirmish/Soothe) and earns the foe's weakness ×WEAKNESS / resist
+// ×RESIST multiplier — the tactical heart. A class's effectiveness scales with the horse's STATS
+// (a high-STR Knight hits hard); Soothe keys off **kindness** (Agreeableness), so a Cleric gives
+// Benevolent horses a real role (+ the Mend heal). Plus Item, Defend, Flee, two-sided HP, KO +
+// retreat. Deferred: statuses, harmony, the rest of each class's ability kit, the run→battle handoff.
 
 const POTION_ID = 'healing-potion';
 const MAX_LOG = 60;
@@ -66,6 +72,7 @@ function rngAt(seed: number, round: number, turnIndex: number, salt: number): ()
 
 export type BattleAction =
   | { type: 'attack'; targetId: string; approach?: Approach }
+  | { type: 'mend'; targetId: string } // Cleric class ability — heal/revive an ally
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };
@@ -91,6 +98,7 @@ function partyCombatant(h: HorseRow): Combatant {
     skills,
     luck: h.luck,
     kindness: (h.personality as Record<string, number>).a ?? 50, // Benevolence drives Soothe (§9.4a)
+    class: h.class ?? undefined, // combat class fixes its signature approach (§9.4b)
     statuses: [],
     defending: false,
   };
@@ -176,8 +184,22 @@ function bestApproach(c: Combatant): Approach {
 const APPROACH_VERB: Record<Approach, string> = {
   confront: 'charges',
   outwit: 'outfoxes',
+  skirmish: 'harries',
   soothe: 'gentles',
-  endure: 'wears down',
+};
+
+// Class-themed flavor for the combat log (§9.4b) — heroic structure, our wry voice.
+export const CLASS_LABEL: Record<HorseClass, string> = {
+  knight: 'Knight',
+  wizard: 'Wizard',
+  rogue: 'Rogue',
+  cleric: 'Cleric',
+};
+const CLASS_ATTACK_VERB: Record<HorseClass, string> = {
+  knight: 'cleaves into',
+  wizard: 'looses a hex at',
+  rogue: 'darts in at',
+  cleric: 'soothes',
 };
 
 function pushEvent(snap: BattleSnapshot, text: string, kind?: string): void {
@@ -274,17 +296,16 @@ function resolveEnemyTurn(snap: BattleSnapshot, foe: Combatant, seed: number): v
   const primary = targets[Math.floor(tRng() * targets.length)]!;
   const { dmg } = resolveStrike(foe, primary, rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT));
   const ko = applyDamage(primary, dmg);
-  pushEvent(snap, `${move.text} ${foe.name} hits ${primary.name} for ${dmg}.`, 'enemy');
-  if (ko)
-    pushEvent(snap, `${primary.name} is too spooked to go on — it'll be fine after a nap.`, 'ko');
+  pushEvent(snap, `${move.text} ${primary.name} takes ${dmg}.`, 'enemy');
+  if (ko) pushEvent(snap, `${primary.name} is spooked! (Out cold — back by supper.)`, 'ko');
 
   if (move.kind === 'sweep') {
     const second = targets.find((c) => c.id !== primary.id && !c.ko);
     if (second) {
       const splash = Math.ceil(dmg * 0.5);
       const ko2 = applyDamage(second, splash);
-      pushEvent(snap, `…and clips ${second.name} for ${splash}.`, 'enemy');
-      if (ko2) pushEvent(snap, `${second.name} is too spooked to go on.`, 'ko');
+      pushEvent(snap, `…catching ${second.name} for ${splash} too.`, 'enemy');
+      if (ko2) pushEvent(snap, `${second.name} is spooked! (Out cold — back by supper.)`, 'ko');
     }
   }
 }
@@ -330,31 +351,58 @@ function applyAct(
     const target = byId(snap, action.targetId);
     if (!target || target.side !== 'foe' || target.ko)
       return { outcome: 'active', error: 'bad_target' };
+    // A classed horse always attacks with its class's signature approach; unclassed → best stat.
+    const approach = cur.class ? CLASS_APPROACH[cur.class] : action.approach;
     const res = resolveStrike(
       cur,
       target,
       rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT),
-      action.approach,
+      approach,
     );
     applyDamage(target, res.dmg);
-    const verb = res.approach ? APPROACH_VERB[res.approach] : 'strikes';
-    const tag =
-      res.mult > 1
-        ? ' — a weak point! 💥'
-        : res.mult < 1
-          ? ' — it barely notices.'
-          : res.crit
-            ? ' — a clean hit!'
-            : '.';
-    pushEvent(
-      snap,
-      `${cur.name} ${verb} ${target.name} for ${res.dmg}${tag}`,
-      res.mult > 1 ? 'weak' : res.mult < 1 ? 'resist' : 'attack',
-    );
-    if (target.ko) pushEvent(snap, `${target.name} reels back, done for the day.`, 'ko');
+    const verb = cur.class
+      ? CLASS_ATTACK_VERB[cur.class]
+      : res.approach
+        ? APPROACH_VERB[res.approach]
+        : 'strikes';
+    let line: string;
+    let kind: string;
+    if (res.mult > 1) {
+      line = `${cur.name} ${verb} ${target.name} — ${res.dmg} damage! ★ A glaring weakness.`;
+      kind = 'weak';
+    } else if (res.mult < 1) {
+      line = `${cur.name} ${verb} ${target.name} — ${res.dmg} damage. ◦ Barely scratched.`;
+      kind = 'resist';
+    } else if (res.crit) {
+      line = `${cur.name} ${verb} ${target.name} — ${res.dmg} damage! A clean hit.`;
+      kind = 'attack';
+    } else {
+      line = `${cur.name} ${verb} ${target.name} — ${res.dmg} damage.`;
+      kind = 'attack';
+    }
+    pushEvent(snap, line, kind);
+    if (target.ko) pushEvent(snap, `${target.name} throws in the towel and shuffles off.`, 'ko');
+  } else if (action.type === 'mend') {
+    if (cur.class !== 'cleric') return { outcome: 'active', error: 'bad_action' };
+    const target = byId(snap, action.targetId);
+    if (!target || target.side !== 'party') return { outcome: 'active', error: 'bad_target' };
+    const heal = CLERIC_MEND_BASE + kindnessStat(cur.kindness ?? 50);
+    if (target.ko) {
+      target.ko = false;
+      target.hp = Math.min(target.maxHp, heal);
+      pushEvent(
+        snap,
+        `${cur.name} lays on hooves — ${target.name} staggers back to its feet (+${target.hp} HP).`,
+        'item',
+      );
+    } else {
+      const before = target.hp;
+      target.hp = Math.min(target.maxHp, target.hp + heal);
+      pushEvent(snap, `${cur.name} mends ${target.name} — +${target.hp - before} HP.`, 'item');
+    }
   } else if (action.type === 'defend') {
     cur.defending = true;
-    pushEvent(snap, `${cur.name} braces, ready to weather the next blow.`, 'defend');
+    pushEvent(snap, `${cur.name} raises its guard.`, 'defend');
   } else if (action.type === 'flee') {
     const check = skillCheck(
       cur.stats.dex ?? 10,
@@ -364,12 +412,16 @@ function applyAct(
       rngAt(seed, snap.round, snap.turnIndex, FLEE_SALT),
     );
     if (check.success) {
-      pushEvent(snap, `${cur.name} calls it — the party slips away clean.`, 'flee');
+      pushEvent(
+        snap,
+        `${cur.name} calls the retreat — the party makes a tactical withdrawal.`,
+        'flee',
+      );
       return { outcome: 'fled' };
     }
     pushEvent(
       snap,
-      `${cur.name} looks for an opening to break off, but the moment passes.`,
+      `${cur.name} looks for an opening to break off — the moment slips away.`,
       'flee',
     );
   } else if (action.type === 'item') {
@@ -378,11 +430,19 @@ function applyAct(
     if (target.ko) {
       target.ko = false;
       target.hp = Math.min(target.maxHp, POTION_REVIVE_HP);
-      pushEvent(snap, `A Healing Potion brings ${target.name} blinking back to its feet.`, 'item');
+      pushEvent(
+        snap,
+        `A Healing Potion hauls ${target.name} back to its hooves (+${target.hp} HP).`,
+        'item',
+      );
     } else {
       const before = target.hp;
       target.hp = Math.min(target.maxHp, target.hp + POTION_HEAL_HP);
-      pushEvent(snap, `A Healing Potion mends ${target.name} (+${target.hp - before} HP).`, 'item');
+      pushEvent(
+        snap,
+        `${target.name} quaffs a Healing Potion — +${target.hp - before} HP.`,
+        'item',
+      );
     }
   }
 
@@ -405,6 +465,8 @@ export interface CombatantView {
   tell?: string;
   /** Party only — this horse's attack value per approach, so the player can match horse↔approach. */
   approaches?: Record<Approach, number>;
+  /** Party only — combat class (§9.4b); drives its signature approach + abilities. */
+  class?: HorseClass;
 }
 export interface BattleView {
   battleId: string;
@@ -431,11 +493,12 @@ function combatantView(c: Combatant): CombatantView {
   if (c.side === 'foe') return { ...base, tell: enemyDefOf(c)?.tell };
   return {
     ...base,
+    class: c.class,
     approaches: {
       confront: approachAttack(c, 'confront').statValue,
       outwit: approachAttack(c, 'outwit').statValue,
+      skirmish: approachAttack(c, 'skirmish').statValue,
       soothe: approachAttack(c, 'soothe').statValue,
-      endure: approachAttack(c, 'endure').statValue,
     },
   };
 }
@@ -646,4 +709,18 @@ export async function getBattleView(
         : reward;
   const potions = await itemQty(db, herdId, POTION_ID);
   return battleView(row.id, snap, row.status, potions, adjusted);
+}
+
+/** Set (or clear) a horse's combat class — freely re-assignable anytime (§9.4b). Snapshotted into a
+ *  battle at its start, so it can't change mid-fight. */
+export async function setHorseClass(
+  db: DB,
+  herdId: string,
+  horseId: string,
+  cls: HorseClass | null,
+): Promise<{ ok: boolean }> {
+  const h = await getHorse(db, horseId);
+  if (!h || h.herdId !== herdId) return { ok: false };
+  await db.update(horses).set({ class: cls }).where(eq(horses.id, horseId));
+  return { ok: true };
 }

@@ -24,6 +24,8 @@ export interface Horse {
   careCount?: number;
   beloved?: boolean;
   caredToday?: boolean;
+  /** Combat class (§9.4b) — identity + signature approach; null/absent = unclassed. */
+  class?: 'knight' | 'wizard' | 'rogue' | 'cleric' | null;
 }
 
 export const listHerdHorses = (herdId: string): Promise<Horse[]> =>

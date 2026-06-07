@@ -2,17 +2,19 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
 import {
   actInBattle,
+  setHorseClass,
   startBattle,
   type Approach,
   type BattleAction,
   type BattleView,
   type CombatantView,
+  type HorseClass,
 } from '../api/combat.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { useSession } from '../session.js';
 
-// A standalone "sparring ring" to play the core battle loop + the approach/weakness puzzle. The real
-// entry (a region boss reached from an adventure) lands with the run→battle handoff.
+// A standalone "sparring ring" to play the class/approach puzzle. The real entry (a region boss
+// reached from an adventure) lands with the run→battle handoff.
 const FOES: { key: string; label: string; enemies: string[]; blurb: string }[] = [
   {
     key: 'bramble',
@@ -30,7 +32,13 @@ const FOES: { key: string; label: string; enemies: string[]; blurb: string }[] =
     key: 'gander',
     label: 'A Snappish Gander',
     enemies: ['snappish-gander'],
-    blurb: 'All hiss and bluster. A job for a gentle horse.',
+    blurb: 'All hiss and bluster. A job for a gentle soul.',
+  },
+  {
+    key: 'tortoise',
+    label: 'A Mossback Tortoise',
+    enemies: ['mossback-tortoise'],
+    blurb: 'Slow and armoured. A job for quick feet.',
   },
   {
     key: 'thistles',
@@ -40,13 +48,16 @@ const FOES: { key: string; label: string; enemies: string[]; blurb: string }[] =
   },
 ];
 
-// The four approaches as the attack choice — each keys off a stat (Soothe off kindness).
-const APPROACH_META: { key: Approach; label: string; icon: string; hint: string }[] = [
-  { key: 'confront', label: 'Confront', icon: '⚔', hint: 'STR' },
-  { key: 'outwit', label: 'Outwit', icon: '🧠', hint: 'INT' },
-  { key: 'soothe', label: 'Soothe', icon: '🌿', hint: 'kindness' },
-  { key: 'endure', label: 'Endure', icon: '🪨', hint: 'CON' },
-];
+const CLASS_LIST: HorseClass[] = ['knight', 'wizard', 'rogue', 'cleric'];
+const CLASS_META: Record<
+  HorseClass,
+  { label: string; icon: string; approach: Approach; stat: string; attack: string }
+> = {
+  knight: { label: 'Knight', icon: '🛡', approach: 'confront', stat: 'STR', attack: 'Cleave' },
+  wizard: { label: 'Wizard', icon: '🔮', approach: 'outwit', stat: 'INT', attack: 'Hex' },
+  rogue: { label: 'Rogue', icon: '🗡', approach: 'skirmish', stat: 'DEX', attack: 'Skirmish' },
+  cleric: { label: 'Cleric', icon: '🌿', approach: 'soothe', stat: 'kindness', attack: 'Soothe' },
+};
 
 function HpBar({ c, actor }: { c: CombatantView; actor: boolean }): ReactElement {
   const pct = Math.max(0, Math.round((c.hp / c.maxHp) * 100));
@@ -56,6 +67,7 @@ function HpBar({ c, actor }: { c: CombatantView; actor: boolean }): ReactElement
         <span className="combatant-name">
           {actor ? '▶ ' : ''}
           {c.name}
+          {c.class ? <span className="combatant-class"> · {CLASS_META[c.class].label}</span> : ''}
         </span>
         <span className="combatant-hp">
           {c.ko ? 'spooked 😵‍💫' : `${c.hp}/${c.maxHp}`}
@@ -75,8 +87,7 @@ export function SparPage(): ReactElement {
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [foeKey, setFoeKey] = useState(FOES[0]!.key);
   const [battle, setBattle] = useState<BattleView | null>(null);
-  const [picking, setPicking] = useState<'approach' | 'target' | 'item' | null>(null);
-  const [approach, setApproach] = useState<Approach | null>(null);
+  const [picking, setPicking] = useState<'target' | 'mend' | 'item' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +104,15 @@ export function SparPage(): ReactElement {
     setPartyIds((p) =>
       p.includes(id) ? p.filter((x) => x !== id) : p.length < 4 ? [...p, id] : p,
     );
+
+  async function changeClass(horseId: string, cls: HorseClass | null): Promise<void> {
+    try {
+      await setHorseClass(horseId, cls);
+      setHorses((hs) => hs.map((h) => (h.id === horseId ? { ...h, class: cls } : h)));
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function begin(): Promise<void> {
     const foe = FOES.find((f) => f.key === foeKey);
@@ -113,7 +133,6 @@ export function SparPage(): ReactElement {
     setBusy(true);
     setError(null);
     setPicking(null);
-    setApproach(null);
     try {
       setBattle((await actInBattle(battle.battleId, action)).battle);
       await refresh(); // reward Cubes land in the topbar badge
@@ -127,7 +146,6 @@ export function SparPage(): ReactElement {
   function reset(): void {
     setBattle(null);
     setPicking(null);
-    setApproach(null);
     setError(null);
   }
 
@@ -137,9 +155,10 @@ export function SparPage(): ReactElement {
       <div className="spar">
         <h1>⚔ Sparring Ring</h1>
         <p className="muted">
-          A friendly scrap to learn the ropes — pick a party (1–4) and a foe. Cozy rules: a horse at
-          0 HP is just <em>spooked</em> (fine after a nap), and if everyone tires out you simply
-          retreat home. No one gets hurt.
+          Pick a party (1–4), give each a <strong>class</strong>, and choose a foe. A class fixes a
+          horse&apos;s approach — match it to the horse&apos;s strengths and to the enemy&apos;s
+          weakness. Cozy rules: 0 HP just means <em>spooked</em> (fine after a nap); a wipe is a
+          retreat, never a loss.
         </p>
         {error && (
           <div className="error" role="alert">
@@ -158,13 +177,51 @@ export function SparPage(): ReactElement {
                 className={`spar-pick${partyIds.includes(h.id) ? ' on' : ''}`}
                 onClick={() => toggle(h.id)}
               >
-                <span className="spar-pick-name">{h.name ?? 'Unnamed'}</span>
+                <span className="spar-pick-name">
+                  {h.name ?? 'Unnamed'}
+                  {h.class ? ` ${CLASS_META[h.class].icon}` : ''}
+                </span>
                 <span className="spar-pick-stats">
-                  STR {h.stats.str ?? 10} · CON {h.stats.con ?? 10} · DEX {h.stats.dex ?? 10}
+                  STR {h.stats.str ?? 10} · INT {h.stats.int ?? 10} · DEX {h.stats.dex ?? 10} · kind{' '}
+                  {Math.round((h.personality.a ?? 50) / 5)}
                 </span>
               </button>
             ))}
           </div>
+        )}
+
+        {partyIds.length > 0 && (
+          <>
+            <h2 className="section-h">Assign classes</h2>
+            <p className="muted">
+              Each class keys off a stat — Knight/STR, Wizard/INT, Rogue/DEX, Cleric/kindness. A
+              horse&apos;s stats decide how good its class is. Re-assign anytime.
+            </p>
+            <div className="spar-classes">
+              {partyIds.map((id) => {
+                const h = horses.find((x) => x.id === id);
+                if (!h) return null;
+                return (
+                  <div key={id} className="spar-class-row">
+                    <span className="spar-class-name">{h.name ?? 'Unnamed'}</span>
+                    <select
+                      value={h.class ?? ''}
+                      onChange={(e) =>
+                        void changeClass(id, (e.target.value || null) as HorseClass | null)
+                      }
+                    >
+                      <option value="">— unclassed —</option>
+                      {CLASS_LIST.map((c) => (
+                        <option key={c} value={c}>
+                          {CLASS_META[c].icon} {CLASS_META[c].label} ({CLASS_META[c].stat})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         <h2 className="section-h">The foe</h2>
@@ -201,6 +258,11 @@ export function SparPage(): ReactElement {
   const liveFoes = foes.filter((c) => !c.ko);
   const over = battle.status !== 'active';
 
+  const doAttack = (): void => {
+    if (liveFoes.length === 1) void act({ type: 'attack', targetId: liveFoes[0]!.id });
+    else setPicking('target');
+  };
+
   return (
     <div className="spar battle">
       <div className="battle-head">
@@ -236,15 +298,23 @@ export function SparPage(): ReactElement {
           {picking === null && (
             <>
               <p className="battle-turn">
-                <strong>{actor.name}</strong>&apos;s move:
+                <strong>
+                  {actor.name}
+                  {actor.class ? ` the ${CLASS_META[actor.class].label}` : ''}
+                </strong>
+                &apos;s move:
               </p>
               <div className="row-actions">
-                <button
-                  disabled={busy || liveFoes.length === 0}
-                  onClick={() => setPicking('approach')}
-                >
-                  ⚔ Attack
+                <button disabled={busy || liveFoes.length === 0} onClick={doAttack}>
+                  {actor.class
+                    ? `${CLASS_META[actor.class].icon} ${CLASS_META[actor.class].attack}`
+                    : '⚔ Attack'}
                 </button>
+                {actor.class === 'cleric' && (
+                  <button disabled={busy} onClick={() => setPicking('mend')}>
+                    ✨ Mend
+                  </button>
+                )}
                 <button disabled={busy || battle.potions === 0} onClick={() => setPicking('item')}>
                   🧪 Item ({battle.potions})
                 </button>
@@ -257,32 +327,17 @@ export function SparPage(): ReactElement {
               </div>
             </>
           )}
-          {picking === 'approach' && (
+          {picking === 'target' && (
             <>
-              <p className="battle-turn">
-                How does {actor.name} go in? (match the foe&apos;s tell)
-              </p>
-              <div className="row-actions approach-row">
-                {APPROACH_META.map((a) => (
+              <p className="battle-turn">Strike which foe?</p>
+              <div className="row-actions">
+                {liveFoes.map((f) => (
                   <button
-                    key={a.key}
-                    className="approach-btn"
+                    key={f.id}
                     disabled={busy}
-                    onClick={() => {
-                      if (liveFoes.length === 1)
-                        void act({ type: 'attack', targetId: liveFoes[0]!.id, approach: a.key });
-                      else {
-                        setApproach(a.key);
-                        setPicking('target');
-                      }
-                    }}
+                    onClick={() => void act({ type: 'attack', targetId: f.id })}
                   >
-                    <span>
-                      {a.icon} {a.label}
-                    </span>
-                    <span className="approach-val">
-                      {a.hint} {actor.approaches?.[a.key] ?? '–'}
-                    </span>
+                    {f.name}
                   </button>
                 ))}
                 <button className="ghost" onClick={() => setPicking(null)}>
@@ -291,28 +346,21 @@ export function SparPage(): ReactElement {
               </div>
             </>
           )}
-          {picking === 'target' && approach && (
+          {picking === 'mend' && (
             <>
-              <p className="battle-turn">
-                {APPROACH_META.find((a) => a.key === approach)?.label} which foe?
-              </p>
+              <p className="battle-turn">Mend which ally?</p>
               <div className="row-actions">
-                {liveFoes.map((f) => (
+                {party.map((h) => (
                   <button
-                    key={f.id}
+                    key={h.id}
                     disabled={busy}
-                    onClick={() => void act({ type: 'attack', targetId: f.id, approach })}
+                    onClick={() => void act({ type: 'mend', targetId: h.id })}
                   >
-                    {f.name}
+                    {h.name}
+                    {h.ko ? ' (revive)' : ` (${h.hp}/${h.maxHp})`}
                   </button>
                 ))}
-                <button
-                  className="ghost"
-                  onClick={() => {
-                    setPicking('approach');
-                    setApproach(null);
-                  }}
-                >
+                <button className="ghost" onClick={() => setPicking(null)}>
                   Back
                 </button>
               </div>
@@ -347,7 +395,7 @@ export function SparPage(): ReactElement {
         <div className="battle-end">
           {battle.status === 'won' && (
             <p className="note">
-              🎉 The foe huffs off — you held the field! Banked{' '}
+              🎉 Victory! The foe yields the field. Banked{' '}
               <strong>{battle.reward?.cubes ?? 0} ⬡</strong>
               {battle.reward && battle.reward.items.length > 0
                 ? ` + ${battle.reward.items.map((i) => `${i.qty}× ${i.id}`).join(', ')}`
@@ -357,14 +405,14 @@ export function SparPage(): ReactElement {
           )}
           {battle.status === 'retreated' && (
             <p className="note">
-              🌙 Everyone&apos;s worn out — you retreat home to nap it off. A little something for
-              the effort: <strong>{battle.reward?.cubes ?? 0} ⬡</strong>. No harm done; try again
-              anytime.
+              🌙 The party&apos;s worn out — a tactical retreat home to nap it off. A little
+              something for the effort: <strong>{battle.reward?.cubes ?? 0} ⬡</strong>. No harm
+              done; try again anytime.
             </p>
           )}
           {battle.status === 'fled' && (
             <p className="note">
-              🏃 You slipped away clean. No spoils, no scrapes — come back when you&apos;re ready.
+              🏃 A clean getaway. No spoils, no scrapes — come back when you&apos;re ready.
             </p>
           )}
           <button className="primary" onClick={reset}>

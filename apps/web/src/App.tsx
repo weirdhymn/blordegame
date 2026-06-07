@@ -15,6 +15,7 @@ import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
+import { SparPage } from './pages/SparPage.js';
 import { useSession } from './session.js';
 
 /** Gate the authed area on a session; bounce to /login otherwise. */
@@ -43,6 +44,7 @@ export function App(): ReactElement {
         <Route path="/breed" element={<BreedPage />} />
         <Route path="/tavern" element={<TavernPage />} />
         <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/spar" element={<SparPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/herd" element={<HerdPage />} />

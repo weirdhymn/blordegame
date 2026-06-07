@@ -213,3 +213,38 @@ export const AFFINITY_MAX = 200;
 /** Cap pair-evaluations per herd per day so login-catchup stays cheap (§8.2). */
 export const MAX_AUTONOMY_PAIRS = 60;
 export const CLUB_MIN_MEMBERS = 2;
+
+// ── §14.7 Combat (turn-based battles, §9.4) ─────────────────────────────────
+// Cozy & no-death: a horse at 0 HP is "spooked" (out for the fight, fine after — a nap); a full
+// party wipe is a *retreat* home with reduced rewards, never a loss. Reuses skillCheck + DEX +
+// the bond graph. HP is battle-scoped (every fight starts full; nothing persists).
+//
+// The four **approaches** — the damage "types" — map 1:1 onto existing stats + job-skills, so a
+// horse's specialization *is* its battle role (the weakness puzzle reads them; the minimum's
+// generic Attack just uses a horse's best approach stat).
+export type Approach = 'confront' | 'outwit' | 'soothe' | 'endure';
+export const APPROACHES: Approach[] = ['confront', 'outwit', 'soothe', 'endure'];
+export const APPROACH_STAT: Record<Approach, StatKey> = {
+  confront: 'str', // meet it head-on
+  outwit: 'int', // feint, exploit, read it
+  soothe: 'cha', // calm it, charm it down
+  endure: 'con', // outlast, weather it
+};
+export const APPROACH_SKILL: Record<Approach, SkillKey> = {
+  confront: 'smithing', // the Forge
+  outwit: 'reading', // the Library
+  soothe: 'performance', // the Stage
+  endure: 'athletics', // the Track
+};
+
+export const HP_BASE = 20; // every combatant's floor HP
+export const HP_PER_CON = 3; // + this per point of Constitution (horses); enemies author maxHp
+export const COMBAT_GUARD_BASE = 10; // DC to land a clean blow; + the target's CON ability mod
+export const COMBAT_DMG_BASE = 6; // damage of a clean hit, before the attacker's stat mod
+export const COMBAT_DMG_GLANCE = 2; // a failed swing still chips (cozy — never a 0-damage feel-bad)
+export const COMBAT_DMG_CRIT_BONUS = 6; // extra on a crit (nat-20 / margin ≥ 10, from skillCheck)
+export const COMBAT_DEFEND_MULT = 0.5; // Defend halves the next incoming hit (until your next turn)
+export const COMBAT_FLEE_DC = 12; // a DEX check to slip away (cozy: a miss only costs the turn)
+export const POTION_HEAL_HP = 30; // Healing Potion restores this to a conscious horse…
+export const POTION_REVIVE_HP = 20; // …or rouses a spooked (KO'd) horse back to this (clutch revive)
+export const REWARD_RETREAT_FRACTION = 0.4; // a full-party retreat still banks this share of Cubes

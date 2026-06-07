@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { Approach } from '@blorse/balance';
 import type { Genotype } from '@blorse/genetics';
 import type { GlitchKind, LifeStage } from '@blorse/render-core';
 
@@ -162,6 +163,7 @@ export const questProgress = pgTable(
 );
 
 export const adventureRunStatusEnum = pgEnum('adventure_run_status', ['active', 'ended']);
+export const battleStatusEnum = pgEnum('battle_status', ['active', 'won', 'retreated', 'fled']);
 
 /**
  * In-flight interactive adventure runs (§9.3). Promoted from an in-memory store so a run
@@ -196,6 +198,64 @@ export const adventureRuns = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('adventure_runs_herd_idx').on(t.herdId)],
+);
+
+// ── Combat (§9.4) — the persisted, battle-scoped combat state (jsonb payload of `battles.state`).
+// Everything here is ephemeral to one fight: HP, KO, statuses all reset between battles (cozy — no
+// grind-down, no persistent wounds). `statuses` is forward-compat (v1 minimum leaves it empty).
+export type CombatStatusKind = 'rattled' | 'heartened';
+export interface CombatStatus {
+  kind: CombatStatusKind;
+  turns: number;
+}
+export interface Combatant {
+  id: string; // horseId (party) or a synthetic id (foe)
+  side: 'party' | 'foe';
+  name: string;
+  maxHp: number;
+  hp: number;
+  ko: boolean; // "spooked/winded" — skipped for the rest of the fight, fine after
+  stats: Record<string, number>;
+  skills: Record<string, number>; // skill *levels* (boost a matching attack)
+  luck: number;
+  statuses: CombatStatus[];
+  defending: boolean; // set by Defend, cleared at the start of this combatant's next turn
+  enemyId?: string; // foe only — its EnemyDef id
+  weakness?: Approach; // foe only — read by the approach layer (not the minimum)
+  resist?: Approach;
+}
+export interface BattleEvent {
+  round: number;
+  text: string;
+  kind?: string; // 'attack' | 'item' | 'defend' | 'flee' | 'ko' | 'end' | … (UI flavor)
+}
+export interface BattleSnapshot {
+  round: number;
+  turnIndex: number; // cursor into `order`
+  order: string[]; // combatant ids in this round's turn order (recomputed each round)
+  combatants: Combatant[];
+  log: BattleEvent[];
+}
+
+/** One turn-based battle (§9.4). State lives in `state` (jsonb), seeded + resumable like a run. */
+export const battles = pgTable(
+  'battles',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    /** The adventure run this battle was entered from (§9.4), if any; null = standalone. */
+    runId: uuid('run_id'),
+    /** The EnemyDef ids in this fight (1–2 for v1). */
+    enemies: jsonb('enemies').notNull().$type<string[]>(),
+    /** Seed for the whole battle; (seed, round, turnIndex) derives each roll deterministically. */
+    seed: integer('seed').notNull(),
+    state: jsonb('state').notNull().$type<BattleSnapshot>(),
+    status: battleStatusEnum('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('battles_herd_idx').on(t.herdId)],
 );
 
 /** Per-herd record of discovered coats — the Field Guide (collection pillar, §6/§7). */

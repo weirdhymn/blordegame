@@ -712,3 +712,162 @@ button.danger {
   font-size: 1rem;
   line-height: 1.5;
 }
+
+/* ── Sparring & battle (§9.4) ─────────────────────────────────────────────── */
+.spar-party {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.spar-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  background: var(--paper);
+  border: 2px solid var(--sage-deep);
+  border-radius: 8px;
+}
+.spar-pick.on {
+  border-color: var(--ink);
+  background: var(--sage);
+}
+.spar-pick-name {
+  font-weight: 700;
+}
+.spar-pick-stats {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.spar-foes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.spar-foe {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid var(--sage-deep);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+}
+.spar-foe.on {
+  border-color: var(--ink);
+  background: var(--sage);
+}
+.spar-foe-name {
+  font-weight: 700;
+}
+.spar-begin {
+  margin-top: 1rem;
+}
+.battle-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+.battle-field {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin: 0.5rem 0 1rem;
+}
+.battle-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.combatant {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--sage-deep);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.combatant.actor {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--sage-deep);
+}
+.combatant.ko {
+  opacity: 0.5;
+}
+.combatant-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+.combatant-name {
+  font-weight: 700;
+}
+.hp-track {
+  height: 0.8rem;
+  background: var(--sage-deep);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hp-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.25s;
+}
+.hp-fill.party {
+  background: #5b8c3e;
+}
+.hp-fill.foe {
+  background: #a8543a;
+}
+.battle-menu {
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--sage);
+  margin-bottom: 1rem;
+}
+.battle-turn {
+  margin: 0 0 0.4rem;
+}
+button.ghost {
+  background: transparent;
+  border-color: var(--sage-deep);
+}
+.battle-end {
+  margin-bottom: 1rem;
+}
+.battle-log {
+  list-style: none;
+  padding: 0.5rem 0.8rem;
+  margin: 0;
+  background: var(--paper);
+  border: 1px solid var(--sage-deep);
+  border-radius: 8px;
+  max-height: 12rem;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+.battle-log li {
+  padding: 0.15rem 0;
+  border-bottom: 1px dashed var(--sage-deep);
+}
+.battle-log li:last-child {
+  border-bottom: none;
+}
+.battle-log .log-ko {
+  color: #a8543a;
+  font-weight: 700;
+}
+.battle-log .log-item {
+  color: #5b8c3e;
+  font-weight: 700;
+}
+.battle-log .log-intro {
+  font-style: italic;
+  color: var(--ink-soft);
+}

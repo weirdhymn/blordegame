@@ -16,6 +16,8 @@ import {
   FRIEND_THRESHOLD,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
+  POTION_HEAL_HP,
+  REWARD_RETREAT_FRACTION,
   SKILL_KEYS,
   STARTING_CUBES,
   STAT_KEYS,
@@ -40,6 +42,7 @@ import {
   users,
 } from '../src/db/schema.js';
 import { ADVENTURE_BY_ID, ADVENTURE_POOLS, type Choice } from '../src/content/adventures.js';
+import { ENEMY_BY_ID } from '../src/content/enemies.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
 import { REGION_BY_ID } from '../src/content/regions.js';
@@ -54,9 +57,16 @@ import {
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
 import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
+import {
+  actInBattle,
+  getBattleView,
+  startBattle,
+  type BattleAction,
+  type BattleView,
+} from '../src/services/combat.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
-import { grantItems } from '../src/services/inventory.js';
+import { consumeItems, grantItems, itemQty } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { compatibility } from '../src/services/personality.js';
 import { skillCheck } from '../src/services/stats.js';
@@ -1642,6 +1652,202 @@ async function main(): Promise<void> {
     'a fresh horse is neither Beloved nor cared today',
     plainView.beloved === false && plainView.caredToday === false,
   );
+
+  // --- Phase 8d: turn-based combat (§9.4) — the minimum playable battle ---
+  const POTION = 'healing-potion';
+  const herdCubes = async (): Promise<number> =>
+    (await inject({ method: 'GET', url: '/me', headers: { cookie } })).json<{
+      herd: { cubes: number };
+    }>().herd.cubes;
+  const combatHorse = async (over: {
+    str?: number;
+    dex?: number;
+    con?: number;
+    luck?: number;
+    name?: string;
+  }): Promise<string> => {
+    const h = await mintHorse(db, {
+      herdId,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      name: over.name ?? null,
+      stats: {
+        str: over.str ?? 10,
+        dex: over.dex ?? 10,
+        con: over.con ?? 10,
+        int: 10,
+        wis: 10,
+        cha: 10,
+      },
+      luck: over.luck ?? 10,
+    });
+    return h.id;
+  };
+  // Drive an active battle to a terminal state (default strategy: bash the first standing foe).
+  const driveBattle = async (
+    battleId: string,
+    pick: (v: BattleView) => BattleAction = (v) => ({
+      type: 'attack',
+      targetId: v.combatants.find((c) => c.side === 'foe' && !c.ko)?.id ?? '',
+    }),
+  ): Promise<BattleView> => {
+    let view = (await getBattleView(db, herdId, battleId)) as BattleView;
+    for (let i = 0; i < 80 && view.status === 'active' && view.isPartyTurn; i++) {
+      const res = await actInBattle(db, herdId, battleId, pick(view));
+      if (!res.ok) break;
+      view = res.view;
+    }
+    return view;
+  };
+
+  // 1) A strong party bashes a weak foe → a win that banks the reward.
+  const cubesB1 = await herdCubes();
+  const brute = await combatHorse({ str: 20, con: 20, dex: 16, name: 'Brute' });
+  const startWin = await startBattle(db, herdId, ['thistle-whirl'], [brute], { seed: 7 });
+  check(
+    'a battle starts active with two-sided HP',
+    startWin.ok &&
+      startWin.view.combatants.length === 2 &&
+      startWin.view.combatants.every((c) => c.hp > 0 && c.maxHp > 0),
+  );
+  const won = startWin.ok ? await driveBattle(startWin.battleId) : null;
+  check('a strong party defeats a weak foe (a win)', !!won && won.status === 'won');
+  eq(
+    'a won battle banks the foe reward',
+    (await herdCubes()) - cubesB1,
+    ENEMY_BY_ID.get('thistle-whirl')?.reward.cubes ?? 0,
+  );
+  if (won) {
+    check(
+      "the foe was KO'd (HP 0), and the party came through fine — never a death",
+      won.combatants.some((c) => c.side === 'foe' && c.ko && c.hp === 0) &&
+        won.combatants.some((c) => c.side === 'party' && !c.ko),
+    );
+  }
+
+  // 2) A weak lone horse vs a sturdy foe → full-party KO → a cozy RETREAT with reduced reward.
+  const cubesB2 = await herdCubes();
+  const wimp = await combatHorse({ str: 4, con: 3, dex: 5, luck: 4, name: 'Wimp' });
+  const startR = await startBattle(db, herdId, ['bramble-tangle'], [wimp], { seed: 5 });
+  const retreated = startR.ok ? await driveBattle(startR.battleId) : null;
+  check(
+    'a full-party KO ends in a cozy retreat (never a loss)',
+    !!retreated && retreated.status === 'retreated',
+  );
+  const brambleCubes = ENEMY_BY_ID.get('bramble-tangle')?.reward.cubes ?? 0;
+  const retreatGain = (await herdCubes()) - cubesB2;
+  check(
+    'a retreat banks a REDUCED reward (less than a win)',
+    retreatGain === Math.floor(brambleCubes * REWARD_RETREAT_FRACTION) &&
+      retreatGain < brambleCubes,
+  );
+
+  // 3) Turn order is by speed: a faster foe opens before the party's first move.
+  const slowpoke = await combatHorse({ dex: 4, con: 16, name: 'Slowpoke' });
+  const startTO = await startBattle(db, herdId, ['thistle-whirl'], [slowpoke], { seed: 11 });
+  const slowView = startTO.ok ? startTO.view.combatants.find((c) => c.id === slowpoke) : undefined;
+  check(
+    'turn order by DEX — a faster foe acts first',
+    startTO.ok &&
+      startTO.view.isPartyTurn &&
+      startTO.view.log.some((e) => e.kind === 'enemy') &&
+      !!slowView &&
+      slowView.hp < slowView.maxHp,
+  );
+
+  // 4) The Healing Potion finally does something. Take hits until clearly wounded (so the +30 isn't
+  //    clipped at max), then heal and confirm the net gain even after the foe's counter that turn.
+  await grantItems(db, herdId, [{ id: POTION, qty: 1 }]);
+  const medic = await combatHorse({ str: 8, con: 12, dex: 10, name: 'Medic' });
+  const startHeal = await startBattle(db, herdId, ['bramble-tangle'], [medic], { seed: 13 });
+  if (startHeal.ok) {
+    const foeId = startHeal.view.combatants.find((c) => c.side === 'foe')?.id ?? '';
+    let v: BattleView = startHeal.view;
+    for (let i = 0; i < 20 && v.status === 'active' && v.isPartyTurn; i++) {
+      const m = v.combatants.find((c) => c.id === medic) as BattleView['combatants'][number];
+      if (m.ko || m.hp <= m.maxHp - POTION_HEAL_HP) break;
+      const r = await actInBattle(db, herdId, startHeal.battleId, {
+        type: 'attack',
+        targetId: foeId,
+      });
+      if (!r.ok) break;
+      v = r.view;
+    }
+    const before = v.combatants.find((c) => c.id === medic) as BattleView['combatants'][number];
+    const canHeal =
+      v.status === 'active' &&
+      v.isPartyTurn &&
+      !before.ko &&
+      before.hp <= before.maxHp - POTION_HEAL_HP;
+    const healed = canHeal
+      ? await actInBattle(db, herdId, startHeal.battleId, {
+          type: 'item',
+          itemId: POTION,
+          targetId: medic,
+        })
+      : null;
+    const after =
+      healed && healed.ok
+        ? (healed.view.combatants.find((c) => c.id === medic) as BattleView['combatants'][number])
+        : null;
+    check(
+      'the Healing Potion mends a hurt horse and is consumed',
+      !!healed &&
+        healed.ok &&
+        !!after &&
+        after.hp > before.hp &&
+        healed.view.potions === v.potions - 1 &&
+        healed.view.log.some((e) => e.kind === 'item'),
+    );
+  }
+
+  // 4) Item with an empty stash is refused (no potion → no effect). Zero the stash first.
+  const onHand = await itemQty(db, herdId, POTION);
+  if (onHand > 0) await consumeItems(db, herdId, [{ id: POTION, qty: onHand }]);
+  const broke = await combatHorse({ dex: 20, name: 'Broke' }); // fast → acts first
+  const startNoPot = await startBattle(db, herdId, ['bramble-tangle'], [broke], { seed: 9 });
+  if (startNoPot.ok && startNoPot.view.isPartyTurn) {
+    const r = await actInBattle(db, herdId, startNoPot.battleId, {
+      type: 'item',
+      itemId: POTION,
+      targetId: broke,
+    });
+    check('Item with no Healing Potion is refused', !r.ok && r.code === 'no_potion');
+  }
+
+  // 5) Flee ends the battle cozily — no reward, no penalty.
+  const runner = await combatHorse({ con: 20, dex: 20, luck: 20, name: 'Runner' });
+  const startFlee = await startBattle(db, herdId, ['bramble-tangle'], [runner], { seed: 2 });
+  let fled = startFlee.ok ? startFlee.view : null;
+  if (startFlee.ok) {
+    for (let i = 0; i < 8 && fled && fled.status === 'active'; i++) {
+      const r = await actInBattle(db, herdId, startFlee.battleId, { type: 'flee' });
+      fled = r.ok ? r.view : fled;
+    }
+  }
+  check(
+    'a horse can Flee a battle cozily (ends, no reward)',
+    !!fled && fled.status === 'fled' && fled.reward === null,
+  );
+
+  // 6) Determinism: same seed + same actions → identical battle (seeded, replayable).
+  const repA = await startBattle(db, herdId, ['thistle-whirl', 'thistle-whirl'], [brute], {
+    seed: 42,
+  });
+  const repB = await startBattle(db, herdId, ['thistle-whirl', 'thistle-whirl'], [brute], {
+    seed: 42,
+  });
+  if (repA.ok && repB.ok) {
+    const a = await driveBattle(repA.battleId);
+    const b = await driveBattle(repB.battleId);
+    eq('same seed + same actions → same outcome (deterministic)', a.status, b.status);
+    check(
+      '…and identical combatant HP/KO',
+      JSON.stringify(a.combatants.map((c) => [c.id, c.hp, c.ko])) ===
+        JSON.stringify(b.combatants.map((c) => [c.id, c.hp, c.ko])),
+    );
+  }
 
   // --- Phase 9: The Living Herd ---
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{

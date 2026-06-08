@@ -268,6 +268,65 @@ export const CARE_BELOVED_THRESHOLD = 10;
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';
 
+// ── Daily Care rituals: the cozy heartbeat (§6/§7) ──────────────────────────
+// Two bookends — cook a stat buff in the MORNING, groom at NIGHT. Rewarding to do, GENTLE to skip
+// (no penalties, no FOMO, no neglect spiral, ever). Both are whole-herd batch actions; the buff is
+// daily and resets at the rollover. Ingredients come from the EXISTING gather/adventure drops.
+
+/** Morning cook: each grain maps 1:1 to a stat — the mix you cook IS the day's stat loadout. The six
+ *  grains cover every stat adventures / jobs / combat actually test. Item ids = `grain-<name>`. */
+export const GRAIN_STAT: Record<string, StatKey> = {
+  'grain-corn': 'str',
+  'grain-oats': 'dex',
+  'grain-barley': 'con',
+  'grain-wheat': 'int',
+  'grain-rice': 'wis',
+  'grain-rye': 'cha',
+};
+export const GRAIN_IDS = Object.keys(GRAIN_STAT);
+/** The rare cooking ingredient — a far-rarer adventuring find that multiplies the whole dish. */
+export const COOK_RARE_ITEM = 'saffron-bloom';
+
+/** The communal pot holds one ingredient slot per herd horse (clamped 2..30). A bigger herd cooks a
+ *  bigger meal — the herd-tier progression reward — while the per-stat cap stops one stat running away. */
+export const cookSlots = (herdSize: number): number => Math.max(2, Math.min(30, herdSize));
+/** Grains to MAX one stat; each grain of a stat = +1 to that stat's checks today (a DC −1). So a
+ *  6-slot pot maxes one stat (+5); a 30-slot feast maxes all six (30 = 6×5). */
+export const COOK_PER_STAT_CAP = 5;
+/** Each rare amplifies the WHOLE dish by this (×1.5 for one, ×2 for two…) — the "save it for a big
+ *  cook" payoff: a rare scales with how big a meal you already laid out. */
+export const COOK_RARE_MULT = 0.5;
+/** Absolute per-stat ceiling even with rares — bosses still need the class/approach puzzle. */
+export const COOK_BUFF_HARD_CAP = 10;
+
+/** Evening groom: a flat, deliberately SMALL next-morning Cubes bonus for tucking the herd in. Flat
+ *  (not per-horse) + tiny vs daily income, so skipping is genuinely guilt-free — no FOMO, ever. */
+export const GROOM_CUBES = 25;
+/** A cosmetic "rough day" mood a full-party battle retreat leaves behind; grooming clears it. No
+ *  stat penalty — a rattled horse isn't *worse*, it just wants cheering up (cozy). */
+export const MOOD_CONTENT = 'content';
+export const MOOD_RATTLED = 'rattled';
+
+/**
+ * Cook the communal pot (pure + deterministic, so server / tests / client-preview agree): `grains` is
+ * an already-aggregated stat→count map; `rares` is how many rare ingredients went in. Per-stat buff =
+ * min(count, PER_STAT_CAP) × (1 + RARE_MULT·rares), hard-capped. The buff is a DC reduction on that
+ * stat's checks for the day.
+ */
+export function cookMeal(
+  grains: Partial<Record<StatKey, number>>,
+  rares = 0,
+): Partial<Record<StatKey, number>> {
+  const mult = 1 + COOK_RARE_MULT * Math.max(0, rares);
+  const out: Partial<Record<StatKey, number>> = {};
+  for (const [stat, count] of Object.entries(grains)) {
+    if (!count || count <= 0) continue;
+    const v = Math.min(COOK_BUFF_HARD_CAP, Math.round(Math.min(count, COOK_PER_STAT_CAP) * mult));
+    if (v > 0) out[stat as StatKey] = v;
+  }
+  return out;
+}
+
 /**
  * Interactive adventure scenes (§9.3): party harmony buffs `harmony` checks — cozy, buff-only.
  * Each pair's rapport (0..1) is the stored **bond** if they have one (affinity ÷ BONDED_THRESHOLD,

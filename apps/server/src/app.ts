@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from './auth/tokens.js';
 import type { DB } from './db/client.js';
 import { registerAdventureRoutes } from './routes/adventure.js';
 import { registerAuthRoutes, type AuthConfig } from './routes/auth.js';
+import { registerCareHubRoutes } from './routes/care-hub.js';
 import { registerCombatRoutes } from './routes/combat.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerBreedingRoutes } from './routes/breeding.js';
@@ -119,6 +120,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerDailyRoutes(instance, db);
       registerPastureRoutes(instance, db);
       registerProgressionRoutes(instance, db);
+      registerCareHubRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerCombatRoutes(instance, db);
       registerSocialRoutes(instance, db);

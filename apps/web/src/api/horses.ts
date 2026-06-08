@@ -26,6 +26,8 @@ export interface Horse {
   caredToday?: boolean;
   /** Combat class (§9.4b) — identity + signature approach; null/absent = unclassed. */
   class?: 'knight' | 'wizard' | 'rogue' | 'cleric' | null;
+  /** Cosmetic mood (§7) — 'content' or 'rattled' (after a rough day; the evening groom soothes it). */
+  mood?: string;
 }
 
 export const listHerdHorses = (herdId: string): Promise<Horse[]> =>

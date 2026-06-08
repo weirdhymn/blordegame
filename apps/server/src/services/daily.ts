@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { DAILY_CUBES, FOAL_TO_ADULT_MS } from '@blorse/balance';
+import { DAILY_CUBES, FOAL_TO_ADULT_MS, GROOM_CUBES } from '@blorse/balance';
 import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay, nextRollover } from '../util/clock.js';
@@ -17,6 +17,8 @@ export interface DailyResult {
   cubesGained: number;
   /** Cubes earned by jobs during the caught-up days. */
   jobCubes: number;
+  /** The next-morning bonus from last night's groom (§7), if one was pending. */
+  groomCubes: number;
   /** Horse ids whose coat was revealed (foal → adult) this check-in. */
   matured: string[];
   day: number;
@@ -54,6 +56,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       daysAdvanced: 0,
       cubesGained: 0,
       jobCubes: 0,
+      groomCubes: 0,
       matured: [],
       day,
       nextRolloverMs: nextRollover(nowMs),
@@ -68,7 +71,14 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
   const jobDays = Math.min(daysAdvanced, MAX_JOB_CATCHUP_DAYS);
   for (let i = 0; i < jobDays; i++) {
     const tickDay = herd.lastSimTick + 1 + i;
-    jobCubes += await resolveJobsForDay(db, herdId, mulberry32((herd.simSeed ^ tickDay) >>> 0));
+    // The morning meal buffs that day's jobs too (only the day it was actually cooked for, §7).
+    const dayMeal = herd.mealDay === tickDay ? (herd.mealBuffs ?? {}) : {};
+    jobCubes += await resolveJobsForDay(
+      db,
+      herdId,
+      mulberry32((herd.simSeed ^ tickDay) >>> 0),
+      dayMeal,
+    );
     // The Living Herd (§8): relationships + clubs evolve, producing journal beats.
     const events = await resolveAutonomyForDay(
       db,
@@ -78,13 +88,27 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     await addJournalEvents(db, herdId, tickDay, events);
   }
 
-  const cubesGained = daysAdvanced * DAILY_CUBES;
+  // "Wake to a reward": a pending groom from last night pays its small flat bonus at this rollover.
+  const groomCubes = daysAdvanced > 0 && herd.groomBonusPending ? GROOM_CUBES : 0;
+  const cubesGained = daysAdvanced * DAILY_CUBES + groomCubes;
   if (daysAdvanced > 0) {
     await db
       .update(herds)
-      .set({ cubes: sql`${herds.cubes} + ${cubesGained}`, lastSimTick: day })
+      .set({
+        cubes: sql`${herds.cubes} + ${cubesGained}`,
+        lastSimTick: day,
+        groomBonusPending: false,
+      })
       .where(eq(herds.id, herdId));
   }
 
-  return { daysAdvanced, cubesGained, jobCubes, matured, day, nextRolloverMs: nextRollover(nowMs) };
+  return {
+    daysAdvanced,
+    cubesGained,
+    jobCubes,
+    groomCubes,
+    matured,
+    day,
+    nextRolloverMs: nextRollover(nowMs),
+  };
 }

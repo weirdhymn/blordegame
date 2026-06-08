@@ -27,6 +27,7 @@ import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { getRelationships } from './autonomy.js';
+import { getMealBuff } from './care-hub.js';
 import { startBattle, type BattleView } from './combat.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
@@ -187,6 +188,7 @@ export function resolveChoice(
   rng: () => number,
   bonds: PartyBond[] = [],
   now = 0,
+  mealBuff: Record<string, number> = {},
 ): ChoiceResolution {
   if (!choice.check) return { outcome: choice.success, roll: null, trained: null };
   const { stat, skill, dc, harmony } = choice.check;
@@ -196,7 +198,15 @@ export function resolveChoice(
     party.find((h) => h.id === who.horseId),
     now,
   );
-  const check = skillCheck(who.statValue, who.skillLevel, who.luck, dc - harmonyBonus - care, rng);
+  // The morning meal buffs this stat's checks for the whole herd, today (§7) — another DC reduction.
+  const meal = mealBuff[stat] ?? 0;
+  const check = skillCheck(
+    who.statValue,
+    who.skillLevel,
+    who.luck,
+    dc - harmonyBonus - care - meal,
+    rng,
+  );
   const outcome = check.success ? choice.success : (choice.failure ?? choice.success);
   return {
     outcome,
@@ -408,12 +418,14 @@ export async function chooseInRun(
   }
 
   const bonds = await getRelationships(db, herdId);
+  const mealBuff = await getMealBuff(db, herdId, Date.now()); // today's cooked stat loadout (§7)
   const { outcome, roll, trained } = resolveChoice(
     party,
     choice,
     stepRng(run.seed, run.step),
     bonds,
     Date.now(),
+    mealBuff,
   );
   // Did a real friendship/bond (not just a shared temperament) help this harmony check? (→ 💞)
   const bonded = !!choice.check?.harmony && partyHasBond(party, bonds);

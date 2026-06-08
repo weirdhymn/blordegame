@@ -104,6 +104,8 @@ export async function resolveJobsForDay(
   db: DB,
   herdId: string,
   rng: () => number,
+  /** The meal buff cooked FOR this resolved day (per-stat DC reduction), if any (§7). */
+  mealBuff: Record<string, number> = {},
 ): Promise<number> {
   const jobs = await db.select().from(jobAssignments).where(eq(jobAssignments.herdId, herdId));
   let cubes = 0;
@@ -118,8 +120,14 @@ export async function resolveJobsForDay(
     const stat = job.stat as StatKey;
     const level = skills[skill]?.level ?? 0;
 
-    // Seasoned adventurers work with a steadier hand — the mark's first real payoff (§9.3).
-    const check = skillCheck(stats[stat] ?? 10, level, h.luck, jobDc(h.adventures), rng);
+    // Seasoned adventurers work with a steadier hand (§9.3); the morning meal also buffs this stat.
+    const check = skillCheck(
+      stats[stat] ?? 10,
+      level,
+      h.luck,
+      jobDc(h.adventures) - (mealBuff[stat] ?? 0),
+      rng,
+    );
     const earned = check.success
       ? JOB_CUBES_BASE + level * 2 + (check.crit ? JOB_CUBES_BASE : 0)
       : Math.floor(JOB_CUBES_BASE / 2);

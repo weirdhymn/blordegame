@@ -37,6 +37,8 @@ export function publicHorse(h: HorseRow) {
     caredToday: h.lastCaredAt ? gameDay(h.lastCaredAt.getTime()) === gameDay(Date.now()) : false,
     /** Combat class (§9.4b) — identity + signature approach; null = unclassed. */
     class: h.class,
+    /** Cosmetic mood (§7) — 'content' default, 'rattled' after a rough day; the evening groom soothes it. */
+    mood: h.mood,
     // `luck` is intentionally omitted — it is hidden (§9.1).
   };
 }

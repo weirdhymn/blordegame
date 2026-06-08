@@ -51,6 +51,13 @@ export const herds = pgTable('herds', {
   /** Autonomy sim cursor (§8.2) — deterministic per-herd. */
   simSeed: integer('sim_seed').notNull(),
   lastSimTick: integer('last_sim_tick').notNull().default(0),
+  // ── Daily Care rituals (§7) ──
+  /** gameDay the morning meal was cooked; the meal buff is live only while this === today. */
+  mealDay: integer('meal_day'),
+  /** The cooked meal's per-stat buff (a DC reduction on that stat's checks today). */
+  mealBuffs: jsonb('meal_buffs').$type<Record<string, number>>(),
+  /** Set by the evening groom; the next daily rollover pays GROOM_CUBES and clears it. */
+  groomBonusPending: boolean('groom_bonus_pending').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -80,6 +87,9 @@ export const horses = pgTable(
     /** Per-horse daily-gather cursor (§7) — the day's passive gather is capped at once per horse
      *  (GATHER_PER_HORSE_PER_DAY). Compared via gameDay(); null = never gathered. */
     lastGatheredAt: timestamp('last_gathered_at', { withTimezone: true }),
+    /** Cosmetic mood (§7 care hub): 'content' default, 'rattled' after a rough day (a battle retreat);
+     *  the evening groom clears it. No stat effect — a rattled horse just wants cheering up (cozy). */
+    mood: text('mood').notNull().default('content'),
     // RPG (§9): six core stats, hidden Luck, skills, accomplishments. Set at mint.
     stats: jsonb('stats').$type<Record<string, number>>().notNull().default({}),
     luck: integer('luck').notNull().default(10),
@@ -245,6 +255,9 @@ export interface BattleSnapshot {
   order: string[]; // combatant ids in this round's turn order (recomputed each round)
   combatants: Combatant[];
   log: BattleEvent[];
+  /** The herd's morning meal buff (per-stat, §7), snapshotted at battle start — a guard reduction on
+   *  party attacks whose approach uses that stat. Absent on pre-care battles. */
+  mealBuff?: Record<string, number>;
 }
 
 /** One turn-based battle (§9.4). State lives in `state` (jsonb), seeded + resumable like a run. */

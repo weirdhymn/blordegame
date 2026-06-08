@@ -200,6 +200,45 @@ a {
   font-weight: 600;
 }
 
+/* ── Care hub (§7) ── */
+.cook-grains {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+.cook-grain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.3rem 0.6rem;
+  border: 2px solid var(--sage-deep);
+  border-radius: 6px;
+}
+.cook-grain.rare {
+  border-color: var(--ink);
+  background: var(--sage);
+}
+.cook-grain-name {
+  font-weight: 600;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.stepper button {
+  width: 1.9rem;
+  padding: 0.1rem 0;
+}
+.stepper-val {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+
 .field {
   display: flex;
   flex-direction: column;

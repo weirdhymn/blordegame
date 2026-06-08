@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
   abilityMod,
   type Approach,
@@ -20,6 +20,7 @@ import {
   HP_BASE,
   HP_PER_CON,
   KINDNESS_STAT_DIV,
+  MOOD_RATTLED,
   PARTY_MAX,
   POTION_HEAL_HP,
   POTION_REVIVE_HP,
@@ -38,6 +39,7 @@ import {
   type HorseRow,
 } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
+import { getMealBuff } from './care-hub.js';
 import { getHorse } from './horse.js';
 import { consumeItems, grantItems, itemQty, type ItemStack } from './inventory.js';
 import { skillCheck } from './stats.js';
@@ -226,6 +228,7 @@ function resolveStrike(
   target: Combatant,
   rng: () => number,
   approach?: Approach,
+  mealBuff: Record<string, number> = {},
 ): { dmg: number; crit: boolean; mult: number; approach: Approach | null } {
   let statValue: number;
   let skillLevel: number;
@@ -239,7 +242,9 @@ function resolveStrike(
     ({ statValue, skillLevel } = approachAttack(attacker, used));
     if (target.side === 'foe') mult = approachMultiplier(target.weakness, target.resist, used);
   }
-  const check = skillCheck(statValue, skillLevel, attacker.luck, guardOf(target), rng);
+  // The morning meal buffs party attacks whose approach uses the cooked stat (§7) — a guard reduction.
+  const meal = used ? (mealBuff[APPROACH_STAT[used]] ?? 0) : 0;
+  const check = skillCheck(statValue, skillLevel, attacker.luck, guardOf(target) - meal, rng);
   let dmg = check.success
     ? COMBAT_DMG_BASE +
       Math.max(0, abilityMod(statValue)) +
@@ -358,6 +363,7 @@ function applyAct(
       target,
       rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT),
       approach,
+      snap.mealBuff ?? {},
     );
     applyDamage(target, res.dmg);
     const verb = cur.class
@@ -538,6 +544,20 @@ function totalReward(enemyIds: string[]): { cubes: number; items: ItemStack[] } 
   return { cubes, items: [...items].map(([id, qty]) => ({ id, qty })) };
 }
 
+/** A full-party retreat leaves the party in a rough mood (§7) — cosmetic; the evening groom soothes
+ *  it. No stat penalty (cozy): a rattled horse just had a hard day and wants tucking in. */
+async function markRetreatMood(
+  db: DB,
+  snap: BattleSnapshot,
+  outcome: BattleOutcome,
+): Promise<void> {
+  if (outcome !== 'retreated') return;
+  const ids = snap.combatants.filter((c) => c.side === 'party').map((c) => c.id);
+  if (ids.length > 0) {
+    await db.update(horses).set({ mood: MOOD_RATTLED }).where(inArray(horses.id, ids));
+  }
+}
+
 async function grantReward(
   db: DB,
   herdId: string,
@@ -613,7 +633,8 @@ export async function startBattle(
     ...party.map(partyCombatant),
     ...enemyIds.map((id, i) => enemyCombatant(ENEMY_BY_ID.get(id)!, i)),
   ];
-  const snap: BattleSnapshot = { round: 1, turnIndex: 0, order: [], combatants, log: [] };
+  const mealBuff = await getMealBuff(db, herdId, Date.now()); // today's cooked stat loadout (§7)
+  const snap: BattleSnapshot = { round: 1, turnIndex: 0, order: [], combatants, log: [], mealBuff };
   const firstFoe = ENEMY_BY_ID.get(enemyIds[0]!);
   if (firstFoe) pushEvent(snap, firstFoe.intro, 'intro');
   recomputeOrder(snap, seed);
@@ -633,6 +654,7 @@ export async function startBattle(
   if (!row) return { ok: false, code: 'bad_party', message: 'Could not start the battle.' };
 
   const reward = outcome === 'active' ? null : await grantReward(db, herdId, outcome, enemyIds);
+  await markRetreatMood(db, snap, outcome);
   if (outcome !== 'active')
     await db.update(battles).set({ status: outcome }).where(eq(battles.id, row.id));
   const potions = await itemQty(db, herdId, POTION_ID);
@@ -684,6 +706,7 @@ export async function actInBattle(
   if (spendPotion) await consumeItems(db, herdId, [{ id: POTION_ID, qty: 1 }]);
 
   const reward = outcome === 'active' ? null : await grantReward(db, herdId, outcome, row.enemies);
+  await markRetreatMood(db, snap, outcome);
   await db.update(battles).set({ state: snap, status: outcome }).where(eq(battles.id, row.id));
   const potions = await itemQty(db, herdId, POTION_ID);
   return { ok: true, view: battleView(row.id, snap, outcome, potions, reward) };

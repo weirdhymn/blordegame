@@ -21,7 +21,12 @@ export function HorseCard({ horse }: { horse: Horse }): ReactElement {
   return (
     <Link to={`/horses/${horse.id}`} className="horse-card">
       <HorseCanvas spec={spec} scale={2} />
-      <div className="horse-name">{horse.name ?? 'Unnamed'}</div>
+      <div className="horse-name">
+        {horse.mood === 'rattled' && (
+          <span title="Had a rough day — groom to cheer it up">😟 </span>
+        )}
+        {horse.name ?? 'Unnamed'}
+      </div>
       <div className="horse-coat">{spec.foalWhite ? 'Foal · coat hidden' : spec.displayName}</div>
     </Link>
   );

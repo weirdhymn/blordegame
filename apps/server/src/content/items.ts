@@ -1,4 +1,4 @@
-export type ItemKind = 'material' | 'book' | 'game' | 'tool' | 'cosmetic' | 'consumable';
+export type ItemKind = 'material' | 'book' | 'game' | 'tool' | 'cosmetic' | 'consumable' | 'grain';
 
 export interface ItemDef {
   id: string;
@@ -28,6 +28,51 @@ export const ITEMS: ItemDef[] = [
   { id: 'tool', name: 'Tool', kind: 'tool' },
   // rare adventure drop — sell / prestige; not a crafting input
   { id: 'rare-gem', name: 'Rare Gem', kind: 'material' },
+  // cooking grains (§7 care hub) — a gather byproduct; each feeds one stat in the morning cook
+  {
+    id: 'grain-corn',
+    name: 'Corn',
+    kind: 'grain',
+    flavor: 'Hearty cobs. Cooks into a Strength buff for the day.',
+  },
+  {
+    id: 'grain-oats',
+    name: 'Oats',
+    kind: 'grain',
+    flavor: 'Feeling your oats — a Dexterity buff.',
+  },
+  {
+    id: 'grain-barley',
+    name: 'Barley',
+    kind: 'grain',
+    flavor: 'Stout and sustaining — a Constitution buff.',
+  },
+  {
+    id: 'grain-wheat',
+    name: 'Wheat',
+    kind: 'grain',
+    flavor: 'The bread of thought — an Intelligence buff.',
+  },
+  {
+    id: 'grain-rice',
+    name: 'Rice',
+    kind: 'grain',
+    flavor: 'Quiet, patient grain — a Wisdom buff.',
+  },
+  {
+    id: 'grain-rye',
+    name: 'Rye',
+    kind: 'grain',
+    flavor: 'The characterful one — a Charisma buff.',
+  },
+  // the rare cooking ingredient — a far-rarer adventuring find that multiplies the whole dish
+  {
+    id: 'saffron-bloom',
+    name: 'Saffron Bloom',
+    kind: 'grain',
+    flavor:
+      'Golden, fragrant threads. Drop one into a big communal pot and the whole meal blooms — save it for a feast.',
+  },
   // terminal consumable — provisioning for danger that doesn't exist yet (combat, post-beta).
   // Deliberately has no consumer today (§7); the flavor frames it so it doesn't read as broken.
   {

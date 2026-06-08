@@ -1,5 +1,10 @@
 import { randomInt } from 'node:crypto';
-import { GATHER_PER_HORSE_PER_DAY, ROAM_DROPS_MAX, ROAM_DROPS_MIN } from '@blorse/balance';
+import {
+  GATHER_PER_HORSE_PER_DAY,
+  GRAIN_IDS,
+  ROAM_DROPS_MAX,
+  ROAM_DROPS_MIN,
+} from '@blorse/balance';
 import { and, eq, inArray } from 'drizzle-orm';
 import { ADVENTURE_POOLS } from '../content/adventures.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
@@ -103,7 +108,8 @@ export async function roam(
     };
   }
 
-  // Each eligible horse forages once (seeded; a bigger stable simply rolls more times).
+  // Each eligible horse forages once (seeded; a bigger stable simply rolls more times) and brings home
+  // one random cooking grain (§7) — so grain supply scales with herd size, feeding the morning cook.
   const rng = mulberry32(seed ?? randomInt(1, 2 ** 31));
   const tally = new Map<string, number>();
   for (let h = 0; h < eligible.length; h++) {
@@ -112,6 +118,8 @@ export async function roam(
       const item = rollLoot(region, rng);
       tally.set(item, (tally.get(item) ?? 0) + 1);
     }
+    const grain = GRAIN_IDS[Math.floor(rng() * GRAIN_IDS.length)]!;
+    tally.set(grain, (tally.get(grain) ?? 0) + 1);
   }
   const found: ItemStack[] = [...tally.entries()].map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, found);

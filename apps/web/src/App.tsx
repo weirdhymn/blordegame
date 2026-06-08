@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.js';
 import { AdventurePage } from './pages/AdventurePage.js';
 import { BreedPage } from './pages/BreedPage.js';
+import { CarePage } from './pages/CarePage.js';
 import { DebugPage } from './pages/DebugPage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
 import { HomePage } from './pages/HomePage.js';
@@ -41,6 +42,7 @@ export function App(): ReactElement {
         }
       >
         <Route path="/" element={<HomePage />} />
+        <Route path="/care" element={<CarePage />} />
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
         <Route path="/tavern" element={<TavernPage />} />

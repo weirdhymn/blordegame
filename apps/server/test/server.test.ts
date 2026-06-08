@@ -15,9 +15,11 @@ import {
   CLASS_APPROACH,
   COMBAT_RESIST_MULT,
   COMBAT_WEAKNESS_MULT,
+  cookMeal,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
   GATHER_PER_HORSE_PER_DAY,
+  GROOM_CUBES,
   HERD_TIERS,
   type HorseClass,
   JOB_DC,
@@ -69,6 +71,7 @@ import {
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
 import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
+import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
 import {
   actInBattle,
   approachMultiplier,
@@ -3137,6 +3140,122 @@ async function main(): Promise<void> {
       'tiering up to Working Farm raised the cap to 10 (room to grow)',
       roomNow?.herdCap === 10 && (roomNow?.herdSize ?? 99) < 10,
     );
+  }
+
+  // ── §7 Daily Care hub: cook (morning ritual) + groom (evening ritual) ──
+  {
+    // cookMeal (pure): the per-stat cap and the rare multiplier
+    check('cookMeal caps a stat at +5 (5 grains to max it)', cookMeal({ str: 9 }).str === 5);
+    check(
+      'cookMeal maps grain counts → per-stat buff',
+      cookMeal({ str: 3, int: 2 }).str === 3 && cookMeal({ str: 3, int: 2 }).int === 2,
+    );
+    check(
+      'a rare multiplies the WHOLE dish (×1.5 → round(5×1.5)=8)',
+      cookMeal({ str: 5 }, 1).str === 8,
+    );
+    check('two rares double it (×2)', cookMeal({ str: 4 }, 2).str === 8);
+
+    // a herd of 8 (so the pot holds 8) — mint past the tier-1 cap directly (raw mint isn't capped)
+    const cookHerd = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'cook', password: 'cookhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    for (let i = 0; i < 6; i++) {
+      await mintHorse(db, {
+        herdId: cookHerd,
+        genotype: { E: 'Ee', A: 'Aa' } as Genotype,
+        origin: 'wild',
+        lifeStage: 'adult',
+      });
+    }
+    const beforeCook = await getCareState(db, cookHerd, Date.UTC(2026, 6, 1, 12));
+    check(
+      'the pot holds one slot per horse (8)',
+      beforeCook.slots === 8 && beforeCook.herdSize === 8,
+    );
+    check('not cooked yet → no live buff', !beforeCook.cookedToday);
+
+    // stock the pantry and cook a STR-heavy, dash-of-CHA meal with a rare
+    await grantItems(db, cookHerd, [
+      { id: 'grain-corn', qty: 5 },
+      { id: 'grain-rye', qty: 1 },
+      { id: 'saffron-bloom', qty: 1 },
+    ]);
+    const CD = Date.UTC(2026, 6, 1, 12);
+    const meal = await cook(db, cookHerd, { 'grain-corn': 5, 'grain-rye': 1 }, 1, CD);
+    check(
+      'cook succeeds: STR + CHA buffed, rare-multiplied',
+      meal.ok && meal.mealBuffs.str === 8 && meal.mealBuffs.cha === 2,
+    );
+    check(
+      'the live meal buff reads back today',
+      Object.keys(await getMealBuff(db, cookHerd, CD)).length > 0,
+    );
+    check(
+      'the meal buff RESETS at the next day',
+      Object.keys(await getMealBuff(db, cookHerd, CD + 86_400_000)).length === 0,
+    );
+    // over-filling the pot is refused (cozy: a clear message, not a crash)
+    await grantItems(db, cookHerd, [{ id: 'grain-corn', qty: 20 }]);
+    const overfill = await cook(db, cookHerd, { 'grain-corn': 9 }, 0, CD);
+    check(
+      'a pot can hold at most `slots` ingredients',
+      !overfill.ok && overfill.code === 'too_many',
+    );
+
+    // the meal buff genuinely helps a check: a hopeless DC turns into a win
+    const cookAdult = (await listHerdHorses(db, cookHerd)).filter(
+      (h) => h.lifeStage === 'adult',
+    )[0]!;
+    const hopeless: Choice = {
+      id: 'h',
+      text: 'h',
+      check: { stat: 'str', dc: 40 },
+      success: { text: 'WIN', next: 'end' },
+      failure: { text: 'LOSE', next: 'end' },
+    };
+    const noBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], 0, {});
+    const bigBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], 0, { str: 50 });
+    check(
+      'a meal buff turns a hopeless check into a win (DC reduction)',
+      noBuff.outcome.text === 'LOSE' && bigBuff.outcome.text === 'WIN',
+    );
+
+    // groom: soothe rough moods + queue the small morning bonus
+    await db.update(horses).set({ mood: 'rattled' }).where(drizzleEq(horses.herdId, cookHerd));
+    const groomRes = await groom(db, cookHerd);
+    check('groom soothes the rattled herd', groomRes.soothed >= 1);
+    check(
+      'every horse is content after grooming',
+      (await listHerdHorses(db, cookHerd)).every((h) => h.mood === 'content'),
+    );
+    check('groom queues the flat next-morning bonus', groomRes.pendingCubes === GROOM_CUBES);
+    // …paid once, at the next sunrise (a real rollover) — guilt-free, no daily FOMO drip
+    const roll1 = await advanceHerd(db, cookHerd, CD + 86_400_000);
+    check('grooming pays GROOM_CUBES at the next rollover', roll1.groomCubes === GROOM_CUBES);
+    const roll2 = await advanceHerd(db, cookHerd, CD + 2 * 86_400_000);
+    check('the groom bonus pays once, never drips daily', roll2.groomCubes === 0);
+
+    // a full-party battle retreat leaves the party rattled → grooming has something to soothe
+    const sad = await db
+      .insert(horses)
+      .values({
+        herdId: cookHerd,
+        genotype: { E: 'Ee' } as Genotype,
+        seed: 1,
+        origin: 'wild',
+        lifeStage: 'adult',
+        mood: 'rattled',
+      })
+      .returning({ id: horses.id });
+    check('a rattled mood persists until groomed', sad.length === 1);
+    await groom(db, cookHerd);
+    const soothedHorse = await getHorse(db, sad[0]!.id);
+    check('the evening groom soothes it back to content', soothedHorse?.mood === 'content');
   }
 
   await app.close();

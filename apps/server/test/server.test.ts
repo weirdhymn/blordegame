@@ -18,6 +18,7 @@ import {
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
   GATHER_PER_HORSE_PER_DAY,
+  HERD_TIERS,
   type HorseClass,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
@@ -38,6 +39,7 @@ import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import {
   adventureRuns,
+  battles,
   herds,
   horseAncestors,
   horses,
@@ -82,6 +84,12 @@ import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/servic
 import { consumeItems, grantItems, itemQty } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { compatibility } from '../src/services/personality.js';
+import {
+  checkJobSlots,
+  getProgression,
+  herdHorseCount,
+  upgradeHerd,
+} from '../src/services/progression.js';
 import { skillCheck } from '../src/services/stats.js';
 import {
   coatRarityScore,
@@ -153,6 +161,11 @@ async function main(): Promise<void> {
     s0 && s1 ? await shareLineage(db, s0.id, s1.id) : true,
     false,
   );
+
+  // The §7 herd-size cap is exercised on FRESH herds below; the long-running `plum` playground herd
+  // accumulates far past the tier-1 roster cap across the suite, so run it at the top tier (cap 30)
+  // to keep the breeding/recruit/wild tests — which aren't about the cap — unblocked.
+  await db.update(herds).set({ level: 5 }).where(drizzleEq(herds.id, startHerd.id));
 
   // --- duplicate + weak input ---
   const dup = await inject({
@@ -628,6 +641,9 @@ async function main(): Promise<void> {
   });
   eq('craft without materials → 409', craftFail.statusCode, 409);
 
+  // Pasture structure-slot gating is a level-1 capacity (4 slots) — drop `plum` to tier 1 for this
+  // block (it's at the top tier elsewhere so its big roster isn't herd-capped), then restore.
+  await db.update(herds).set({ level: 1 }).where(drizzleEq(herds.id, herdId));
   // build structures (consume building materials + Cubes), up to capacity
   for (const type of ['library', 'foragers-hut', 'track', 'kitchen']) {
     const b = await inject({
@@ -660,6 +676,7 @@ async function main(): Promise<void> {
   }>();
   eq('pasture used 4 slots', pasture.used, 4);
   eq('pasture capacity is 4', pasture.capacity, 4);
+  await db.update(herds).set({ level: 5 }).where(drizzleEq(herds.id, herdId)); // restore top tier
   check(
     'Library is placed',
     pasture.structures.some((s) => s.type === 'library'),
@@ -2986,6 +3003,140 @@ async function main(): Promise<void> {
     );
 
     await dapp.close();
+  }
+
+  // ── §7 herd-tier progression spine (the Cubes sink + milestone-gated ladder) ──
+  {
+    const minimalBattle = { round: 1, turnIndex: 0, order: [], combatants: [], log: [] };
+    const freshHerd = async (name: string): Promise<string> => {
+      const r = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: name, password: 'progress1horse' },
+      });
+      return r.json<{ herd: { id: string } }>().herd.id;
+    };
+
+    check(
+      'the ladder is 5 tiers, top cap 30, Tier-2 cost 650',
+      HERD_TIERS.length === 5 && HERD_TIERS[4]!.herdCap === 30 && HERD_TIERS[1]!.cost === 650,
+    );
+    check(
+      'herd caps strictly escalate (the master lever)',
+      HERD_TIERS.every((t, i) => i === 0 || t.herdCap > HERD_TIERS[i - 1]!.herdCap),
+    );
+
+    const ph = await freshHerd('progress');
+    const p0 = await getProgression(db, ph);
+    check(
+      'a fresh herd reads as Tier 1 Smallholding (cap 6, 2 jobs, 4 slots)',
+      !!p0 && p0.tier === 1 && p0.herdCap === 6 && p0.jobSlots === 2 && p0.structureSlots === 4,
+    );
+    check(
+      'next is Working Farm (650 ⬡), gated on breeding a foal (not yet met)',
+      !!p0?.next &&
+        p0.next.tier === 2 &&
+        p0.next.cost === 650 &&
+        !p0.next.gatesMet &&
+        p0.next.gates.some((g) => /foal/i.test(g.label)),
+    );
+
+    // gated: enough Cubes but the milestone isn't met → upgrade refused
+    await db.update(herds).set({ cubes: 9000 }).where(drizzleEq(herds.id, ph));
+    const gated = await upgradeHerd(db, ph);
+    check('upgrade refused while gated (no foal bred yet)', !gated.ok && gated.code === 'gated');
+
+    // breed a foal → completes a-new-foal → the gate clears → upgrade to Tier 2, Cubes deducted
+    const adults = (await listHerdHorses(db, ph)).filter((h) => h.lifeStage === 'adult');
+    const bred = await breedHorses(db, ph, adults[0]!.id, adults[1]!.id, { seed: 1 });
+    check('bred a foal (completes the a-new-foal quest)', bred.ok);
+    await db.update(herds).set({ cubes: 9000 }).where(drizzleEq(herds.id, ph)); // re-baseline (the quest paid out)
+    const up2 = await upgradeHerd(db, ph);
+    check(
+      'Tier 2 unlocked after breeding + paying',
+      up2.ok && up2.tier === 2 && up2.herdCap === 10,
+    );
+    check(
+      'the Tier-2 cost (650) was sunk from the purse',
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, ph) }))?.cubes === 9000 - 650,
+    );
+
+    // Tier 3 gates on a boss win (combat breadth)
+    const p2 = await getProgression(db, ph);
+    check(
+      'Tier 3 gated on the Green Grass boss (not yet met)',
+      !!p2?.next && p2.next.tier === 3 && !p2.next.gatesMet,
+    );
+    await db.insert(battles).values({
+      herdId: ph,
+      enemies: ['gg-hollow-keeper'],
+      seed: 1,
+      state: minimalBattle,
+      status: 'won',
+    });
+    await db.update(herds).set({ cubes: 9000 }).where(drizzleEq(herds.id, ph));
+    const up3 = await upgradeHerd(db, ph);
+    check('Tier 3 unlocked by beating the Green Grass boss', up3.ok && up3.tier === 3);
+
+    // Tier 4 gates on BOTH a rare coat AND a second boss (must play the breadth)
+    const p3 = await getProgression(db, ph);
+    check(
+      'Tier 4 gated on TWO accomplishments (rare coat + Dunes boss)',
+      !!p3?.next && p3.next.gates.length === 2 && !p3.next.gatesMet,
+    );
+    await mintHorse(db, {
+      herdId: ph,
+      genotype: { E: 'Ee', G: 'Gg' },
+      origin: 'wild',
+      lifeStage: 'adult',
+    });
+    await db.insert(battles).values({
+      herdId: ph,
+      enemies: ['dd-sandstone-sentinel'],
+      seed: 1,
+      state: minimalBattle,
+      status: 'won',
+    });
+    await db.update(herds).set({ cubes: 9000 }).where(drizzleEq(herds.id, ph));
+    const up4 = await upgradeHerd(db, ph);
+    check('Tier 4 unlocked by a rare (Gray) coat + the Dunes boss', up4.ok && up4.tier === 4);
+
+    // The blocked-at-cap moment is MOTIVATING — names the next tier + cost, never a dead end.
+    const cap = await freshHerd('capper');
+    for (let i = 0; i < 4; i++) {
+      await mintHorse(db, {
+        herdId: cap,
+        genotype: { E: 'Ee', A: 'Aa' },
+        origin: 'wild',
+        lifeStage: 'adult',
+      });
+    }
+    check('herd filled to the Tier-1 cap of 6', (await herdHorseCount(db, cap)) === 6);
+    const capAdults = (await listHerdHorses(db, cap)).filter((h) => h.lifeStage === 'adult');
+    const blockedBreed = await breedHorses(db, cap, capAdults[0]!.id, capAdults[1]!.id, {
+      seed: 2,
+    });
+    check(
+      'at cap → breeding is blocked (herd_full)',
+      !blockedBreed.ok && blockedBreed.code === 'herd_full',
+    );
+    check(
+      'the herd-full message motivates (names Tier 2 + the 650 ⬡ cost)',
+      !blockedBreed.ok && /Tier 2/.test(blockedBreed.message) && /650/.test(blockedBreed.message),
+    );
+    // job-slots cap at Tier 1 = 2 workers; a 3rd is a motivating block too
+    const slot3 = await checkJobSlots(db, cap, 2);
+    check(
+      'Tier-1 job slots cap at 2 (a 3rd worker is blocked, motivating)',
+      !slot3.ok && slot3.code === 'jobs_full' && /Tier 2/.test(slot3.message),
+    );
+    // tiering up raises the roster ceiling → room to grow again
+    await db.update(herds).set({ level: 2 }).where(drizzleEq(herds.id, cap));
+    const roomNow = await getProgression(db, cap);
+    check(
+      'tiering up to Working Farm raised the cap to 10 (room to grow)',
+      roomNow?.herdCap === 10 && (roomNow?.herdSize ?? 99) < 10,
+    );
   }
 
   await app.close();

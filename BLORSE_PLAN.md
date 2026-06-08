@@ -500,6 +500,17 @@ The first real economy lever. Passive daily gathering was uncapped (roam infinit
 - **Measured (3-day sim, 5-horse stable, 4 adventures/day):** ~34 raw mats from gathering vs ~28 from adventuring (gathering the majority); ~20 raws/day total; ~138 Cubes/day. So a day funds only a handful of ~5–7-raw products — crafting is no longer flooded. **Recommendation: hold crafting costs; the cap balanced the source.** Re-runnable via `apps/server/scripts/measure-economy.ts`.
 - **Render fix (orthogonal):** horse sprites are now capped to the native **150×126 at integer scale only** (the canvas's CSS size is locked to its bitmap size; `image-rendering: pixelated`), so upscaled pixel art is crisp instead of fractionally blurred.
 
+### 7f The progression spine: Herd Tier (the Cubes sink)
+
+ONE legible ladder — `herds.level` (a dormant hook that already gated `pastureCapacity`, now actually written) — is the herd's long-term progression + the Cubes sink. Each rung raises **three capacities together** so it reads as one tier, not parallel meters: **herd-size cap** (the master lever) + **autonomy job slots** + **Pasture structure slots** (the existing `pastureCapacity(level)`). `HERD_TIERS` in balance.ts.
+
+- **The ladder (5 tiers):** Smallholding (6 horses / 2 jobs / 4 slots, start) → Working Farm (10 / 3 / 5, **650 ⬡**) → Ranch (15 / 4 / 6, **1,250**) → Estate (22 / 5 / 7, **2,100**) → Dynasty (30 / 6 / 8, **3,600**).
+- **Costs priced against measured income, not feel.** A projection (`scripts/project-progression.ts`) models income compounding 158 → 394 Cubes/day as the herd grows; the chosen costs give **days-to-tier ≈ 4 → 6 → 8 → 11** (earned, gently rising, never the 21-day wall the feel-based costs produced). 30 confirmed comfortable: the autonomy tick is bounded by `MAX_AUTONOMY_PAIRS=60`, jobs ≤ slots, the gather batch is linear.
+- **The compounding loop is real:** more horses → more daily gathering (per-horse cap fixed → *count* is the only lever) + more autonomy-job Cubes (job-slot cap) + bigger adventure runs → more income → the next, bigger tier.
+- **Gates force playing the breadth.** Tier 2 = a light early accomplishment (the **a-new-foal** quest — breed a foal) + Cubes; Tier 3 = **beat the Green Grass boss**; Tier 4 = **own a rare coat (≥0.5) AND beat the Dusty Dunes boss**; Tier 5 = **beat the Weird Woods boss**. Milestones are detected on demand (won-battle query, on-the-fly `coatRarityScore` scan, quest check) — nothing new stored.
+- **Enforcement is motivating, never a dead end.** The herd-size cap is checked at the deliberate add-points (breeding, Tavern recruiting; the dice-adventure wild gracefully → Tavern); blocked → *"Your Smallholding is full (6/6). Reach Tier 2 (Working Farm) to raise it to 10 horses — 650 ⬡"* with a link to the progression panel. Job-slots cap likewise. (A rare story-befriended stray still joins — a cozy exception.)
+- **Surfaced** as the **Herd Tier panel on the Pasture** (tier + caps, the next upgrade's cost/gates/unlocks, the Upgrade button) — `GET /api/progression`, `POST /api/progression/upgrade`.
+
 ### 9.5 Beta scope
 
 Ship: the six stats \+ hidden Luck, 4–6 skills, 2–3 jobs tied to starter structures, single-horse-and-small-party adventures with one encounter table per starter region, the **wild-encounter → party-recruit → Tavern** flow, dice resolution UI, accomplishments. Defer to **post-beta content waves**: large/strategic parties, deep job trees, multi-stage expeditions, and civil-society offices — all extend the same stat+dice+event spine.

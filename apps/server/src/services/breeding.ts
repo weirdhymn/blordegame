@@ -15,6 +15,7 @@ import { mulberry32 } from '../util/rng.js';
 import { logAudit } from './audit.js';
 import { getRelationships } from './autonomy.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from './horse.js';
+import { checkHerdCapacity } from './progression.js';
 import { recordEvent } from './quests.js';
 
 export type BreedRejection =
@@ -23,7 +24,8 @@ export type BreedRejection =
   | 'not_adult'
   | 'cooldown'
   | 'related'
-  | 'same_horse';
+  | 'same_horse'
+  | 'herd_full';
 
 /** How the parents' bond lifted the foal — only present (non-null) when the bonus is > 0. */
 export interface BondBreed {
@@ -106,6 +108,10 @@ export async function breedHorses(
 
   if (await shareLineage(db, a.id, b.id))
     return { ok: false, code: 'related', message: 'These two share a common ancestor.' };
+
+  // Herd-size cap (§7 progression): a viable foal needs a free roster slot. Motivating, not a wall.
+  const room = await checkHerdCapacity(db, herdId);
+  if (!room.ok) return { ok: false, code: 'herd_full', message: room.message };
 
   const seed = opts.seed ?? randomInt(1, 2 ** 31);
   const result = breedFoal(a.genotype, b.genotype, mulberry32(seed));

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import { breed, getBreedOdds, type BreedOdds, type BreedSuccess } from '../api/breeding.js';
@@ -15,6 +16,7 @@ export function BreedPage(): ReactElement {
   const [odds, setOdds] = useState<BreedOdds | null>(null);
   const [result, setResult] = useState<BreedSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false); // herd_full → link to the progression screen
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -41,6 +43,7 @@ export function BreedPage(): ReactElement {
     if (!a || !b) return;
     setBusy(true);
     setError(null);
+    setBlocked(false);
     setResult(null);
     try {
       const r = await breed(a, b);
@@ -48,6 +51,7 @@ export function BreedPage(): ReactElement {
       await refresh();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Breeding failed.');
+      setBlocked(e instanceof ApiError && e.code === 'herd_full');
     } finally {
       setBusy(false);
     }
@@ -128,6 +132,12 @@ export function BreedPage(): ReactElement {
       {error && (
         <div className="error" role="alert">
           {error}
+          {blocked && (
+            <>
+              {' '}
+              <Link to="/">→ Grow your Herd Tier</Link>
+            </>
+          )}
         </div>
       )}
       {result && result.viable && foalSpec && (

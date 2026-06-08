@@ -118,9 +118,99 @@ export const STARTER_HORSE_COUNT = 2;
 export const STARTING_CUBES = 3 * DAILY_CUBES; // 150
 
 // ── The Pasture (Phase 7) ───────────────────────────────────────────────────
-/** Structure slots in a fresh Pasture; grows with herd level. */
+/** Structure slots in a fresh Pasture; grows with herd level (= Herd Tier, see HERD_TIERS). */
 export const PASTURE_BASE_SLOTS = 4;
 export const PASTURE_SLOTS_PER_LEVEL = 1;
+
+// ── Herd progression spine (§6/§7): the ONE legible ladder ──────────────────
+/** A single milestone gate on a tier-up. ALL gates on a tier must be met to buy it. The ids are
+ *  resolved by the server (boss = a won battle vs that enemy; quest = completed; rareCoat = an owned
+ *  horse with coatRarityScore ≥ minRarity). */
+export type HerdTierGate =
+  | { kind: 'quest'; questId: string; label: string }
+  | { kind: 'boss'; enemyId: string; label: string }
+  | { kind: 'rareCoat'; minRarity: number; label: string };
+
+export interface HerdTier {
+  /** Tier number = herds.level. */
+  tier: number;
+  name: string;
+  /** Max horses the herd may hold (the master lever: more horses → more gather/jobs/adventures). */
+  herdCap: number;
+  /** Max horses that can hold an autonomy job at once. */
+  jobSlots: number;
+  /** Cubes to upgrade INTO this tier from the previous (tier 1 = 0, the start). */
+  cost: number;
+  /** Accomplishment gates (ALL required); [] = Cubes-only. Major jumps gate on playing the breadth. */
+  gates: HerdTierGate[];
+}
+
+/** The progression spine. One ladder; each rung raises herdCap + jobSlots + (via pastureCapacity)
+ *  structure slots together. Costs priced against measured income so days-to-tier stay ~4→11 (earned,
+ *  not a wall) while income compounds 158→394/day. Tier-2 gate is a LIGHT early accomplishment (breed
+ *  a foal); the major jumps gate on bosses + a rare coat so progression requires breadth, not farming. */
+export const HERD_TIERS: HerdTier[] = [
+  { tier: 1, name: 'Smallholding', herdCap: 6, jobSlots: 2, cost: 0, gates: [] },
+  {
+    tier: 2,
+    name: 'Working Farm',
+    herdCap: 10,
+    jobSlots: 3,
+    cost: 650,
+    gates: [{ kind: 'quest', questId: 'a-new-foal', label: 'Breed your first foal' }],
+  },
+  {
+    tier: 3,
+    name: 'Ranch',
+    herdCap: 15,
+    jobSlots: 4,
+    cost: 1250,
+    gates: [
+      {
+        kind: 'boss',
+        enemyId: 'gg-hollow-keeper',
+        label: 'Defeat the Green Grass boss (the Hollow-Keeper)',
+      },
+    ],
+  },
+  {
+    tier: 4,
+    name: 'Estate',
+    herdCap: 22,
+    jobSlots: 5,
+    cost: 2100,
+    gates: [
+      { kind: 'rareCoat', minRarity: 0.5, label: 'Own a rare-coated horse (rarity ≥ 0.5)' },
+      {
+        kind: 'boss',
+        enemyId: 'dd-sandstone-sentinel',
+        label: 'Defeat the Dusty Dunes boss (the Sandstone Sentinel)',
+      },
+    ],
+  },
+  {
+    tier: 5,
+    name: 'Dynasty',
+    herdCap: 30,
+    jobSlots: 6,
+    cost: 3600,
+    gates: [
+      {
+        kind: 'boss',
+        enemyId: 'ww-mistwood-mimic',
+        label: 'Defeat the Weird Woods boss (the Mistwood Mimic)',
+      },
+    ],
+  },
+];
+
+export const HERD_TIER_BY_LEVEL = new Map(HERD_TIERS.map((t) => [t.tier, t]));
+/** The herd-size cap for a level (clamps to the top tier). */
+export const herdCapForLevel = (level: number): number =>
+  (HERD_TIER_BY_LEVEL.get(level) ?? HERD_TIERS[HERD_TIERS.length - 1]!).herdCap;
+/** The autonomy job-slot cap for a level. */
+export const jobSlotsForLevel = (level: number): number =>
+  (HERD_TIER_BY_LEVEL.get(level) ?? HERD_TIERS[HERD_TIERS.length - 1]!).jobSlots;
 
 // ── RPG: stats, skills, jobs (Phase 8, §9, §14.6) ───────────────────────────
 export type StatKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';

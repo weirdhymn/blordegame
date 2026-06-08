@@ -12,6 +12,7 @@ import { STRUCTURE_BY_ID } from '../content/structures.js';
 import type { DB } from '../db/client.js';
 import { herds, horses, jobAssignments, structures } from '../db/schema.js';
 import { getHorse } from './horse.js';
+import { checkJobSlots } from './progression.js';
 import {
   accomplishmentsForLevel,
   grantSkillXp,
@@ -23,7 +24,7 @@ import {
 export type JobResult =
   | {
       ok: false;
-      code: 'not_found' | 'not_owned' | 'not_adult' | 'no_structure' | 'no_job';
+      code: 'not_found' | 'not_owned' | 'not_adult' | 'no_structure' | 'no_job' | 'jobs_full';
       message: string;
     }
   | { ok: true; structureType: string; skill: string };
@@ -51,6 +52,17 @@ export async function assignJob(
     .where(eq(structures.herdId, herdId));
   if (!built.some((b) => b.type === structureType)) {
     return { ok: false, code: 'no_structure', message: 'Build that structure first.' };
+  }
+
+  // Job-slot cap (§7 progression). A re-assignment (the horse already works) just MOVES it — no new
+  // slot; a fresh assignment needs a free work slot, else a motivating "tier up for another" message.
+  const herdJobs = await db
+    .select({ horseId: jobAssignments.horseId })
+    .from(jobAssignments)
+    .where(eq(jobAssignments.herdId, herdId));
+  if (!herdJobs.some((j) => j.horseId === horseId)) {
+    const slot = await checkJobSlots(db, herdId, herdJobs.length);
+    if (!slot.ok) return { ok: false, code: 'jobs_full', message: slot.message };
   }
 
   await db

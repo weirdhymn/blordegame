@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { listTavern, recruit, type TavernHorse } from '../api/tavern.js';
 import { TavernCard } from '../components/TavernCard.js';
@@ -8,6 +9,7 @@ export function TavernPage(): ReactElement {
   const { herd, refresh } = useSession();
   const [list, setList] = useState<TavernHorse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false); // herd_full → link to the progression screen
   const [note, setNote] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -21,6 +23,7 @@ export function TavernPage(): ReactElement {
   async function onRecruit(id: string): Promise<void> {
     setBusyId(id);
     setError(null);
+    setBlocked(false);
     setNote(null);
     try {
       await recruit(id);
@@ -29,6 +32,7 @@ export function TavernPage(): ReactElement {
       load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not recruit that horse.');
+      setBlocked(e instanceof ApiError && e.code === 'herd_full');
     } finally {
       setBusyId(null);
     }
@@ -45,6 +49,12 @@ export function TavernPage(): ReactElement {
       {error && (
         <div className="error" role="alert">
           {error}
+          {blocked && (
+            <>
+              {' '}
+              <Link to="/">→ Grow your Herd Tier</Link>
+            </>
+          )}
         </div>
       )}
       {list === null && <div className="loading">Loading…</div>}

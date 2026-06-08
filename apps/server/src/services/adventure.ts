@@ -23,6 +23,7 @@ import { mulberry32 } from '../util/rng.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { rollWildPersonality } from './personality.js';
+import { checkHerdCapacity } from './progression.js';
 import { isQuestCompleted } from './quests.js';
 import {
   accomplishmentsForLevel,
@@ -188,7 +189,10 @@ export async function adventure(
     const personality = rollWildPersonality(rng);
     const name = resolve(genotype).displayName;
     const avgCha = party.reduce((s, h) => s + ((h.stats as StatBlock).cha ?? 10), 0) / party.length;
+    // A wild only joins if there's both a party slot AND a herd-roster slot; otherwise → Tavern (§7).
+    const room = await checkHerdCapacity(db, herdId);
     const accepted =
+      room.ok &&
       party.length < PARTY_MAX &&
       rng() < acceptChance(avgCha, personality.a, personality.n, personality.e);
 

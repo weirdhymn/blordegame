@@ -428,6 +428,8 @@ export async function chooseInRun(
   // Befriend a wild stranger → it joins the herd now (the narrative recruit, no fee).
   let befriended: { id: string; name: string } | null = null;
   if (outcome.wild) {
+    // A befriended stray is a rare narrative gift — it joins even at the roster cap (a cozy exception;
+    // the deliberate add-points, breeding + Tavern recruiting, are where the §7 cap bites).
     const region = REGION_BY_ID.get(run.regionId);
     const wrng = stepRng(run.seed, run.step, 0x85ebca6b);
     const genotype = randomGenotype(region?.freqOverride);

@@ -18,6 +18,7 @@ const REJECTION_STATUS: Record<BreedRejection, number> = {
   cooldown: 429,
   related: 409,
   same_horse: 400,
+  herd_full: 409,
 };
 
 export function registerBreedingRoutes(app: FastifyInstance, db: DB): void {

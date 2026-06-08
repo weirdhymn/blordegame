@@ -5,6 +5,7 @@ import type { DB } from '../db/client.js';
 import { herds, horses, type HorseRow } from '../db/schema.js';
 import { logAudit } from './audit.js';
 import { getHorse } from './horse.js';
+import { checkHerdCapacity } from './progression.js';
 import type { SkillBlock, StatBlock } from './stats.js';
 
 function rarityTier(genotype: Genotype): keyof typeof RARITY_SCORE {
@@ -51,7 +52,7 @@ export async function listTavern(db: DB): Promise<TavernHorseView[]> {
 }
 
 export type RecruitResult =
-  | { ok: false; code: 'not_found' | 'gone' | 'cant_afford'; message: string }
+  | { ok: false; code: 'not_found' | 'gone' | 'cant_afford' | 'herd_full'; message: string }
   | { ok: true; horseId: string; fee: number };
 
 /** Recruit a Tavern horse for the fee. Atomic: only the first claimant wins (§10). */
@@ -69,6 +70,9 @@ export async function recruitFromTavern(
   if (herd.cubes < h.tavernFee) {
     return { ok: false, code: 'cant_afford', message: 'Not enough Cubes for the fee.' };
   }
+  // Herd-size cap (§7 progression): need a free roster slot to take the horse home.
+  const room = await checkHerdCapacity(db, herdId);
+  if (!room.ok) return { ok: false, code: 'herd_full', message: room.message };
 
   // Atomic claim — succeeds only while the horse is still unowned.
   const claimed = await db

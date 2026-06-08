@@ -4,6 +4,7 @@ import { ApiError } from '../api/client.js';
 import { checkIn, type DailyResult } from '../api/daily.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { DailyGather } from '../components/DailyGather.js';
+import { HerdTier } from '../components/HerdTier.js';
 import { HorseCard } from '../components/HorseCard.js';
 import { useSession } from '../session.js';
 
@@ -72,6 +73,7 @@ export function HomePage(): ReactElement {
           {error}
         </div>
       )}
+      <HerdTier />
       <DailyGather />
       <h2 className="section-h">Your herd</h2>
       {horses === null && <div className="loading">Loading your herd…</div>}

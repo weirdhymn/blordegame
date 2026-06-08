@@ -1,10 +1,35 @@
 :root {
+  /* — warm palette (unchanged) — */
   --sage: #e7ecd7;
   --sage-deep: #cdd6b6;
   --ink: #1d2917;
   --ink-soft: #44583b;
   --paper: #f4f6ec;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  /* — pixel grid: 1 unit = 1 source-sprite-pixel = 2 CSS px at our 2× sprite scale, so the UI
+     rhythm and the horses share one grid. Spacing + borders snap to it. — */
+  --px: 2px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --bd: 2px; /* hard border = 1 sprite-pixel */
+
+  /* — warm accents, pixel-flat (ours, not EarthBound's neon), AA-dark on cream — */
+  --gold: #8a6014; /* Cubes / cost (5.1:1) */
+  --berry: #9c4410; /* full-cap / warm alert (5.9:1) */
+  --leaf: #2c5a1d; /* positive / note */
+
+  /* — stepped gradients: HARD stops only (banded, never smooth) — */
+  --band-sage: repeating-linear-gradient(180deg, #eef2e1 0 4px, #e7ecd7 4px 8px, #dde4cb 8px 12px);
+  --band-paper: repeating-linear-gradient(180deg, #f7f8f0 0 4px, #f1f3e6 4px 8px, #eaefdb 8px 12px);
+
+  /* — two pixel fonts by role: Silkscreen (chunky display) + Pixelify Sans (legible body/data) — */
+  --font-display: 'Silkscreen', ui-monospace, monospace;
+  --font-body: 'Pixelify Sans', ui-monospace, monospace;
+
+  font-family: var(--font-body);
   color: var(--ink);
 }
 
@@ -1041,4 +1066,221 @@ button.ghost {
 .combatant-class {
   color: var(--ink-soft);
   font-weight: 400;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PIXEL THEME — EarthBound/Mother idiom in OUR cozy-warm palette. APP-WIDE.
+   (Tokens live on :root above.) Placed last so it themes the base elements, the
+   shell, and shared components by source-order precedence; the per-feature
+   structural rules above are left intact and simply inherit the new look.
+
+   Principles: hard edges (0-radius), chunky solid borders + crisp 0-blur pixel
+   shadows (never soft/blurred), stepped/banded gradients (never smooth), two
+   pixel fonts by role at INTEGER-px display sizes. Legibility first — frames +
+   banding carry character on hero panels and plates; dense data leans on
+   weight/colour/space, never a box around every row.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Hard edges everywhere: one blunt reset kills all smooth rounding app-wide
+   (every component sets its own radius, so a plain universal rule won't reach
+   them — !important is the deliberate, single exception the idiom needs). */
+* {
+  border-radius: 0 !important;
+}
+
+body {
+  /* Flat sage fill — a full-page repeating-conic dither rasterises far too slowly; the pixel
+     identity rides on the frames, fonts, and banded plates, not a page texture. */
+  background: var(--sage);
+  /* keep pixel glyphs hard-edged — no sub-pixel smoothing */
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* ── Headings + display type ── */
+h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.05;
+  color: var(--ink);
+  background: var(--band-sage);
+  border: var(--bd) solid var(--ink);
+  /* the signature double frame = a crisp paper gap then a second ink line (0 blur = hard) */
+  box-shadow:
+    0 0 0 var(--bd) var(--paper),
+    0 0 0 calc(var(--bd) * 2) var(--ink);
+  padding: var(--sp-3) var(--sp-4);
+  margin: var(--sp-1) 0 var(--sp-6);
+}
+.section-h {
+  font-family: var(--font-display);
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--ink);
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+.name,
+.brand {
+  font-family: var(--font-display);
+}
+.name {
+  font-size: 16px;
+}
+
+/* ── Buttons / link-buttons / inputs — chunky, with a hard pixel shadow you press into ── */
+button,
+.btn-link,
+select,
+input {
+  font-family: var(--font-body);
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--bd) solid var(--ink);
+  padding: var(--sp-2) var(--sp-3);
+}
+button,
+.btn-link {
+  box-shadow: var(--px) var(--px) 0 0 var(--ink);
+}
+button.primary {
+  background: var(--band-sage);
+}
+button:active,
+.btn-link:active {
+  transform: translate(var(--px), var(--px));
+  box-shadow: none; /* press down into the shadow */
+}
+button:disabled {
+  color: var(--ink-soft);
+  background: var(--sage);
+  box-shadow: none;
+  opacity: 0.75;
+  cursor: default;
+}
+input {
+  box-shadow: none;
+  font-weight: 400;
+}
+
+/* ── Cards / framed boxes — flat paper, single hard frame ── */
+.card,
+.stage {
+  background: var(--paper);
+  border: var(--bd) solid var(--ink);
+}
+
+/* ── App shell — a banded title bar with a thick base rule (the EarthBound window) ── */
+.topbar {
+  background: var(--band-sage);
+  border-bottom: calc(var(--bd) * 2) solid var(--ink);
+}
+.brand {
+  font-size: 15px;
+}
+.cubes-badge {
+  background: var(--paper);
+  border: var(--bd) solid var(--ink);
+  box-shadow: var(--px) var(--px) 0 0 var(--ink);
+  font-size: 12px;
+}
+.topnav a {
+  border: var(--bd) solid transparent; /* reserve the border so :active never shifts layout */
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.topnav a:hover {
+  background: var(--sage);
+}
+.topnav a.active {
+  background: var(--band-sage);
+  border-color: var(--ink);
+  box-shadow: var(--px) var(--px) 0 0 var(--ink);
+  font-weight: 700;
+}
+
+/* ── Status blocks — flat bold colour with a hard border ── */
+.note {
+  background: #e3f0d8;
+  border: var(--bd) solid var(--leaf);
+  color: var(--leaf);
+}
+.error {
+  background: #f3e1e1;
+  border: var(--bd) solid #7c1d1d;
+  color: #7c1d1d;
+}
+
+/* ── Hero panels get the double-line frame (sparingly — the data centrepiece, menus, modals) ── */
+.herd-tier,
+.modal,
+.battle-menu {
+  box-shadow:
+    0 0 0 var(--bd) var(--paper),
+    0 0 0 calc(var(--bd) * 2) var(--ink);
+}
+.herd-tier {
+  margin: var(--sp-1) var(--bd) calc(var(--sp-4) + var(--bd));
+}
+
+/* ── Herd-Tier dense panel — banded stat plates + clean gate rows (legibility: no box per row) ── */
+.tier-caps .cap {
+  background: var(--band-paper);
+  border: var(--bd) solid var(--ink);
+  padding: var(--sp-1) var(--sp-2);
+}
+.tier-caps .cap.full {
+  color: var(--berry);
+  border-color: var(--berry);
+  font-weight: 700;
+}
+.tier-next {
+  border-top: var(--bd) solid var(--sage-deep);
+}
+.tier-next .section-h {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+}
+.tier-next .section-h strong {
+  color: var(--gold);
+}
+.tier-gates li.met {
+  color: var(--ink-soft);
+}
+.tier-gates li.unmet {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ── Horse cards — sprites lead: each seated on a hard pixel shadow, sprite double-bordered ── */
+.horse-card {
+  border: var(--bd) solid var(--ink);
+  box-shadow: var(--sp-1) var(--sp-1) 0 0 var(--sage-deep);
+  padding: var(--sp-2);
+}
+.horse-card:hover {
+  background: var(--band-paper);
+  border-color: var(--ink);
+  box-shadow: var(--sp-1) var(--sp-1) 0 0 var(--ink);
+}
+.horse-card:active {
+  transform: translate(var(--px), var(--px));
+  box-shadow: var(--px) var(--px) 0 0 var(--sage-deep);
+}
+.horse-canvas {
+  border: var(--bd) solid var(--ink);
+}
+.horse-name {
+  font-size: 13px;
+}
+
+/* ── Small accents ── */
+.rare {
+  color: var(--berry);
+}
+.mark,
+.chip.on,
+.die.win {
+  background: var(--band-sage);
 }

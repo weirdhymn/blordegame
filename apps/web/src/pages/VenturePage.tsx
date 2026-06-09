@@ -5,12 +5,12 @@ import type { BattleView } from '../api/combat.js';
 import {
   adventure,
   chooseStory,
-  getAdventures,
+  getKeeper,
   getRegions,
   startStory,
-  type AdventureOption,
   type AdventureResult,
   type ChooseStoryResult,
+  type KeeperChallenge,
   type RegionView,
   type SceneView,
   type StoryRunView,
@@ -23,9 +23,9 @@ import { pretty } from '../util/format.js';
 
 type StoryEnding = Extract<ChooseStoryResult, { ended: true }>;
 
-/** Venture Out (§9.3/§9.4) — the real expeditions: region picker → expedition → party → set out,
- *  interactive stories, skirmishes, and the region bosses. One of the two Adventure-hub paths (the
- *  other is the no-stakes Sparring Ring). Distinct from the once-daily gather on the Pasture. */
+/** Venture Out (§9.3/§9.4) — the real expeditions: pick a region + party and set out into a RANDOM
+ *  expedition (no picker — each day is a surprise), or take on the region's earned Keeper challenge
+ *  (the boss). One of the two Adventure-hub paths; the other is the no-stakes Sparring Ring. */
 export function VenturePage(): ReactElement {
   const { herd, refresh } = useSession();
   const [regions, setRegions] = useState<RegionView[]>([]);
@@ -43,9 +43,8 @@ export function VenturePage(): ReactElement {
   const [run, setRun] = useState<StoryRunView | null>(null);
   const [storyLog, setStoryLog] = useState<StoryLogEntry[]>([]);
   const [ending, setEnding] = useState<StoryEnding | null>(null);
-  // Expedition picker + the boss handoff (§9.4c).
-  const [adventures, setAdventures] = useState<AdventureOption[]>([]);
-  const [scriptId, setScriptId] = useState('');
+  // The deliberate Keeper challenge (the boss) + its handoff (§9.4c). Regular expeditions are random.
+  const [keeper, setKeeper] = useState<KeeperChallenge | null>(null);
   const [bossBattle, setBossBattle] = useState<BattleView | null>(null);
 
   const loadHorses = useCallback(() => {
@@ -71,18 +70,18 @@ export function VenturePage(): ReactElement {
     loadHorses();
   }, [herd, loadHorses]);
 
-  // A region's expeditions, for the picker (so the boss expedition is reachable on purpose).
-  useEffect(() => {
+  // The region's deliberate Keeper challenge (the boss) — its own earned option, never a random pull.
+  const loadKeeper = useCallback(() => {
     const r = regions.find((x) => x.id === regionId);
-    setScriptId('');
-    if (r?.interactive) {
-      getAdventures(regionId)
-        .then(setAdventures)
-        .catch(() => setAdventures([]));
+    if (r?.interactive && r.unlocked) {
+      getKeeper(regionId)
+        .then(setKeeper)
+        .catch(() => setKeeper(null));
     } else {
-      setAdventures([]);
+      setKeeper(null);
     }
   }, [regionId, regions]);
+  useEffect(loadKeeper, [loadKeeper]);
 
   function toggle(id: string): void {
     setParty((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < 4 ? [...p, id] : p));
@@ -91,13 +90,13 @@ export function VenturePage(): ReactElement {
   const selected = regions.find((r) => r.id === regionId);
   const storyActive = storyRunId !== null || ending !== null;
 
-  async function setOut(): Promise<void> {
+  async function setOut(scriptId?: string): Promise<void> {
     setBusy(true);
     setError(null);
     setAdv(null);
     try {
       if (selected?.interactive) {
-        const r = await startStory(regionId, party, scriptId || undefined);
+        const r = await startStory(regionId, party, scriptId);
         setStoryRunId(r.runId);
         setStoryRegion(selected.name);
         setScene(r.scene);
@@ -158,6 +157,7 @@ export function VenturePage(): ReactElement {
     setEnding(null);
     setError(null);
     void refresh();
+    loadKeeper(); // a finished expedition may have just unlocked the Keeper
   }
 
   if (bossBattle) {
@@ -205,18 +205,11 @@ export function VenturePage(): ReactElement {
         </select>
       </label>
 
-      {selected?.interactive && adventures.length > 0 && !storyActive && (
-        <label className="field">
-          <span>Expedition</span>
-          <select value={scriptId} onChange={(e) => setScriptId(e.target.value)}>
-            <option value="">Any (random) ✦</option>
-            {adventures.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      {selected?.interactive && !storyActive && (
+        <p className="hint">
+          Each expedition is a surprise drawn from {selected.name}&apos;s pool — set out and see
+          where the day takes you.
+        </p>
       )}
 
       {storyActive ? (
@@ -256,6 +249,31 @@ export function VenturePage(): ReactElement {
                 ? 'Set out (a story awaits ✦)'
                 : 'Set out'}
           </button>
+
+          {keeper?.keeper && (
+            <section className="card keeper-card">
+              <h2 className="section-h">⚔ Challenge the Keeper</h2>
+              <p className="muted">
+                The region&apos;s boss — a deliberate milestone you take on, not a random pull. Beat
+                it to advance your Herd Tier.
+              </p>
+              {keeper.available ? (
+                <button
+                  className="primary"
+                  disabled={party.length === 0 || busy}
+                  onClick={() => keeper.keeper && void setOut(keeper.keeper.id)}
+                >
+                  Face {keeper.keeper.name}
+                </button>
+              ) : (
+                <p className="muted">
+                  🔒 Run {Math.max(0, keeper.needed - keeper.completed)} more expedition
+                  {keeper.needed - keeper.completed === 1 ? '' : 's'} in {selected?.name} to earn a
+                  challenge against {keeper.keeper.name} ({keeper.completed}/{keeper.needed}).
+                </p>
+              )}
+            </section>
+          )}
 
           {error && (
             <div className="error" role="alert">

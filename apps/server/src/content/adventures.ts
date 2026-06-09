@@ -51,11 +51,16 @@ export interface Scene {
 export interface AdventureScript {
   /** Stable id — a run stores which script it picked from its region's pool (§9.3). */
   id: string;
-  /** Display name for the expedition picker (§9.4c). */
+  /** Display name. Regular expeditions are randomized (no picker); this is shown for the deliberate
+   *  Keeper challenge and used by tooling/tests. */
   name: string;
   regionId: string;
   start: string;
   scenes: Record<string, Scene>;
+  /** A deliberate region-boss "Keeper" challenge — the §7 progression gate. Excluded from the random
+   *  expedition pool and offered as a separate, EARNED option; its deepest ending hands off to the
+   *  boss battle. Keeps day-to-day adventuring a surprise while the milestone fight stays a choice. */
+  keeper?: boolean;
 }
 
 // ── VOICE & TONE STANDARD (the bar for every adventure script) ─────────────
@@ -429,6 +434,7 @@ const HOLLOW_KEEPER: AdventureScript = {
   id: 'hollow-keeper',
   name: 'The Hollow-Keeper',
   regionId: 'green-grass',
+  keeper: true,
   start: 'keeper-meadow',
   scenes: {
     'keeper-meadow': {
@@ -624,6 +630,7 @@ const SANDSTONE_SENTINEL: AdventureScript = {
   id: 'sandstone-sentinel',
   name: 'The Sandstone Sentinel',
   regionId: 'dusty-dunes',
+  keeper: true,
   start: 'sentinel-flats',
   scenes: {
     'sentinel-flats': {
@@ -714,6 +721,7 @@ const MISTWOOD_MIMIC: AdventureScript = {
   id: 'mistwood-mimic',
   name: 'The Mistwood Mimic',
   regionId: 'weird-woods',
+  keeper: true,
   start: 'mist-eaves',
   scenes: {
     'mist-eaves': {
@@ -800,97 +808,255 @@ const MISTWOOD_MIMIC: AdventureScript = {
 };
 
 // ── Green Grass — "The Bramble Gate" (combat-forward: a Knight-weak skirmish) ─
-const BRAMBLE_GATE: AdventureScript = {
-  id: 'bramble-gate',
-  name: 'The Bramble Gate',
+// ── Green Grass — "The Windfall" (a SHORT, cozy errand: no fork, no winding deep, no fight — just a
+//    quick gather against the failing light, in and out before dark. The deliberately-brief shape.) ─
+const WINDFALL: AdventureScript = {
+  id: 'windfall',
+  name: 'The Windfall',
   regionId: 'green-grass',
-  start: 'gate-lane',
+  start: 'windfall-slope',
   scenes: {
-    'gate-lane': {
-      id: 'gate-lane',
+    'windfall-slope': {
+      id: 'windfall-slope',
       stage: 1,
-      text: 'An old drystone lane runs off between two meadows toward a forgotten orchard gone gloriously to seed. Somewhere down it, too, is whatever has been snapping branches after dark.',
+      text: "Last night's wind did half your work for you. An old orchard tumbles down the hillside here, gone wild years ago, and the gale has shaken a whole season of fruit and good deadfall loose across the slope. It is all just lying there in the long grass, smelling of cider and rain — and the light is going fast.",
       choices: [
         {
-          id: 'glean-lane',
-          text: 'Glean the hedgerows as you go',
-          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          id: 'sweep-low',
+          text: 'Sweep the long grass quick while you can still see',
+          check: { stat: 'dex', skill: 'foraging', dc: 10 },
           success: {
-            text: 'You strip the hedge of late berries and good straight withies.',
+            text: 'Nimble and fast, you comb the slope clean before the dusk does, hooves sure among the windfall.',
             items: [
               { id: 'plant-fiber', qty: 2 },
               { id: 'timber', qty: 1 },
             ],
-            next: 'gate-fork',
+            next: 'windfall-dusk',
           },
           failure: {
-            text: 'Thornier than it looks; you come away with a modest handful and a few scratches.',
+            text: 'Half of it has rolled downhill into the bramble, of course. You salvage a respectable armful and leave the rest to feed the foxes.',
             items: [{ id: 'plant-fiber', qty: 1 }],
-            next: 'gate-fork',
+            next: 'windfall-dusk',
           },
         },
         {
-          id: 'march-on',
-          text: 'Save your strength and march straight for the orchard',
-          success: { text: 'You pick up the pace down the green lane.', next: 'gate-fork' },
+          id: 'reach-high',
+          text: 'Shoulder the old boughs for the good fruit still hanging',
+          check: { stat: 'str', skill: 'athletics', dc: 11 },
+          success: {
+            text: 'You set a shoulder to the trunk and rock it, and a soft drumroll of the very best fruit comes down around your ears.',
+            items: [
+              { id: 'plant-fiber', qty: 3 },
+              { id: 'timber', qty: 1 },
+            ],
+            next: 'windfall-dusk',
+          },
+          failure: {
+            text: 'The bough is stubborn and the bark is slick with rain. You come away with one good straight branch and a faceful of wet leaves.',
+            items: [{ id: 'timber', qty: 1 }],
+            next: 'windfall-dusk',
+          },
+        },
+        {
+          id: 'pip-cache',
+          text: '“Pip has found something. Pip is extremely pleased about it.”',
+          requires: { trait: 'o', min: 60 },
+          success: {
+            text: "Your nosiest one excavates a fox's private hoard from under the roots — the choicest windfall in the orchard, already gathered and sorted and now regrettably yours. The fox will be furious. The fox is not here.",
+            items: [
+              { id: 'plant-fiber', qty: 2 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            next: 'windfall-dusk',
+          },
         },
       ],
     },
-    'gate-fork': {
-      id: 'gate-fork',
+    'windfall-dusk': {
+      id: 'windfall-dusk',
       stage: 2,
-      text: 'The lane ends where the orchard gate used to be. A bramble has eaten it: a wall of thorn as tall as a horse, bristling, and — you would swear — breathing. Beyond it the old trees hang heavy with fruit nobody has picked in years.',
+      text: 'And just like that the light is gone — the slope blue and cooling, the last of the windfall a guess in the dark. A short day; a good one. There is maybe one more armful in it, if you fancy groping about by smell.',
       choices: [
         {
-          id: 'turn-back',
-          text: 'Decide the berries you have are plenty, and turn back',
+          id: 'last-armful',
+          text: 'Gather one last armful by feel',
+          check: { stat: 'con', skill: 'foraging', dc: 11, harmony: true },
           success: {
-            text: 'A wise, unscratched retreat. You amble home with your hedgerow haul.',
+            text: 'Working nose-first in the dusk, shoulder to warm shoulder, you turn up a last good haul and head home in the dark, thoroughly pleased with yourselves.',
+            items: [{ id: 'plant-fiber', qty: 2 }],
+            cubes: 8,
+            next: 'end',
+          },
+          failure: {
+            text: 'You find a great deal of wet grass and one deeply startled toad. Enough. You head home with the good haul you already have.',
             next: 'end',
           },
         },
         {
-          id: 'press-gate',
-          text: 'Step up for a closer look at what you are dealing with',
+          id: 'call-it',
+          text: 'Call it a good day and amble home',
           success: {
-            text: 'You approach the thorn-wall. It shivers, shakes off a season of dust, and hauls itself upright to meet you. Ah.',
-            next: 'gate-stand',
+            text: 'No sense being greedy with a gift. You turn for home under the first stars, baskets full, the orchard already settling back to sleep behind you.',
+            cubes: 5,
+            next: 'end',
           },
         },
       ],
     },
-    'gate-stand': {
-      id: 'gate-stand',
-      stage: 3,
-      text: 'The bramble fills the gateway, thorns combing the air, entirely and uncomplicatedly in your way. There is a great deal of fruit on the other side of it.',
+  },
+};
+
+// ── Green Grass — "The Singing Stones" (a MYSTERY: not a gather, not a fight — investigate a strange
+//    phenomenon. Three approaches branch to three genuinely different findings.) ─────────────────
+const SINGING_STONES: AdventureScript = {
+  id: 'singing-stones',
+  name: 'The Singing Stones',
+  regionId: 'green-grass',
+  start: 'stone-ring',
+  scenes: {
+    'stone-ring': {
+      id: 'stone-ring',
+      stage: 1,
+      text: "The old ring of standing stones has always just stood there, lichened and patient, minding its own business at the meadow's edge. Tonight it is humming — one low, even note you feel in your teeth before you hear it, rising off the stones like heat off a road. It was not doing this yesterday.",
       choices: [
         {
-          id: 'pick-through',
-          text: 'Thread a careful path through the gaps',
-          requires: { trait: 'c', min: 60 },
-          check: { stat: 'dex', skill: 'athletics', dc: 14 },
+          id: 'listen-close',
+          text: 'Press an ear to the cold stone and hunt the source',
+          check: { stat: 'wis', skill: 'foraging', dc: 11 },
           success: {
-            text: 'Patient, exact, not a wasted step — you thread the whole party through and raid the orchard clean.',
+            text: 'The note is not in the stone. It is under it — coming up through the roots of the ring from something buried, patient, and awake.',
+            next: 'beneath',
+          },
+          failure: {
+            text: 'The hum is everywhere and nowhere, maddening, and gives up nothing. You step back, ears ringing, none the wiser — but the ground underhoof thrums hardest by the leaning stone.',
+            next: 'beneath',
+          },
+        },
+        {
+          id: 'sound-it',
+          text: 'Hum back, and find the note that answers',
+          check: { stat: 'cha', skill: 'performance', dc: 12, harmony: true },
+          success: {
+            text: 'You match the stones pitch for pitch, and the ring *answers* — the note doubling, warming, and somewhere out in the dark grass something large turns toward the sound and begins, unhurried, to come.',
+            next: 'answering',
+          },
+          failure: {
+            text: 'You sing flat. The stones do not care for it; the hum sours, wavers, and as it does a shape out in the grass lifts its head, curious despite your noise.',
+            next: 'answering',
+          },
+        },
+        {
+          id: 'old-marks',
+          text: 'Read the worn carvings for what the ring is FOR',
+          requires: { trait: 'c', min: 55 },
+          success: {
+            text: 'Your careful one traces the carvings the others walk past — a spiral, a seed, a sun — and reads them right: this was never a temple. It is a granary marker. The old folk buried their best seed here and set the stones to remember the spot.',
+            next: 'record',
+          },
+        },
+      ],
+    },
+    beneath: {
+      id: 'beneath',
+      stage: 2,
+      text: 'The leaning stone tilts over a patch of ground that hums like a hive. Something is down there, resonating in its sleep — and whatever it is, the old folk thought it worth a ring of stones to mark.',
+      choices: [
+        {
+          id: 'dig-down',
+          text: 'Shoulder the stone aside and dig to the note',
+          check: { stat: 'str', skill: 'athletics', dc: 13 },
+          success: {
+            text: 'You heave the old marker over and dig — and there it is: a fist of raw crystal still ringing faintly, and around it a cache the burying-folk left for luck. The hum fades to a contented murmur, as if glad to be found.',
             items: [
               { id: 'rare-gem', qty: 1 },
-              { id: 'plant-fiber', qty: 2 },
+              { id: 'clay', qty: 2 },
             ],
-            cubes: 20,
+            cubes: 18,
             next: 'end',
           },
           failure: {
-            text: 'Three steps in, the thorns have other ideas; you back out the way you came, prickled and laughing.',
-            items: [{ id: 'plant-fiber', qty: 1 }],
+            text: 'The stone will not be moved by the likes of you tonight. You scrape up what loose treasure the roots have pushed near the surface and leave the rest to its long song.',
+            items: [{ id: 'clay', qty: 1 }],
             fatigue: 1,
             next: 'end',
           },
         },
         {
-          id: 'shoulder-in',
-          text: 'Put your shoulders into it and force the gate',
+          id: 'let-it-sing',
+          text: 'Leave it to its song and simply listen a while',
           success: {
-            text: 'No more finesse, then. You square up to the thing and shove — and it shoves back.',
-            battle: 'bramble-tangle',
+            text: 'Some things are not yours to dig up. You bed down in the ring and let the old note rock you, and in the morning the grass is thick with the marsh-sage that only grows where the ground is glad.',
+            items: [{ id: 'marsh-sage', qty: 2 }],
+            next: 'end',
+          },
+        },
+      ],
+    },
+    answering: {
+      id: 'answering',
+      stage: 2,
+      text: 'It steps into the ring on the last of the note — a wild horse, moon-pale and unafraid, drawn miles by a song it has clearly been waiting its whole life to hear. It looks at you as though you are the ones who are lost.',
+      choices: [
+        {
+          id: 'hold-note',
+          text: 'Hold the note and let it choose you',
+          check: { stat: 'cha', skill: 'performance', dc: 13, harmony: true },
+          success: {
+            text: 'You hold the chord, gentle and sure, and the wild one walks the rest of the way in and leans its head to your shoulder. Wherever it was going, it has decided it would rather go with you.',
+            wild: true,
+            next: 'end',
+          },
+          failure: {
+            text: 'The note slips; the spell with it. The wild one tosses its head, unimpressed, and melts back into the dark — but it leaves the ring still ringing, and the resonant sage it bruised underfoot is yours.',
+            items: [{ id: 'marsh-sage', qty: 1 }],
+            next: 'end',
+          },
+        },
+        {
+          id: 'step-back',
+          text: 'Step back and let the wild thing be wild',
+          success: {
+            text: 'You lower your voice and bow it out. The pale horse drinks the song a moment longer, then turns and is gone — and where it stood, the grass has gone to silver seed-heads worth the gathering.',
+            items: [
+              { id: 'plant-fiber', qty: 2 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            next: 'end',
+          },
+        },
+      ],
+    },
+    record: {
+      id: 'record',
+      stage: 2,
+      text: 'The carvings agree with each other the way only true things do: nine paces from the sun-stone, dig where the hum is sweetest. The ring has kept a granary safe for longer than anyone has been alive to rob it.',
+      choices: [
+        {
+          id: 'read-true',
+          text: 'Pace it out and lift the old seed-cache',
+          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'Nine paces, and your hooves find the soft spot. Up comes a sealed crock of heirloom seed and the burying-folk’s tithe beside it — dry, whole, and astonishing after all these years.',
+            items: [
+              { id: 'plant-fiber', qty: 3 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            cubes: 16,
+            next: 'end',
+          },
+          failure: {
+            text: 'You miscount in the dark and dig three good holes in entirely the wrong places. The ring, you feel, is laughing at you. You pocket a handful of spilled seed and call it square.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            next: 'end',
+          },
+        },
+        {
+          id: 'mark-leave',
+          text: 'Note the spot, take only your share, and leave the rest marked',
+          success: {
+            text: 'You take a careful tithe and re-set the sun-stone for the next hungry year — old courtesy, kept. The ring hums its single satisfied note behind you all the way home.',
+            items: [{ id: 'plant-fiber', qty: 2 }],
+            cubes: 10,
             next: 'end',
           },
         },
@@ -1790,7 +1956,8 @@ export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   // Green Grass
   SUNNY_HOLLOW,
   HERB_HUNT,
-  BRAMBLE_GATE,
+  WINDFALL,
+  SINGING_STONES,
   FROGMARCH_POND,
   LOST_LAMB,
   HOLLOW_KEEPER,
@@ -1805,13 +1972,22 @@ export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   MISTWOOD_MIMIC,
 ];
 
-/** Each region's pool of adventure scripts; a run picks one (seeded) at startRun (§9.3). */
+/** Each region's pool of RANDOM expeditions — a run picks one (seeded) at startRun (§9.3). Keeper
+ *  challenges are deliberately EXCLUDED here so day-to-day adventuring is a surprise, never a reroll
+ *  hunting for the boss (see REGION_KEEPER for the separate, earned milestone fight). */
 export const ADVENTURE_POOLS = new Map<string, AdventureScript[]>();
 for (const s of ADVENTURE_SCRIPTS) {
+  if (s.keeper) continue;
   const pool = ADVENTURE_POOLS.get(s.regionId);
   if (pool) pool.push(s);
   else ADVENTURE_POOLS.set(s.regionId, [s]);
 }
 
-/** Resolve a run's chosen script by its stored id — a run stays on its script (§9.3). */
+/** The deliberate region-boss "Keeper" challenge per region (the §7 progression gate) — offered as
+ *  its own option once earned, never in the random pool above. */
+export const REGION_KEEPER = new Map<string, AdventureScript>();
+for (const s of ADVENTURE_SCRIPTS) if (s.keeper) REGION_KEEPER.set(s.regionId, s);
+
+/** Resolve a run's chosen script by its stored id — a run stays on its script (§9.3). Includes
+ *  keepers, so a deliberate keeper challenge resolves by id even though it's out of the pool. */
 export const ADVENTURE_BY_ID = new Map(ADVENTURE_SCRIPTS.map((s) => [s.id, s]));

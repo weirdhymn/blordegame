@@ -261,6 +261,9 @@ export const ADVENTURE_SKILL_XP_ATTEMPT = 5;
 export const ADVENTURE_MARK_THRESHOLD = 3;
 /** Per-adventure chance a wild horse appears — the main new-horse faucet (§9.3). */
 export const WILD_ENCOUNTER_CHANCE = 0.5;
+/** Expeditions a herd completes in a region before its boss "Keeper" challenge unlocks — so the
+ *  tier-gating fight is EARNED by exploring the area, not stumbled into via a random reroll (§7/§9.4c). */
+export const KEEPER_UNLOCK_EXPEDITIONS = 3;
 export const RARE_ITEM = 'rare-gem';
 
 /** Quick-sell (Inventory): modest per-item Cube values — a convenience dump for surplus materials,

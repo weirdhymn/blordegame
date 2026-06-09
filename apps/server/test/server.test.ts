@@ -22,6 +22,7 @@ import {
   type HorseClass,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
+  KEEPER_UNLOCK_EXPEDITIONS,
   POTION_HEAL_HP,
   REWARD_RETREAT_FRACTION,
   SKILL_KEYS,
@@ -52,6 +53,7 @@ import {
   ADVENTURE_BY_ID,
   ADVENTURE_POOLS,
   ADVENTURE_SCRIPTS,
+  REGION_KEEPER,
   type Choice,
 } from '../src/content/adventures.js';
 import { ENEMY_BY_ID } from '../src/content/enemies.js';
@@ -62,6 +64,7 @@ import { adventure } from '../src/services/adventure.js';
 import {
   availableChoices,
   chooseInRun,
+  keeperChallenge,
   partyHarmony,
   partyHasBond,
   resolveChoice,
@@ -1298,9 +1301,10 @@ async function main(): Promise<void> {
     await app2.close();
   }
 
-  // §2 pool mechanic: a region holds a pool of scripts; startRun draws one (seeded, reproducible).
+  // §2 pool mechanic: a region holds a pool of RANDOM scripts; startRun draws one (seeded). Keeper
+  // bosses are EXCLUDED from this pool — they're a separate, earned challenge (verified below).
   check(
-    'green-grass holds a pool of scripts (incl. the boss expedition)',
+    'green-grass holds a pool of random expeditions',
     (ADVENTURE_POOLS.get('green-grass')?.length ?? 0) >= 3,
   );
   check(
@@ -1350,6 +1354,105 @@ async function main(): Promise<void> {
       (r) => (ADVENTURE_POOLS.get(r)?.length ?? 0) >= 1,
     ),
   );
+
+  // ── Expedition selection + the deliberate Keeper challenge (§7/§9.4c) ────────────────────────────
+  // Regular expeditions are randomized (region-pick only); each region boss is a separate, EARNED
+  // Keeper challenge — out of the random pool. Confirm every progression boss stays reachable, and a
+  // random draw never hands one back.
+  {
+    check(
+      'the random pool excludes every Keeper boss (no boss in the surprise draw)',
+      [...ADVENTURE_POOLS.values()].every((pool) => pool.every((s) => !s.keeper)),
+    );
+    check(
+      'every progression boss is reachable as its region’s Keeper',
+      REGION_KEEPER.get('green-grass')?.id === 'hollow-keeper' &&
+        REGION_KEEPER.get('dusty-dunes')?.id === 'sandstone-sentinel' &&
+        REGION_KEEPER.get('weird-woods')?.id === 'mistwood-mimic',
+    );
+    const keeperFights = (scriptId: string, enemy: string): boolean => {
+      const sc = ADVENTURE_BY_ID.get(scriptId);
+      return (
+        !!sc &&
+        Object.values(sc.scenes).some((sn) =>
+          sn.choices.some((ch) => [ch.success, ch.failure].some((o) => o?.battle === enemy)),
+        )
+      );
+    };
+    check(
+      'each Keeper’s deepest path hands off to its boss battle',
+      keeperFights('hollow-keeper', 'gg-hollow-keeper') &&
+        keeperFights('sandstone-sentinel', 'dd-sandstone-sentinel') &&
+        keeperFights('mistwood-mimic', 'ww-mistwood-mimic'),
+    );
+
+    // Across many seeded random draws, the keeper expedition's start scene never appears.
+    const ggDraws = new Set<string>();
+    for (let s = 1; s <= 24; s++) {
+      const r = await startRun(db, herdId, 'green-grass', [id], { seed: s });
+      if (r.ok) ggDraws.add(r.scene.id);
+    }
+    check('random GG draws never surface the keeper expedition', !ggDraws.has('keeper-meadow'));
+
+    // EARNED: a fresh herd must complete KEEPER_UNLOCK_EXPEDITIONS expeditions before it can challenge.
+    const kHerd = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'keeperherd', password: 'keeperhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const kAdult = await mintHorse(db, {
+      herdId: kHerd,
+      genotype: { E: 'Ee' } as Genotype,
+      origin: 'wild',
+      lifeStage: 'adult',
+    });
+    const before = await keeperChallenge(db, kHerd, 'green-grass');
+    check(
+      'a fresh herd has not earned the GG keeper yet',
+      before.keeper?.id === 'hollow-keeper' &&
+        !before.available &&
+        before.completed === 0 &&
+        before.needed === KEEPER_UNLOCK_EXPEDITIONS,
+    );
+    const tooEarly = await startRun(db, kHerd, 'green-grass', [kAdult.id], {
+      scriptId: 'hollow-keeper',
+    });
+    check(
+      'challenging the keeper before it is earned is refused',
+      !tooEarly.ok && tooEarly.code === 'keeper_locked',
+    );
+    for (let i = 0; i < KEEPER_UNLOCK_EXPEDITIONS; i++) {
+      await db.insert(adventureRuns).values({
+        herdId: kHerd,
+        regionId: 'green-grass',
+        scriptId: 'windfall',
+        party: [kAdult.id],
+        seed: i,
+        sceneId: 'windfall-slope',
+        status: 'ended',
+      });
+    }
+    const earned = await keeperChallenge(db, kHerd, 'green-grass');
+    check(
+      'after enough expeditions, the keeper challenge is earned',
+      earned.available && earned.completed >= KEEPER_UNLOCK_EXPEDITIONS,
+    );
+    const challenge = await startRun(db, kHerd, 'green-grass', [kAdult.id], {
+      scriptId: 'hollow-keeper',
+    });
+    check('an earned herd can deliberately challenge the keeper', challenge.ok);
+
+    // Structural length variety in the GG pool: a short errand (≤2 scenes) AND a long journey (≥8).
+    const sceneCounts = (ADVENTURE_POOLS.get('green-grass') ?? []).map(
+      (s) => Object.keys(s.scenes).length,
+    );
+    check(
+      'GG expeditions vary in length (a short errand and a long journey both exist)',
+      Math.min(...sceneCounts) <= 2 && Math.max(...sceneCounts) >= 8,
+    );
+  }
 
   // --- "The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on the scene-tree engine ---
   {

@@ -145,13 +145,17 @@ export type ChooseStoryResult =
       battle: { battleId: string; view: BattleView } | null;
     };
 
-/** A region's authored expeditions, for the picker (§9.4c). */
-export interface AdventureOption {
-  id: string;
-  name: string;
+/** A region's deliberate Keeper challenge (the boss) + whether it's been earned yet (§9.4c). Regular
+ *  expeditions are randomized (no picker), so the only thing to surface here is the milestone fight. */
+export interface KeeperChallenge {
+  keeper: { id: string; name: string } | null;
+  available: boolean;
+  regionUnlocked: boolean;
+  completed: number;
+  needed: number;
 }
-export const getAdventures = (regionId: string): Promise<AdventureOption[]> =>
-  api.get<AdventureOption[]>(`/regions/${regionId}/adventures`);
+export const getKeeper = (regionId: string): Promise<KeeperChallenge> =>
+  api.get<KeeperChallenge>(`/regions/${regionId}/keeper`);
 
 export const startStory = (
   regionId: string,

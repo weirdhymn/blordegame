@@ -1,10 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
-import { ADVENTURE_POOLS } from '../content/adventures.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
 import { adventure } from '../services/adventure.js';
-import { chooseInRun, startRun } from '../services/adventure-run.js';
+import { chooseInRun, keeperChallenge, startRun } from '../services/adventure-run.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { listTavern, recruitFromTavern } from '../services/tavern.js';
 
@@ -32,10 +31,13 @@ export function registerAdventureRoutes(app: FastifyInstance, db: DB): void {
 
   // ── Interactive "story" adventures (§9.3) — regions with an authored scene library.
   // The flat POST /adventure above stays for regions without one; nothing here touches it.
-  // List a region's authored expeditions (id + name) so the player can pick one (§9.4c).
-  app.get('/regions/:regionId/adventures', async (req) => {
+  // Regular expeditions are RANDOMIZED (no picker). This returns only the region's deliberate Keeper
+  // challenge (the progression boss) + whether it's been earned yet, for the "Challenge the Keeper" UI.
+  app.get('/regions/:regionId/keeper', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     const { regionId } = req.params as { regionId: string };
-    return (ADVENTURE_POOLS.get(regionId) ?? []).map((sc) => ({ id: sc.id, name: sc.name }));
+    return reply.send(await keeperChallenge(db, herd.id, regionId));
   });
 
   app.post('/adventure/start', async (req, reply) => {
@@ -49,7 +51,12 @@ export function registerAdventureRoutes(app: FastifyInstance, db: DB): void {
       scriptId: body.scriptId,
     });
     if (!result.ok) {
-      const status = result.code === 'no_script' ? 404 : result.code === 'locked' ? 403 : 400;
+      const status =
+        result.code === 'no_script'
+          ? 404
+          : result.code === 'locked' || result.code === 'keeper_locked'
+            ? 403
+            : 400;
       return reply.code(status).send({ error: result.message, code: result.code });
     }
     return reply.send(result);

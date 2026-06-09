@@ -7,6 +7,7 @@ import {
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
   BONDED_THRESHOLD,
+  KEEPER_UNLOCK_EXPEDITIONS,
   PARTY_MAX,
   type PersonalityKey,
   type SkillKey,
@@ -16,6 +17,7 @@ import { randomGenotype, resolve } from '@blorse/genetics';
 import {
   ADVENTURE_BY_ID,
   ADVENTURE_POOLS,
+  REGION_KEEPER,
   type Choice,
   type Outcome,
   type Scene,
@@ -270,13 +272,59 @@ function runView(run: RunRow, stage: number): RunView {
 }
 
 export type StartResult =
-  | { ok: false; code: 'no_script' | 'locked' | 'bad_party'; message: string }
+  | { ok: false; code: 'no_script' | 'locked' | 'bad_party' | 'keeper_locked'; message: string }
   | { ok: true; runId: string; scene: SceneView; run: RunView };
 
 export interface StartOptions {
   seed?: number;
   /** Force a specific script (tests / replay), bypassing the seeded pool draw. */
   scriptId?: string;
+}
+
+/** How many expeditions a herd has completed (a run reached an ending) in a region — gates the keeper. */
+async function countEndedRuns(db: DB, herdId: string, regionId: string): Promise<number> {
+  const rows = await db
+    .select({ id: adventureRuns.id })
+    .from(adventureRuns)
+    .where(
+      and(
+        eq(adventureRuns.herdId, herdId),
+        eq(adventureRuns.regionId, regionId),
+        eq(adventureRuns.status, 'ended'),
+      ),
+    );
+  return rows.length;
+}
+
+export interface KeeperChallenge {
+  keeper: { id: string; name: string } | null;
+  /** Region open AND enough expeditions completed there — the challenge is earned. */
+  available: boolean;
+  regionUnlocked: boolean;
+  completed: number;
+  needed: number;
+}
+
+/** The deliberate region-boss challenge state for the UI: which Keeper, and whether it's been earned
+ *  yet (region open + ≥ KEEPER_UNLOCK_EXPEDITIONS expeditions completed there). This guarantees every
+ *  progression boss stays reachable: unlock the region, run a few expeditions, then the Keeper answers. */
+export async function keeperChallenge(
+  db: DB,
+  herdId: string,
+  regionId: string,
+): Promise<KeeperChallenge> {
+  const region = REGION_BY_ID.get(regionId);
+  const regionUnlocked = !!region && (await isQuestCompleted(db, herdId, region.requiresQuest));
+  const k = REGION_KEEPER.get(regionId);
+  if (!k) return { keeper: null, available: false, regionUnlocked, completed: 0, needed: 0 };
+  const completed = await countEndedRuns(db, herdId, regionId);
+  return {
+    keeper: { id: k.id, name: k.name },
+    available: regionUnlocked && completed >= KEEPER_UNLOCK_EXPEDITIONS,
+    regionUnlocked,
+    completed,
+    needed: KEEPER_UNLOCK_EXPEDITIONS,
+  };
 }
 
 /** Begin an interactive adventure run in a region that has an authored scene library. */
@@ -313,6 +361,19 @@ export async function startRun(
   }
   const start = script.scenes[script.start];
   if (!start) return { ok: false, code: 'no_script', message: 'That story is misconfigured.' };
+
+  // The Keeper is a deliberate, EARNED milestone, never a random draw (it is out of the pool). It only
+  // answers a herd that has explored the region enough (§7/§9.4c). Region-open is already checked above.
+  if (script.keeper) {
+    const done = await countEndedRuns(db, herdId, regionId);
+    if (done < KEEPER_UNLOCK_EXPEDITIONS) {
+      return {
+        ok: false,
+        code: 'keeper_locked',
+        message: `Run ${KEEPER_UNLOCK_EXPEDITIONS} expeditions in ${region.name} first — its Keeper only answers a herd that has earned the right to challenge it.`,
+      };
+    }
+  }
 
   const [run] = await db
     .insert(adventureRuns)

@@ -1,10 +1,9 @@
-import { ADVENTURE_MARK_THRESHOLD, CARE_BELOVED_THRESHOLD } from '@blorse/balance';
+import { ADVENTURE_MARK_THRESHOLD } from '@blorse/balance';
 import type { Genotype } from '@blorse/genetics';
 import type { LifeStage } from '@blorse/render-core';
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import { gameDay } from '../util/clock.js';
 import type { HorseRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getHorse, horseRenderSpec, listHerdHorses, mintHorse } from '../services/horse.js';
@@ -30,11 +29,6 @@ export function publicHorse(h: HorseRow) {
     /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3, flavor only). */
     adventures: h.adventures,
     experienced: h.adventures >= ADVENTURE_MARK_THRESHOLD,
-    /** Lifetime care + the cosmetic "Beloved" mark; `caredToday` → its adventure checks get the
-     *  care buff right now (§7→§9.3). */
-    careCount: h.careCount,
-    beloved: h.careCount >= CARE_BELOVED_THRESHOLD,
-    caredToday: h.lastCaredAt ? gameDay(h.lastCaredAt.getTime()) === gameDay(Date.now()) : false,
     /** Combat class (§9.4b) — identity + signature approach; null = unclassed. */
     class: h.class,
     /** Cosmetic mood (§7) — 'content' default, 'rattled' after a rough day; the evening groom soothes it. */

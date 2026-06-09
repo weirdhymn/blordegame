@@ -15,7 +15,6 @@ export interface StoryLogEntry {
   success: boolean | null;
   train?: StoryTrained | null;
   bonded?: boolean;
-  care?: number | null;
 }
 
 const TRAIT_NAMES: Record<string, string> = {
@@ -65,9 +64,6 @@ export function StoryRunner(props: {
                   (harmony +{l.harmony}
                   {l.bonded ? ' 💞 they pulled together' : ''})
                 </span>
-              ) : null}
-              {l.care && l.care > 0 ? (
-                <span className="muted"> (🍎 well-tended +{l.care})</span>
               ) : null}
               {l.train ? (
                 <span className="train">

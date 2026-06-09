@@ -129,7 +129,6 @@ export function VenturePage(): ReactElement {
         success: res.roll ? res.roll.success : null,
         train: res.trained ?? null,
         bonded: res.bonded,
-        care: res.roll?.care ?? null,
       };
       setStoryLog((l) => [...l, line]);
       if (res.ended) {

@@ -20,10 +20,6 @@ export interface Horse {
   /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3). */
   adventures?: number;
   experienced?: boolean;
-  /** Lifetime care + the "Beloved" mark; `caredToday` → its adventure checks get the care buff (§7). */
-  careCount?: number;
-  beloved?: boolean;
-  caredToday?: boolean;
   /** Combat class (§9.4b) — identity + signature approach; null/absent = unclassed. */
   class?: 'knight' | 'wizard' | 'rogue' | 'cleric' | null;
   /** Cosmetic mood (§7) — 'content' or 'rattled' (after a rough day; the evening groom soothes it). */
@@ -46,9 +42,3 @@ export interface Pedigree {
 
 export const getPedigree = (id: string): Promise<Pedigree> =>
   api.get<Pedigree>(`/horses/${id}/pedigree`);
-
-export const care = (
-  id: string,
-  action: 'feed' | 'groom',
-): Promise<{ ok: boolean; message: string; careCount: number }> =>
-  api.post<{ ok: boolean; message: string; careCount: number }>(`/horses/${id}/care`, { action });

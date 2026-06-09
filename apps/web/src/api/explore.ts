@@ -110,7 +110,6 @@ export interface StoryRoll {
   dc: number;
   success: boolean;
   harmony: number;
-  care: number;
 }
 
 /** What a horse learned from the check it just attempted (so the player sees it improve). */

@@ -10,8 +10,6 @@ import {
   ADVENTURE_SKILL_XP_SUCCESS,
   BONDED_BREED_STAT_BONUS,
   BONDED_THRESHOLD,
-  CARE_BELOVED_THRESHOLD,
-  CARE_CHECK_BONUS,
   CLASS_APPROACH,
   COMBAT_RESIST_MULT,
   COMBAT_WEAKNESS_MULT,
@@ -573,22 +571,6 @@ async function main(): Promise<void> {
     'Bay is in the field guide',
     fg.discovered.some((d) => d.slug === 'bay'),
   );
-
-  // care: cozy, once per day
-  const care1 = await inject({
-    method: 'POST',
-    url: `/horses/${id}/care`,
-    headers: { cookie },
-    payload: { action: 'feed' },
-  });
-  eq('care → 200', care1.statusCode, 200);
-  const care2 = await inject({
-    method: 'POST',
-    url: `/horses/${id}/care`,
-    headers: { cookie },
-    payload: { action: 'groom' },
-  });
-  eq('second care same day → 409', care2.statusCode, 409);
 
   // POST /daily on the real clock (already caught up → no-op, 200)
   const daily = await inject({ method: 'POST', url: '/daily', headers: { cookie } });
@@ -1827,100 +1809,6 @@ async function main(): Promise<void> {
     'a horse below the threshold is not yet experienced',
     (await inject({ method: 'GET', url: `/horses/${trainee.id}` })).json<{ experienced: boolean }>()
       .experienced === false,
-  );
-
-  // --- Care matters (§7 → §9.3): a horse tended today fares a little better on adventures ---
-  const careNow = Date.now();
-  const careHorse = await mintHorse(db, {
-    herdId,
-    genotype: { E: 'Ee', A: 'Aa' },
-    origin: 'founder',
-    lifeStage: 'adult',
-    stats: flat6,
-  });
-  const careRef = skillCheck(10, 0, careHorse.luck, 0, () => 0.5).total;
-  const careChoice: Choice = {
-    id: 'carec',
-    text: 'carec',
-    check: { stat: 'wis', skill: 'foraging', dc: careRef + 1 },
-    success: { text: 'win', next: 'end' },
-    failure: { text: 'lose', next: 'end' },
-  };
-  const caredRes = resolveChoice(
-    [{ ...careHorse, lastCaredAt: new Date(careNow) }],
-    careChoice,
-    () => 0.5,
-    [],
-    careNow,
-  );
-  const uncaredRes = resolveChoice(
-    [{ ...careHorse, lastCaredAt: null }],
-    careChoice,
-    () => 0.5,
-    [],
-    careNow,
-  );
-  check(
-    'a freshly-cared horse gets the care buff on its check',
-    (caredRes.roll?.care ?? 0) === CARE_CHECK_BONUS,
-  );
-  check('an un-cared horse gets no care buff', (uncaredRes.roll?.care ?? 0) === 0);
-  eq('an un-cared horse fails just under the DC', uncaredRes.outcome.text, 'lose');
-  eq('care clears the same DC', caredRes.outcome.text, 'win');
-
-  // Integration: chooseInRun reads the horse's care state and applies the buff.
-  const careAdv = await mintHorse(db, {
-    herdId,
-    genotype: { E: 'Ee', A: 'Aa' },
-    origin: 'founder',
-    lifeStage: 'adult',
-    stats: flat6,
-  });
-  await db.update(horses).set({ lastCaredAt: new Date() }).where(drizzleEq(horses.id, careAdv.id));
-  const careRun = await startRun(db, herdId, 'green-grass', [careAdv.id], {
-    scriptId: 'sunny-hollow',
-    seed: 11,
-  });
-  if (careRun.ok) {
-    const careStep = await chooseInRun(db, herdId, careRun.runId, 'forage-bank');
-    check(
-      'chooseInRun applies the care buff for a tended horse',
-      careStep.ok && !careStep.ended && (careStep.roll?.care ?? 0) === CARE_CHECK_BONUS,
-    );
-  }
-
-  // The cosmetic "Beloved" mark + `caredToday` surface on the horse view.
-  const belovedHorse = await mintHorse(db, {
-    herdId,
-    genotype: { E: 'Ee', A: 'Aa' },
-    origin: 'founder',
-    lifeStage: 'adult',
-  });
-  await db
-    .update(horses)
-    .set({ careCount: CARE_BELOVED_THRESHOLD, lastCaredAt: new Date() })
-    .where(drizzleEq(horses.id, belovedHorse.id));
-  const belovedView = (await inject({ method: 'GET', url: `/horses/${belovedHorse.id}` })).json<{
-    careCount: number;
-    beloved: boolean;
-    caredToday: boolean;
-  }>();
-  eq('the horse view reports the care count', belovedView.careCount, CARE_BELOVED_THRESHOLD);
-  check('the Beloved mark appears at the threshold', belovedView.beloved === true);
-  check('a horse tended today reads caredToday', belovedView.caredToday === true);
-  const plainHorse = await mintHorse(db, {
-    herdId,
-    genotype: { E: 'ee' },
-    origin: 'wild',
-    lifeStage: 'adult',
-  });
-  const plainView = (await inject({ method: 'GET', url: `/horses/${plainHorse.id}` })).json<{
-    beloved: boolean;
-    caredToday: boolean;
-  }>();
-  check(
-    'a fresh horse is neither Beloved nor cared today',
-    plainView.beloved === false && plainView.caredToday === false,
   );
 
   // --- Phase 8d: turn-based combat (§9.4) — the minimum playable battle ---
@@ -3256,8 +3144,8 @@ async function main(): Promise<void> {
       success: { text: 'WIN', next: 'end' },
       failure: { text: 'LOSE', next: 'end' },
     };
-    const noBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], 0, {});
-    const bigBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], 0, { str: 50 });
+    const noBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], {});
+    const bigBuff = resolveChoice([cookAdult], hopeless, mulberry32(7), [], { str: 50 });
     check(
       'a meal buff turns a hopeless check into a win (DC reduction)',
       noBuff.outcome.text === 'LOSE' && bigBuff.outcome.text === 'WIN',

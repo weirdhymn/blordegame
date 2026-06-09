@@ -76,89 +76,101 @@ export function BreedPage(): ReactElement {
     <div className="breed">
       <h1>Breed</h1>
       <p className="sub">Pick two adults. Closely related horses can&apos;t breed.</p>
-      <div className="picker">
-        <label className="field">
-          <span>Parent A</span>
-          <select value={a} onChange={(e) => setA(e.target.value)}>
-            <option value="">— choose —</option>
-            {horses.map((h) => option(h, b))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Parent B</span>
-          <select value={b} onChange={(e) => setB(e.target.value)}>
-            <option value="">— choose —</option>
-            {horses.map((h) => option(h, a))}
-          </select>
-        </label>
-      </div>
-
-      {odds && (
-        <div className="card odds">
-          <h2 className="section-h">
-            Foal odds {odds.related && <span className="warn">· related — can&apos;t breed</span>}
-          </h2>
-          <div className="swatches">
-            {odds.distribution.map((c) => (
-              <div className="swatch-row" key={c.name}>
-                <span className="swatch" style={{ background: c.swatch }} />
-                <span className="swatch-name">{c.name}</span>
-                <span className="swatch-p">{Math.round(c.pLive * 100)}%</span>
-              </div>
-            ))}
+      {/* Breeding station: controls on the left, the live foal-odds + result on the right.
+          Stacks to one column on narrow screens. */}
+      <div className="breed-grid">
+        <div className="breed-controls">
+          <div className="picker">
+            <label className="field">
+              <span>Parent A</span>
+              <select value={a} onChange={(e) => setA(e.target.value)}>
+                <option value="">— choose —</option>
+                {horses.map((h) => option(h, b))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Parent B</span>
+              <select value={b} onChange={(e) => setB(e.target.value)}>
+                <option value="">— choose —</option>
+                {horses.map((h) => option(h, a))}
+              </select>
+            </label>
           </div>
-          {odds.lethalFraction > 0 && (
-            <p className="hint">
-              {Math.round(odds.lethalFraction * 100)}% of crosses don&apos;t take.
-            </p>
-          )}
-          {odds.bond && (
-            <p className="wild">
-              💞 These two are {odds.bond.type === 'bonded' ? 'inseparable' : 'close'} — their foal
-              would start <strong>+{odds.bond.statBonus} in every stat</strong>.
-            </p>
-          )}
-        </div>
-      )}
 
-      <button
-        className="primary"
-        disabled={!a || !b || a === b || busy || (odds?.related ?? false)}
-        onClick={() => void onBreed()}
-      >
-        {busy ? 'Breeding…' : 'Breed'}
-      </button>
+          <button
+            className="primary"
+            disabled={!a || !b || a === b || busy || (odds?.related ?? false)}
+            onClick={() => void onBreed()}
+          >
+            {busy ? 'Breeding…' : 'Breed'}
+          </button>
 
-      {error && (
-        <div className="error" role="alert">
-          {error}
-          {blocked && (
-            <>
-              {' '}
-              <Link to="/">→ Grow your Herd Tier</Link>
-            </>
+          {error && (
+            <div className="error" role="alert">
+              {error}
+              {blocked && (
+                <>
+                  {' '}
+                  <Link to="/">→ Grow your Herd Tier</Link>
+                </>
+              )}
+            </div>
           )}
         </div>
-      )}
-      {result && result.viable && foalSpec && (
-        <div className="card foal-result">
-          <h2 className="section-h">A new foal!</h2>
-          <HorseCanvas spec={foalSpec} scale={3} />
-          <p className="horse-name">{result.foal.name ?? 'Unnamed'}</p>
-          <p className="sub">It renders white until it grows up.</p>
-          {result.bond && (
-            <p className="wild">
-              💞 Born of a bond — it starts life <strong>+{result.bond.bonus} in every stat</strong>
-              .
-            </p>
+
+        <div className="breed-outcome">
+          {odds && (
+            <div className="card odds">
+              <h2 className="section-h">
+                Foal odds{' '}
+                {odds.related && <span className="warn">· related — can&apos;t breed</span>}
+              </h2>
+              <div className="swatches">
+                {odds.distribution.map((c) => (
+                  <div className="swatch-row" key={c.name}>
+                    <span className="swatch" style={{ background: c.swatch }} />
+                    <span className="swatch-name">{c.name}</span>
+                    <span className="swatch-p">{Math.round(c.pLive * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+              {odds.lethalFraction > 0 && (
+                <p className="hint">
+                  {Math.round(odds.lethalFraction * 100)}% of crosses don&apos;t take.
+                </p>
+              )}
+              {odds.bond && (
+                <p className="wild">
+                  💞 These two are {odds.bond.type === 'bonded' ? 'inseparable' : 'close'} — their
+                  foal would start <strong>+{odds.bond.statBonus} in every stat</strong>.
+                </p>
+              )}
+            </div>
+          )}
+          {result && result.viable && foalSpec && (
+            <div className="card foal-result">
+              <h2 className="section-h">A new foal!</h2>
+              <HorseCanvas spec={foalSpec} scale={3} />
+              <p className="horse-name">{result.foal.name ?? 'Unnamed'}</p>
+              <p className="sub">It renders white until it grows up.</p>
+              {result.bond && (
+                <p className="wild">
+                  💞 Born of a bond — it starts life{' '}
+                  <strong>+{result.bond.bonus} in every stat</strong>.
+                </p>
+              )}
+            </div>
+          )}
+          {result && !result.viable && (
+            <div className="card">
+              <p>{result.message}</p>
+            </div>
+          )}
+          {!odds && !result && (
+            <p className="muted">Pick two parents to preview the foal&apos;s odds.</p>
           )}
         </div>
-      )}
-      {result && !result.viable && (
-        <div className="card">
-          <p>{result.message}</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

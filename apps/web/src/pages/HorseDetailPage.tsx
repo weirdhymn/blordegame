@@ -208,123 +208,135 @@ export function HorseDetailPage(): ReactElement {
       <p>
         <Link to="/">← back to the Pasture</Link>
       </p>
-      <div className="detail-head">
-        <HorseCanvas spec={spec} scale={3} />
-        <div>
-          <h1>{horse.name ?? 'Unnamed'}</h1>
-          <p className="sub">
-            {spec.foalWhite ? 'Foal · coat revealed at adulthood' : spec.displayName} ·{' '}
-            {horse.lifeStage} · {horse.origin}
+      {/* Character sheet: portrait + actions on the left, the stat block on the right.
+          Stacks to one column on narrow screens. The Cloud send-off stays a full-width footer. */}
+      <div className="detail-grid">
+        <div className="detail-portrait">
+          <div className="detail-head">
+            <HorseCanvas spec={spec} scale={3} />
+            <div>
+              <h1>{horse.name ?? 'Unnamed'}</h1>
+              <p className="sub">
+                {spec.foalWhite ? 'Foal · coat revealed at adulthood' : spec.displayName} ·{' '}
+                {horse.lifeStage} · {horse.origin}
+              </p>
+              {horse.experienced && <p className="mark">🧭 Seasoned Adventurer</p>}
+              {horse.beloved && <p className="mark">🍎 Beloved</p>}
+              {(horse.adventures ?? 0) > 0 && (
+                <p className="muted">
+                  {horse.adventures} adventure{(horse.adventures ?? 0) === 1 ? '' : 's'} completed
+                </p>
+              )}
+            </div>
+          </div>
+
+          <h2 className="section-h">Care</h2>
+          <div className="row-actions">
+            <button disabled={careBusy} onClick={() => void doCare('feed')}>
+              🍎 Feed
+            </button>
+            <button disabled={careBusy} onClick={() => void doCare('groom')}>
+              🧽 Groom
+            </button>
+            {careNote && <span className="muted">{careNote}</span>}
+          </div>
+          <p className="muted">
+            {horse.caredToday
+              ? '🍎 Tended today — it sets out on adventures in good fettle (a small edge on its checks).'
+              : 'A fed-and-groomed horse fares a little better on its adventures today.'}
           </p>
-          {horse.experienced && <p className="mark">🧭 Seasoned Adventurer</p>}
-          {horse.beloved && <p className="mark">🍎 Beloved</p>}
-          {(horse.adventures ?? 0) > 0 && (
-            <p className="muted">
-              {horse.adventures} adventure{(horse.adventures ?? 0) === 1 ? '' : 's'} completed
-            </p>
+
+          {horse.lifeStage === 'adult' && (
+            <>
+              <h2 className="section-h">Job</h2>
+              {job ? (
+                <>
+                  <div className="row-actions">
+                    <span>
+                      Working the {pretty(job.structureType)} ({job.skill}) — earns Cubes each day.
+                    </span>
+                    <button disabled={jobBusy} onClick={() => void unassign()}>
+                      Unassign
+                    </button>
+                  </div>
+                  {horse.experienced && (
+                    <p className="muted">
+                      🧭 Seasoned — its travels steady its hand at work, so its job checks come a
+                      little easier (it earns a bit more here).
+                    </p>
+                  )}
+                </>
+              ) : jobStructures.length === 0 ? (
+                <p className="muted">Build a Workshop structure with a job first.</p>
+              ) : (
+                <div className="row-actions">
+                  <select value={pick} onChange={(e) => setPick(e.target.value)}>
+                    <option value="">— assign to a structure —</option>
+                    {jobStructures.map((s) => (
+                      <option key={s.type} value={s.type}>
+                        {s.name} ({s.skill})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="primary"
+                    disabled={!pick || jobBusy}
+                    onClick={() => void assign()}
+                  >
+                    Assign
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="detail-stats">
+          <h2 className="section-h">Stats</h2>
+          <div className="kv-grid">
+            {Object.entries(horse.stats).map(([k, v]) => (
+              <div className="kv" key={k}>
+                <span className="kv-k">{k.toUpperCase()}</span>
+                <span className="kv-v">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="section-h">Skills</h2>
+          <div className="kv-grid">
+            {Object.entries(horse.skills).map(([k, s]) => (
+              <div className="kv" key={k}>
+                <span className="kv-k">{k}</span>
+                <span className="kv-v">Lv {s.level}</span>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="section-h">Personality</h2>
+          <div className="bars">
+            {Object.entries(horse.personality).map(([k, v]) => (
+              <div className="bar-row" key={k}>
+                <span className="bar-l">{PERSONALITY_LABELS[k] ?? k}</span>
+                <span className="bar-track">
+                  <span className="bar-fill" style={{ width: `${v}%` }} />
+                </span>
+                <span className="bar-v">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          {ped && ped.parents.length > 0 && (
+            <>
+              <h2 className="section-h">Pedigree</h2>
+              <ul className="pedigree">
+                {ped.parents.map((p) => (
+                  <PedigreeNode key={p.id} node={p} />
+                ))}
+              </ul>
+            </>
           )}
         </div>
       </div>
-
-      <h2 className="section-h">Care</h2>
-      <div className="row-actions">
-        <button disabled={careBusy} onClick={() => void doCare('feed')}>
-          🍎 Feed
-        </button>
-        <button disabled={careBusy} onClick={() => void doCare('groom')}>
-          🧽 Groom
-        </button>
-        {careNote && <span className="muted">{careNote}</span>}
-      </div>
-      <p className="muted">
-        {horse.caredToday
-          ? '🍎 Tended today — it sets out on adventures in good fettle (a small edge on its checks).'
-          : 'A fed-and-groomed horse fares a little better on its adventures today.'}
-      </p>
-
-      {horse.lifeStage === 'adult' && (
-        <>
-          <h2 className="section-h">Job</h2>
-          {job ? (
-            <>
-              <div className="row-actions">
-                <span>
-                  Working the {pretty(job.structureType)} ({job.skill}) — earns Cubes each day.
-                </span>
-                <button disabled={jobBusy} onClick={() => void unassign()}>
-                  Unassign
-                </button>
-              </div>
-              {horse.experienced && (
-                <p className="muted">
-                  🧭 Seasoned — its travels steady its hand at work, so its job checks come a little
-                  easier (it earns a bit more here).
-                </p>
-              )}
-            </>
-          ) : jobStructures.length === 0 ? (
-            <p className="muted">Build a Workshop structure with a job first.</p>
-          ) : (
-            <div className="row-actions">
-              <select value={pick} onChange={(e) => setPick(e.target.value)}>
-                <option value="">— assign to a structure —</option>
-                {jobStructures.map((s) => (
-                  <option key={s.type} value={s.type}>
-                    {s.name} ({s.skill})
-                  </option>
-                ))}
-              </select>
-              <button className="primary" disabled={!pick || jobBusy} onClick={() => void assign()}>
-                Assign
-              </button>
-            </div>
-          )}
-        </>
-      )}
-
-      <h2 className="section-h">Stats</h2>
-      <div className="kv-grid">
-        {Object.entries(horse.stats).map(([k, v]) => (
-          <div className="kv" key={k}>
-            <span className="kv-k">{k.toUpperCase()}</span>
-            <span className="kv-v">{v}</span>
-          </div>
-        ))}
-      </div>
-
-      <h2 className="section-h">Skills</h2>
-      <div className="kv-grid">
-        {Object.entries(horse.skills).map(([k, s]) => (
-          <div className="kv" key={k}>
-            <span className="kv-k">{k}</span>
-            <span className="kv-v">Lv {s.level}</span>
-          </div>
-        ))}
-      </div>
-
-      <h2 className="section-h">Personality</h2>
-      <div className="bars">
-        {Object.entries(horse.personality).map(([k, v]) => (
-          <div className="bar-row" key={k}>
-            <span className="bar-l">{PERSONALITY_LABELS[k] ?? k}</span>
-            <span className="bar-track">
-              <span className="bar-fill" style={{ width: `${v}%` }} />
-            </span>
-            <span className="bar-v">{v}</span>
-          </div>
-        ))}
-      </div>
-
-      {ped && ped.parents.length > 0 && (
-        <>
-          <h2 className="section-h">Pedigree</h2>
-          <ul className="pedigree">
-            {ped.parents.map((p) => (
-              <PedigreeNode key={p.id} node={p} />
-            ))}
-          </ul>
-        </>
-      )}
 
       <h2 className="section-h">The Cloud</h2>
       <p className="muted">

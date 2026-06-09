@@ -102,99 +102,103 @@ export function CarePage(): ReactElement {
 
       {msg && <div className="note">{msg}</div>}
 
-      {/* ── Morning: the communal pot ── */}
-      <section className="card care-cook">
-        <h2 className="section-h">🍳 Morning — the Communal Pot</h2>
-        {care.cookedToday ? (
-          <p className="note">
-            ✅ Today&apos;s meal is cooked: <strong>{describeBuff(care.mealBuffs)}</strong>. The
-            whole herd carries it on every adventure, job, and boss today.
-          </p>
-        ) : (
+      {/* Two bookend rituals, side-by-side on desktop; stacks to one column on narrow. */}
+      <div className="care-grid">
+        {/* ── Morning: the communal pot ── */}
+        <section className="card care-cook">
+          <h2 className="section-h">🍳 Morning — the Communal Pot</h2>
+          {care.cookedToday ? (
+            <p className="note">
+              ✅ Today&apos;s meal is cooked: <strong>{describeBuff(care.mealBuffs)}</strong>. The
+              whole herd carries it on every adventure, job, and boss today.
+            </p>
+          ) : (
+            <p className="muted">
+              One slot per horse (<strong>{slots}</strong> today — a bigger herd cooks a bigger
+              meal). Each grain buffs its stat; mix for today&apos;s loadout. A Saffron Bloom
+              amplifies the whole dish.
+            </p>
+          )}
           <p className="muted">
-            One slot per horse (<strong>{slots}</strong> today — a bigger herd cooks a bigger meal).
-            Each grain buffs its stat; mix for today&apos;s loadout. A Saffron Bloom amplifies the
-            whole dish.
+            Pot: <strong className={room < 0 ? 'cap full' : ''}>{picked}</strong> / {slots}{' '}
+            ingredients
           </p>
-        )}
-        <p className="muted">
-          Pot: <strong className={room < 0 ? 'cap full' : ''}>{picked}</strong> / {slots}{' '}
-          ingredients
-        </p>
-        <div className="cook-grains">
-          {care.grains.map((g) => (
-            <div key={g.id} className="cook-grain">
+          <div className="cook-grains">
+            {care.grains.map((g) => (
+              <div key={g.id} className="cook-grain">
+                <span className="cook-grain-name">
+                  {pretty(g.id.replace('grain-', ''))}{' '}
+                  <span className="muted">→ {STAT_LABEL[g.stat] ?? g.stat}</span>
+                </span>
+                <span className="muted">have {g.qty}</span>
+                <div className="stepper">
+                  <button
+                    disabled={busy || (pick[g.id] ?? 0) <= 0}
+                    onClick={() => bump(g.id, -1, g.qty)}
+                  >
+                    −
+                  </button>
+                  <span className="stepper-val">{pick[g.id] ?? 0}</span>
+                  <button
+                    disabled={busy || (pick[g.id] ?? 0) >= g.qty || room <= 0}
+                    onClick={() => bump(g.id, +1, g.qty)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div className="cook-grain rare">
               <span className="cook-grain-name">
-                {pretty(g.id.replace('grain-', ''))}{' '}
-                <span className="muted">→ {STAT_LABEL[g.stat] ?? g.stat}</span>
+                ✨ Saffron Bloom{' '}
+                <span className="muted">→ ×{(1 + 0.5 * rares).toFixed(1)} dish</span>
               </span>
-              <span className="muted">have {g.qty}</span>
+              <span className="muted">have {care.rares}</span>
               <div className="stepper">
                 <button
-                  disabled={busy || (pick[g.id] ?? 0) <= 0}
-                  onClick={() => bump(g.id, -1, g.qty)}
+                  disabled={busy || rares <= 0}
+                  onClick={() => setRares((r) => Math.max(0, r - 1))}
                 >
                   −
                 </button>
-                <span className="stepper-val">{pick[g.id] ?? 0}</span>
+                <span className="stepper-val">{rares}</span>
                 <button
-                  disabled={busy || (pick[g.id] ?? 0) >= g.qty || room <= 0}
-                  onClick={() => bump(g.id, +1, g.qty)}
+                  disabled={busy || rares >= care.rares || room <= 0}
+                  onClick={() => setRares((r) => r + 1)}
                 >
                   +
                 </button>
               </div>
             </div>
-          ))}
-          <div className="cook-grain rare">
-            <span className="cook-grain-name">
-              ✨ Saffron Bloom <span className="muted">→ ×{(1 + 0.5 * rares).toFixed(1)} dish</span>
-            </span>
-            <span className="muted">have {care.rares}</span>
-            <div className="stepper">
-              <button
-                disabled={busy || rares <= 0}
-                onClick={() => setRares((r) => Math.max(0, r - 1))}
-              >
-                −
-              </button>
-              <span className="stepper-val">{rares}</span>
-              <button
-                disabled={busy || rares >= care.rares || room <= 0}
-                onClick={() => setRares((r) => r + 1)}
-              >
-                +
-              </button>
-            </div>
           </div>
-        </div>
-        <button
-          className="primary"
-          disabled={busy || picked <= 0 || room < 0}
-          onClick={() => void doCook()}
-        >
-          {picked <= 0 ? 'Add grain to the pot' : `🍲 Cook (${picked} in the pot)`}
-        </button>
-      </section>
+          <button
+            className="primary"
+            disabled={busy || picked <= 0 || room < 0}
+            onClick={() => void doCook()}
+          >
+            {picked <= 0 ? 'Add grain to the pot' : `🍲 Cook (${picked} in the pot)`}
+          </button>
+        </section>
 
-      {/* ── Evening: tuck the herd in ── */}
-      <section className="card care-groom">
-        <h2 className="section-h">🌙 Evening — Tuck the Herd In</h2>
-        <p className="muted">
-          Groom the whole herd: lift any rough moods and leave a small{' '}
-          <strong>{care.groomCubes} ⬡</strong> thank-you for the morning. Purely a nicety — never a
-          penalty for skipping.
-        </p>
-        {care.rattled > 0 && (
-          <p className="note">
-            😟 {care.rattled} horse{care.rattled > 1 ? 's' : ''} had a rough day.
+        {/* ── Evening: tuck the herd in ── */}
+        <section className="card care-groom">
+          <h2 className="section-h">🌙 Evening — Tuck the Herd In</h2>
+          <p className="muted">
+            Groom the whole herd: lift any rough moods and leave a small{' '}
+            <strong>{care.groomCubes} ⬡</strong> thank-you for the morning. Purely a nicety — never
+            a penalty for skipping.
           </p>
-        )}
-        {care.groomed && <p className="note">🛏 Already tucked in — a bonus waits at sunrise.</p>}
-        <button className="primary" disabled={busy} onClick={() => void doGroom()}>
-          🧽 Groom the herd
-        </button>
-      </section>
+          {care.rattled > 0 && (
+            <p className="note">
+              😟 {care.rattled} horse{care.rattled > 1 ? 's' : ''} had a rough day.
+            </p>
+          )}
+          {care.groomed && <p className="note">🛏 Already tucked in — a bonus waits at sunrise.</p>}
+          <button className="primary" disabled={busy} onClick={() => void doGroom()}>
+            🧽 Groom the herd
+          </button>
+        </section>
+      </div>
     </div>
   );
 }

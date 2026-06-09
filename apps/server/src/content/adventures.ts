@@ -521,102 +521,231 @@ const HOLLOW_KEEPER: AdventureScript = {
 };
 
 // ── Dusty Dunes — "The Bleaching Wash" (a regular tier-2 expedition) ────────
-const BLEACHING_WASH: AdventureScript = {
-  id: 'bleaching-wash',
-  name: 'The Bleaching Wash',
+// ── Dusty Dunes — "The Salt Pan" (a SHORT, hot errand: be quick, beat the noon glare, no fork, no
+//    fight — the desert's version of the deliberately-brief shape) ───────────────────────────────
+const SALT_PAN: AdventureScript = {
+  id: 'salt-pan',
+  name: 'The Salt Pan',
   regionId: 'dusty-dunes',
-  start: 'wash-mouth',
+  start: 'pan-dawn',
   scenes: {
-    'wash-mouth': {
-      id: 'wash-mouth',
+    'pan-dawn': {
+      id: 'pan-dawn',
       stage: 1,
-      text: 'A dry wash cuts down out of the dunes — a road for water that has not seen rain in living memory, floored with cracked clay and bleached, faintly judgemental bones. Good gleaning, if you can stand the glare.',
+      text: 'At dawn the salt pan is a white sheet to the horizon, cool and crusted and quiet, every cracked plate of it edged with last night’s frost. By noon it will be a furnace and a mirage and no use to anyone. So: be quick.',
       choices: [
         {
-          id: 'dig-clay',
-          text: 'Lever up the cracked clay-pan',
-          check: { stat: 'str', skill: 'athletics', dc: 11 },
+          id: 'scrape-crust',
+          text: 'Scrape and lever the crust while it is still cool',
+          check: { stat: 'str', skill: 'athletics', dc: 10 },
           success: {
-            text: 'You pry up good slabs of fire-ready clay.',
-            items: [{ id: 'clay', qty: 3 }],
-            next: 'wash-fork',
+            text: 'You work fast in the frost-cool, prising up clean slabs of sun-dried clay and a crust of good salt besides.',
+            items: [
+              { id: 'clay', qty: 3 },
+              { id: 'ore', qty: 1 },
+            ],
+            next: 'pan-noon',
           },
           failure: {
-            text: 'The pan fights you; you lever loose a meagre lump.',
+            text: 'The crust is stuck fast to the morning chill; you crack loose a respectable load and a sweat for it.',
             items: [{ id: 'clay', qty: 1 }],
-            next: 'wash-fork',
+            next: 'pan-noon',
           },
         },
         {
-          id: 'sift-shade',
-          text: 'Sift the shaded undercut for what the floods left',
+          id: 'read-pan',
+          text: 'Read the pan for where the good seams hide',
           check: { stat: 'wis', skill: 'foraging', dc: 12 },
           success: {
-            text: 'Patience pays: a seam of good ore the water tucked away.',
+            text: 'You read the salt the way a fisher reads water and walk straight to the rich seam the old floods buried — clean ore, no wasted digging.',
             items: [
               { id: 'ore', qty: 2 },
               { id: 'clay', qty: 1 },
             ],
-            next: 'wash-fork',
+            next: 'pan-noon',
           },
           failure: {
-            text: 'Mostly grit and old bone. You pocket a little ore.',
-            items: [{ id: 'ore', qty: 1 }],
-            next: 'wash-fork',
-          },
-        },
-      ],
-    },
-    'wash-fork': {
-      id: 'wash-fork',
-      stage: 2,
-      text: 'The wash splits around a great bleached boulder. The shaded fork looks cool and promising; or you could call it a good haul and climb out while the light still holds.',
-      choices: [
-        {
-          id: 'bank',
-          text: 'Climb out with your haul',
-          success: {
-            text: 'A sensible turn for home, pockets full of honest clay.',
-            next: 'end',
+            text: 'The pan keeps its secrets behind the glare. You dig honestly and come up with an honest, ordinary load.',
+            items: [{ id: 'clay', qty: 1 }],
+            next: 'pan-noon',
           },
         },
         {
-          id: 'push',
-          text: 'Press on up the shaded fork',
-          success: { text: 'You duck into the cool blue shade and press on.', next: 'wash-cache' },
-        },
-      ],
-    },
-    'wash-cache': {
-      id: 'wash-cache',
-      stage: 3,
-      text: 'The shade opens on a hollow where the last real flood piled its treasures: a glitter of something better than clay, half-buried where the wash gives up its secrets.',
-      choices: [
-        {
-          id: 'work-cache',
-          text: 'Work the flood-cache loose together',
-          check: { stat: 'dex', skill: 'foraging', dc: 14, harmony: true },
+          id: 'pip-mirage',
+          text: '“Pip is walking INTO the shimmer. Pip, no — ”',
+          requires: { trait: 'o', min: 60 },
           success: {
-            text: 'Careful hooves free it whole — a gem the desert kept for itself, and good ore besides.',
+            text: 'Your strangest one strolls calmly into the rising mirage and out the other side, dragging a wind-buried trade-crate the heat-haze had been politely hiding from everyone sensible.',
             items: [
-              { id: 'rare-gem', qty: 1 },
-              { id: 'ore', qty: 2 },
+              { id: 'ore', qty: 1 },
+              { id: 'clay', qty: 2 },
             ],
-            cubes: 18,
+            cubes: 12,
+            next: 'pan-noon',
+          },
+        },
+      ],
+    },
+    'pan-noon': {
+      id: 'pan-noon',
+      stage: 2,
+      text: 'The frost is gone, the white going blinding, the far edge of the pan already lifting and rippling into mirage. The heat is minutes away from unbearable. There is maybe one good seam left if you are fast and you are willing to bake for it.',
+      choices: [
+        {
+          id: 'one-more',
+          text: 'One more seam before the heat lands',
+          check: { stat: 'con', skill: 'athletics', dc: 12, harmony: true },
+          success: {
+            text: 'You crack the last seam shoulder to shoulder and are off the pan before the worst of the day, baskets heavy and skins barely scorched.',
+            items: [{ id: 'ore', qty: 2 }],
+            cubes: 10,
             next: 'end',
           },
           failure: {
-            text: 'It shatters as it comes free; you salvage the ore and a story.',
-            items: [{ id: 'ore', qty: 1 }],
+            text: 'The heat wins the race. You retreat off the white with what you have and your eyebrows mostly intact. Enough is enough.',
             fatigue: 1,
             next: 'end',
           },
         },
         {
-          id: 'leave',
-          text: 'Leave it and head for home',
+          id: 'beat-heat',
+          text: 'Quit while you are ahead and walk off the white',
           success: {
-            text: 'Some treasures keep. You climb back into the light, content.',
+            text: 'No sense cooking for a few more lumps of clay. You amble off the pan into the long shadows of the dunes, a tidy morning’s work behind you.',
+            cubes: 6,
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Dusty Dunes — "The Lost Caravan" (a RESCUE: a stranded pack-beast, three approaches to three
+//    different reunions — find the caravan, dig it out, or discover it was never lost at all) ─────
+const LOST_CARAVAN: AdventureScript = {
+  id: 'lost-caravan',
+  name: 'The Lost Caravan',
+  regionId: 'dusty-dunes',
+  start: 'stranded-tortoise',
+  scenes: {
+    'stranded-tortoise': {
+      id: 'stranded-tortoise',
+      stage: 1,
+      text: 'A pack-tortoise stands alone in the lee of a dune, vast and patient and hopelessly overloaded, swaying under a tower of trade-crates lashed on by someone who is no longer here. It regards you with the mild, total despair of a creature that has been left behind by its caravan and intends to feel every minute of it.',
+      choices: [
+        {
+          id: 'read-tracks',
+          text: 'Cast about for the caravan’s trail',
+          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'Wind has scoured most of it, but you find the thread of it — cart-ruts and dung and dropped twine — and follow it off into the dunes.',
+            next: 'follow-trail',
+          },
+          failure: {
+            text: 'The wind has eaten the tracks entirely. You strike off on the freshest scuff you can find and hope.',
+            next: 'follow-trail',
+          },
+        },
+        {
+          id: 'climb-dune',
+          text: 'Climb the high dune for a look across the waste',
+          check: { stat: 'str', skill: 'athletics', dc: 12 },
+          success: {
+            text: 'You haul up the soft sand to the crest and there it is — a smudge of dust and canvas a mile off, and between it and you, a glint of trouble.',
+            next: 'spot-dust',
+          },
+          failure: {
+            text: 'The dune slides out from under you half the way up. From where you finally crest, the waste is just waste — but a thread of smoke says someone is out there somewhere.',
+            next: 'spot-dust',
+          },
+        },
+        {
+          id: 'calm-beast',
+          text: 'Settle the poor beast first, and listen to what it wants',
+          requires: { trait: 'a', min: 55 },
+          success: {
+            text: 'Your kindest one leans against the great warm shell and just breathes with it a while, until the tortoise stops despairing long enough to do the one thing nobody had let it do: turn around and plod off, with enormous purpose, in a direction entirely its own.',
+            next: 'beast-leads',
+          },
+        },
+      ],
+    },
+    'follow-trail': {
+      id: 'follow-trail',
+      stage: 2,
+      text: 'The trail bends around a thornbrake and there is the caravan, halted, fretting, a knot of traders arguing about whether to go back for the tortoise they could not afford to wait for. Their faces, when they see it ambling up behind you, are worth the whole trip.',
+      choices: [
+        {
+          id: 'deliver',
+          text: 'Hand the great beast back to its people',
+          check: { stat: 'cha', skill: 'performance', dc: 11, harmony: true },
+          success: {
+            text: 'The reunion is loud and undignified and involves the tortoise being kissed on the nose by a weeping caravan-master. They press ore and good coin on you and will not hear a word against it.',
+            items: [{ id: 'ore', qty: 2 }],
+            cubes: 20,
+            next: 'end',
+          },
+          failure: {
+            text: 'You bungle the handover, the tortoise takes offence, and it is a full half-hour of coaxing before everyone is reunited and only mildly cross. They thank you anyway, and pay in the small coin of the genuinely grateful.',
+            items: [{ id: 'clay', qty: 1 }],
+            cubes: 8,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'spot-dust': {
+      id: 'spot-dust',
+      stage: 2,
+      text: 'From the height you saw it clear: the caravan is not moving on. It is bogged to the axles in a sink of soft sand, going nowhere, and the longer it sits the deeper it drinks. They did not abandon the tortoise. They lost the race to the sand.',
+      choices: [
+        {
+          id: 'dig-them-out',
+          text: 'Bring the tortoise down and dig the caravan free',
+          check: { stat: 'str', skill: 'athletics', dc: 13, harmony: true },
+          success: {
+            text: 'Tortoise, party, and traders all hauling as one, you walk the bogged carts up out of the sink board by board. The caravan-master opens the very best crate by way of thanks — the kind of stone the deep desert only gives up once a season.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'ore', qty: 1 },
+            ],
+            cubes: 18,
+            next: 'end',
+          },
+          failure: {
+            text: 'The sink is greedy and the day is long, but between the lot of you the worst cart comes free at last. The traders share what they can spare, which is honest and not nothing.',
+            items: [{ id: 'ore', qty: 1 }],
+            fatigue: 1,
+            cubes: 10,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'beast-leads': {
+      id: 'beast-leads',
+      stage: 2,
+      text: 'The tortoise leads you, with the unhurried certainty of the very old, not toward any caravan at all — but to a slot in the rocks where a seep of green water hides, and a cache of trade-goods tucked in the shade beside it. It was never lost. It had simply found something better and could not work out how to tell anyone.',
+      choices: [
+        {
+          id: 'share-find',
+          text: 'Take a fair share of the tortoise’s good fortune',
+          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          success: {
+            text: 'You water everyone, the tortoise included, and divide the cached goods by the old desert law of finders. It sees you off with what passes, in a tortoise, for a fond farewell.',
+            items: [
+              { id: 'marsh-sage', qty: 1 },
+              { id: 'clay', qty: 2 },
+              { id: 'ore', qty: 1 },
+            ],
+            cubes: 14,
+            next: 'end',
+          },
+          failure: {
+            text: 'You are too polite by half and take almost nothing, which the tortoise finds baffling and a little insulting. Still — you leave watered, rested, and richer in goodwill than in ore.',
+            items: [{ id: 'marsh-sage', qty: 1 }],
+            cubes: 6,
             next: 'end',
           },
         },
@@ -1962,7 +2091,8 @@ export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   LOST_LAMB,
   HOLLOW_KEEPER,
   // Dusty Dunes
-  BLEACHING_WASH,
+  SALT_PAN,
+  LOST_CARAVAN,
   WHIRLING_WASTE,
   GLASSLANDS,
   SANDSTONE_SENTINEL,

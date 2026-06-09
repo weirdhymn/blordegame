@@ -1452,6 +1452,15 @@ async function main(): Promise<void> {
       'GG expeditions vary in length (a short errand and a long journey both exist)',
       Math.min(...sceneCounts) <= 2 && Math.max(...sceneCounts) >= 8,
     );
+    // Dusty Dunes diversified to match: a short errand + a rescue, on top of the existing pool.
+    const ddPool = ADVENTURE_POOLS.get('dusty-dunes') ?? [];
+    check(
+      'Dusty Dunes spans varied shapes (short errand + rescue + the rest)',
+      ddPool.length >= 4 &&
+        ddPool.some((s) => s.id === 'salt-pan') &&
+        ddPool.some((s) => s.id === 'lost-caravan') &&
+        Math.min(...ddPool.map((s) => Object.keys(s.scenes).length)) <= 2,
+    );
   }
 
   // --- "The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on the scene-tree engine ---

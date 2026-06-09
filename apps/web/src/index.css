@@ -386,7 +386,7 @@ a {
 /* ── App shell (authed) ── */
 .app {
   width: 100%;
-  max-width: 680px;
+  max-width: 1320px; /* desktop-first: a wide shell for multi-panel screens (was a 680px column) */
 }
 .topbar {
   display: flex;
@@ -1283,4 +1283,59 @@ input {
 .chip.on,
 .die.win {
   background: var(--band-sage);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DESKTOP DASHBOARD LAYOUT — wide, multi-panel composition instead of a tall
+   single column. Desktop-first: optimise for wide screens, collapse cleanly to
+   one column on narrow ones. The horizontal space buys MORE PANELS side-by-side,
+   never wider text — content widths inside each panel stay comfortable.
+   POC: the Pasture only. Other screens keep a centred readable column until the
+   pattern is approved + rolled out.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Un-migrated pages keep a comfortable single column, centred in the wide shell
+   (so the extra width never stretches their text lines edge-to-edge). */
+.page > * {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+/* ── The Pasture dashboard ── */
+.page > .pasture {
+  max-width: none; /* break out of the readable-column cap to use the full desktop width */
+}
+.pasture-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* base (narrow): one stacked column */
+  gap: var(--sp-4);
+  align-items: start;
+}
+.pasture-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.pasture-side > .card {
+  margin-bottom: 0; /* the flex gap owns the spacing — no doubled margin */
+}
+.pasture-main {
+  min-width: 0; /* let the grid track shrink rather than overflow the sprites */
+}
+
+@media (min-width: 900px) {
+  /* Desktop: herd grid centre-stage on the left, the panels as a right-hand rail. */
+  .pasture-grid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  .pasture-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .pasture-side {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: var(--sp-4); /* the rail stays in view while a big herd scrolls past */
+  }
 }

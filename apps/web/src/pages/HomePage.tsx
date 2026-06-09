@@ -59,36 +59,45 @@ export function HomePage(): ReactElement {
   return (
     <div className="pasture">
       <h1>The Pasture</h1>
-      <div className="row-actions">
-        <button className="primary" disabled={busy} onClick={() => void run(checkIn)}>
-          Daily check-in
-        </button>
-        <Link to="/breed" className="btn-link">
-          Breed →
-        </Link>
-      </div>
       {note && <div className="note">{note}</div>}
       {error && (
         <div className="error" role="alert">
           {error}
         </div>
       )}
-      <HerdTier />
-      <DailyGather />
-      <h2 className="section-h">Your herd</h2>
-      {horses === null && <div className="loading">Loading your herd…</div>}
-      {horses && horses.length === 0 && (
-        <div className="card placeholder">
-          <p>No horses yet — try the Tavern or an adventure.</p>
+      {/* Desktop dashboard: the herd is the centre-stage panel; actions + progression + the
+          daily chore live in a side rail. Presentational wrappers only — collapses to one
+          column on narrow screens (see .pasture-grid). */}
+      <div className="pasture-grid">
+        <aside className="pasture-side">
+          <div className="row-actions">
+            <button className="primary" disabled={busy} onClick={() => void run(checkIn)}>
+              Daily check-in
+            </button>
+            <Link to="/breed" className="btn-link">
+              Breed →
+            </Link>
+          </div>
+          <HerdTier />
+          <DailyGather />
+        </aside>
+        <div className="pasture-main">
+          <h2 className="section-h">Your herd</h2>
+          {horses === null && <div className="loading">Loading your herd…</div>}
+          {horses && horses.length === 0 && (
+            <div className="card placeholder">
+              <p>No horses yet — try the Tavern or an adventure.</p>
+            </div>
+          )}
+          {horses && horses.length > 0 && (
+            <div className="horse-grid">
+              {horses.map((h) => (
+                <HorseCard key={h.id} horse={h} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
-      {horses && horses.length > 0 && (
-        <div className="horse-grid">
-          {horses.map((h) => (
-            <HorseCard key={h.id} horse={h} />
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

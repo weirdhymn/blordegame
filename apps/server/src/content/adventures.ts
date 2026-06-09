@@ -435,83 +435,74 @@ const HOLLOW_KEEPER: AdventureScript = {
   name: 'The Hollow-Keeper',
   regionId: 'green-grass',
   keeper: true,
-  start: 'keeper-meadow',
+  start: 'keeper-threshold',
   scenes: {
-    'keeper-meadow': {
-      id: 'keeper-meadow',
+    'keeper-threshold': {
+      id: 'keeper-threshold',
       stage: 1,
-      text: 'There is a part of the Green Grass the old herds speak of only in lowered voices: a deep hollow where something ancient keeps its own counsel. The way in is easy enough, and green, and far too quiet.',
+      text: 'You came on purpose this time, down through the green dark to the still heart of the hollow — and there it is: the Hollow-Keeper, the great mossy stag of the oldest stories, fast asleep. Lichen has grown up its flanks. A wren is nesting in the crown of its antlers. It has plainly been waiting a hundred quiet years for someone to come and challenge it, and somewhere in there it has stopped expecting anyone. First, then: you will have to wake it.',
       choices: [
         {
-          id: 'gather-way',
-          text: 'Gather as you go',
-          check: { stat: 'wis', skill: 'foraging', dc: 11 },
+          id: 'announce-grand',
+          text: 'Announce yourself — loud, grand, and frankly a little rude',
+          check: { stat: 'cha', skill: 'performance', dc: 12, harmony: true },
           success: {
-            text: 'You work the verges as you walk — a tidy armful of good things for the road.',
-            items: [
-              { id: 'plant-fiber', qty: 2 },
-              { id: 'timber', qty: 1 },
-            ],
-            next: 'keeper-fork',
+            text: 'You plant your hooves and bellow a challenge fit for a ballad, with several pointed remarks about moss and idleness. The Keeper’s ear swivels. Then, slowly, delightedly, one ancient eye opens.',
+            next: 'keeper-roused',
           },
           failure: {
-            text: 'Pickings are thin this deep; you pocket what little there is.',
-            items: [{ id: 'plant-fiber', qty: 1 }],
-            next: 'keeper-fork',
+            text: 'Your grand speech cracks on the high note and rolls off into the green, faintly ridiculous — but the Keeper has heard worse, and stirs anyway, curious who is making such a racket.',
+            next: 'keeper-roused',
           },
         },
         {
-          id: 'press-quiet',
-          text: 'Save your strength and press on quietly',
+          id: 'prod-it',
+          text: 'Skip the speeches and simply shove the old monument awake',
+          check: { stat: 'str', skill: 'athletics', dc: 12 },
           success: {
-            text: 'You keep your heads down and your hooves soft, and the hollow swallows you whole.',
-            next: 'keeper-fork',
+            text: 'You set a shoulder to its mossy flank and HEAVE. The wren departs, swearing. The Keeper comes awake all at once, affronted and enormous and — unmistakably — pleased.',
+            next: 'keeper-roused',
+          },
+          failure: {
+            text: 'It is a great deal heavier and mossier than it looks, and your shove mostly moves you. But the sheer indignity of being leaned on does the trick: it rouses, grumbling, to see who dares.',
+            next: 'keeper-roused',
+          },
+        },
+        {
+          id: 'speak-name',
+          text: 'Speak its forgotten name into the quiet',
+          requires: { trait: 'o', min: 55 },
+          success: {
+            text: 'Your strangest one knows the old word for it — the true one, from before the herds went quiet about this place — and speaks it once, gently. The whole hollow inhales. The Keeper opens both eyes at once, and there is something in them that has been gone a very long time: recognition.',
+            next: 'keeper-roused',
           },
         },
       ],
     },
-    'keeper-fork': {
-      id: 'keeper-fork',
+    'keeper-roused': {
+      id: 'keeper-roused',
       stage: 2,
-      text: 'The hollow forks. One path climbs back toward the open meadow and an easy trip home. The other drops deeper, toward a stillness with a weight to it — toward whatever it is that keeps this place.',
+      text: 'The Hollow-Keeper wakes the way a hill might wake — slowly, then all at once. Lichen sloughs off it in green sheets as it unfolds to its full and frankly unreasonable height. It regards you with an eye like a deep clear pond and asks, in a voice you feel in your teeth more than hear, whether you have come down here to WASTE the little waking it has left — or to give it, at long last, the fight it has spent a century without.',
       choices: [
         {
-          id: 'bank-home',
-          text: 'Bank your haul and head home',
+          id: 'declare',
+          text: 'Tell it you came for the fight — and mean it',
           success: {
-            text: 'Discretion, the better part. You turn for the light, content.',
-            next: 'end',
-          },
-        },
-        {
-          id: 'go-deeper',
-          text: 'Go down, toward the keeper',
-          success: {
-            text: 'You go down. The green closes overhead. The quiet gets quieter.',
-            next: 'keeper-clearing',
-          },
-        },
-      ],
-    },
-    'keeper-clearing': {
-      id: 'keeper-clearing',
-      stage: 3,
-      text: 'The path opens into a sunlit clearing at the heart of the hollow — and the Hollow-Keeper is waiting, vast and unhurried, square across the only way through. There is no going round it. There is only through.',
-      choices: [
-        {
-          id: 'face-keeper',
-          text: 'Stand your ground and face the Hollow-Keeper',
-          success: {
-            text: 'You square up. The great stag rises to meet you, and the whole clearing holds its breath.',
+            text: 'You tell it the truth, and the truth is yes. Something old and glad kindles in the great stag, and the clearing draws its breath as those antlers come down to meet you.',
             battle: 'gg-hollow-keeper',
             next: 'end',
           },
         },
         {
-          id: 'slip-back',
-          text: 'Think better of it and slip back the way you came',
+          id: 'bow-out',
+          text: 'Bow, leave it the dignity of having been asked, and go',
           success: {
-            text: 'Some doors are better left closed. You back out quietly; the Keeper lets you go.',
+            text: 'You bow low and tell it, honestly, that today is not the day. The Keeper takes this better than you feared — being woken and asked was most of what it wanted — and nudges a season’s windfall your way before settling back into its long green dreaming.',
+            items: [
+              { id: 'plant-fiber', qty: 2 },
+              { id: 'timber', qty: 1 },
+            ],
+            cubes: 8,
             next: 'end',
           },
         },
@@ -760,83 +751,75 @@ const SANDSTONE_SENTINEL: AdventureScript = {
   name: 'The Sandstone Sentinel',
   regionId: 'dusty-dunes',
   keeper: true,
-  start: 'sentinel-flats',
+  start: 'sentinel-proving',
   scenes: {
-    'sentinel-flats': {
-      id: 'sentinel-flats',
+    'sentinel-proving': {
+      id: 'sentinel-proving',
       stage: 1,
-      text: 'Out past the last good well, the dunes give way to a country of standing stones and slot canyons — and a story, old as the rock, of a guardian that walks when it is woken. The wind here sounds almost like breathing.',
+      text: 'At the dead end of the red slot canyon the Sandstone Sentinel waits, buried to the shoulders in its own slow dune, vast and patient and watching. It does not rise for everyone. All around its feet stand the wind-worn shapes of those who came unready — not dead, the desert is not so unkind, just turned politely to standing stone and left a long while to think about it. The Sentinel will not stand for you until you have shown it you are worth standing for.',
       choices: [
         {
-          id: 'glean-stones',
-          text: 'Glean the standing stones as you go',
-          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          id: 'stand-the-heat',
+          text: 'Stand in the canyon’s furnace and do not flinch while it watches',
+          check: { stat: 'con', skill: 'athletics', dc: 13 },
           success: {
-            text: 'You chip free good ore and a few odd, heavy stones for the road.',
-            items: [
-              { id: 'ore', qty: 2 },
-              { id: 'clay', qty: 1 },
-            ],
-            next: 'sentinel-fork',
+            text: 'You hold the killing red heat without a backward step, sweat-blind and steady, until a long crack opens across the Sentinel’s brow that might, in stone, be approval.',
+            next: 'sentinel-rises',
           },
           failure: {
-            text: 'The stones keep their counsel. You take what little flakes off.',
-            items: [{ id: 'ore', qty: 1 }],
-            next: 'sentinel-fork',
+            text: 'The heat nearly folds you and you give a step — but you do not break and you do not run, and the Sentinel has watched far better give far more. It allows it.',
+            fatigue: 1,
+            next: 'sentinel-rises',
           },
         },
         {
-          id: 'pace-quiet',
-          text: 'Save your strength and pace it quietly',
+          id: 'read-glyphs',
+          text: 'Read the challenge-glyphs worn into its base, and answer them true',
+          requires: { trait: 'c', min: 55 },
           success: {
-            text: 'You go soft-hooved through the standing stones, and the country lets you pass.',
-            next: 'sentinel-fork',
+            text: 'The glyphs are a question the Sentinel has put to a thousand challengers, and you are perhaps the hundredth to bother reading it before answering. You answer it right. The sand at its shoulders begins, grain by grain, to shift.',
+            next: 'sentinel-rises',
+          },
+        },
+        {
+          id: 'declare-true',
+          text: 'Look it in its great blank face and say, plainly, why you have come',
+          check: { stat: 'cha', skill: 'performance', dc: 12, harmony: true },
+          success: {
+            text: 'No flourishes, no boasting — just the plain true reason, spoken to a thing that has heard ten thousand lies. It weighs your honesty like ore, and finds enough of it.',
+            next: 'sentinel-rises',
+          },
+          failure: {
+            text: 'Your words come out tangled under that ancient stare, but the marrow of them is true, and the Sentinel takes marrow over polish. It deigns to consider you.',
+            next: 'sentinel-rises',
           },
         },
       ],
     },
-    'sentinel-fork': {
-      id: 'sentinel-fork',
+    'sentinel-rises': {
+      id: 'sentinel-rises',
       stage: 2,
-      text: 'The way forks at a slot canyon. One path skirts wide around it, an easy road home. The other goes in — into a deep red cleft where the breathing-wind is loudest and something very large is very still.',
+      text: 'Found worthy — or near enough — the Sandstone Sentinel hauls itself up out of a century of dune, sand sheeting from shoulders of red stone, until it blots out the strip of sky at the top of the slot. It raises one fist the size of a millstone: not in threat, but in offer — the fight you have just proved you earned the right to lose.',
       choices: [
         {
-          id: 'skirt-home',
-          text: 'Skirt wide and head for home',
+          id: 'meet-it',
+          text: 'Set your hooves and meet the colossus',
           success: {
-            text: 'Let sleeping mountains lie. You turn for the wells, content.',
-            next: 'end',
-          },
-        },
-        {
-          id: 'into-slot',
-          text: 'Go in, down the slot canyon',
-          success: {
-            text: 'You step into the red cleft. The breathing stops. Something begins, very slowly, to stand.',
-            next: 'sentinel-slot',
-          },
-        },
-      ],
-    },
-    'sentinel-slot': {
-      id: 'sentinel-slot',
-      stage: 3,
-      text: 'The slot canyon ends in a wall — and the wall unfolds, sand sheeting off shoulders of red stone, into the Sandstone Sentinel. It fills the only way through. There is no skirting this one.',
-      choices: [
-        {
-          id: 'face-sentinel',
-          text: 'Stand your ground and face the Sentinel',
-          success: {
-            text: 'You set your hooves in the sand. The colossus raises a fist the size of a millstone.',
+            text: 'You square up to the mountain in the hot red sand. It comes down to meet you, and the whole canyon rings like a struck bell.',
             battle: 'dd-sandstone-sentinel',
             next: 'end',
           },
         },
         {
-          id: 'back-out',
-          text: 'Back out of the slot the way you came',
+          id: 'yield',
+          text: 'Salute it, decline the honour for today, and withdraw',
           success: {
-            text: 'Wiser, if less glorious. You back into the light; the Sentinel settles, grain by grain, back into a dune.',
+            text: 'You salute it the way one salutes a worthy thing and step back out of the slot. The Sentinel inclines its great head a fraction — respect, from a mountain — and presses a fistful of the deep canyon’s ore on you before it settles back to wait for braver weather.',
+            items: [
+              { id: 'ore', qty: 2 },
+              { id: 'rare-gem', qty: 1 },
+            ],
+            cubes: 10,
             next: 'end',
           },
         },
@@ -851,83 +834,74 @@ const MISTWOOD_MIMIC: AdventureScript = {
   name: 'The Mistwood Mimic',
   regionId: 'weird-woods',
   keeper: true,
-  start: 'mist-eaves',
+  start: 'mimic-meeting',
   scenes: {
-    'mist-eaves': {
-      id: 'mist-eaves',
+    'mimic-meeting': {
+      id: 'mimic-meeting',
       stage: 1,
-      text: 'Under the eaves of the Weird Woods the light goes green and strange and the mist never quite lifts. The trees here grow things they have no business growing, and a few of them are worth the taking.',
+      text: 'Down in the mist-pooled hollow where the laughing lives, something waits for you wearing a friendly face: a lost-looking little horse, dappled and sweet, that calls you by a name it has no business knowing and tells you, oh so kindly, that there is nothing down here worth your trouble and the way home is right back the way you came. It is, of course, the Mistwood Mimic. The trick is to be quite rude about noticing.',
       choices: [
         {
-          id: 'harvest-odd',
-          text: 'Harvest the odd, glowing growths',
-          check: { stat: 'int', skill: 'foraging', dc: 12 },
+          id: 'spot-the-tell',
+          text: 'Watch it close until it slips — every mimic slips',
+          check: { stat: 'wis', skill: 'foraging', dc: 13 },
           success: {
-            text: 'You read which lights are safe to touch and come away with good timber and stranger things.',
-            items: [
-              { id: 'timber', qty: 2 },
-              { id: 'ore', qty: 1 },
-            ],
-            next: 'mist-fork',
+            text: 'You watch, and you wait, and there: it breathes out into the cold air and casts no fog at all. You point this out, loudly and rudely, and the sweet little face splits open ear to ear to ear.',
+            next: 'mimic-revealed',
           },
           failure: {
-            text: 'Half of it bites back or simply vanishes. You keep what holds still.',
-            items: [{ id: 'timber', qty: 1 }],
-            next: 'mist-fork',
+            text: 'It is good — very good — and for a moment you almost turn for home. But its shadow falls the wrong way, just once, and once is plenty. You call it out. The grin spreads.',
+            next: 'mimic-revealed',
           },
         },
         {
-          id: 'tread-careful',
-          text: 'Tread carefully and keep your wits about you',
+          id: 'refuse-trick',
+          text: 'Refuse the bait flat — you know exactly what lives in mist like this',
+          requires: { trait: 'c', min: 55 },
           success: {
-            text: 'You keep one eye on the path and one on the mist, and the woods, for now, behave.',
-            next: 'mist-fork',
+            text: 'You do not chase the afterimages and you do not take one backward step toward that helpfully-offered exit. You simply name the thing for what it is, and the lost little horse stops bothering to pretend.',
+            next: 'mimic-revealed',
+          },
+        },
+        {
+          id: 'flatter-it',
+          text: 'Play along — then praise the act until it can’t resist a bow',
+          check: { stat: 'cha', skill: 'performance', dc: 12, harmony: true },
+          success: {
+            text: 'You praise the disguise extravagantly — the dapples, the wobble in the voice, the sheer cheek of the name — until the Mimic, helpless against an appreciative audience, drops the act to take a delighted, many-mouthed bow.',
+            next: 'mimic-revealed',
+          },
+          failure: {
+            text: 'Your flattery is a touch overcooked and the Mimic narrows its borrowed eyes — but vanity wins, as it always does in the Weird Woods, and it shrugs off the little horse to show you what is really laughing.',
+            next: 'mimic-revealed',
           },
         },
       ],
     },
-    'mist-fork': {
-      id: 'mist-fork',
+    'mimic-revealed': {
+      id: 'mimic-revealed',
       stage: 2,
-      text: 'The path forks at a leaning, lightning-split oak. One way leads back to the honest edge of the wood. The other goes down into a hollow where the mist pools thick as soup and something is laughing very quietly at a joke you cannot hear.',
+      text: 'Unmasked, the Mistwood Mimic stops being one thing and becomes a dozen — a hollow full of grinning copies, your own faces among them, none of them ever quite where you look. But the spell is broken now: you know the game, and it knows you know. It waits, all its grins turned your way, to find out whether knowing is the same as winning.',
       choices: [
         {
-          id: 'back-edge',
-          text: 'Head back to the wood-edge',
+          id: 'face-it',
+          text: 'Hold your nerve, pick the real one, and have at it',
           success: {
-            text: 'You leave the laughing to itself and turn for home, content.',
-            next: 'end',
-          },
-        },
-        {
-          id: 'into-mist',
-          text: 'Go down, into the laughing mist',
-          success: {
-            text: 'You wade into the soup. The laughing gets closer, and then it is all around you.',
-            next: 'mist-heart',
-          },
-        },
-      ],
-    },
-    'mist-heart': {
-      id: 'mist-heart',
-      stage: 3,
-      text: 'The hollow at the heart of the mist is full of the Mistwood Mimic — which is to say full of a dozen of it, all grinning, none of them quite where you look. There is one real one in there somewhere, and it is between you and the way out.',
-      choices: [
-        {
-          id: 'face-mimic',
-          text: 'Hold your nerve and face the Mimic',
-          success: {
-            text: 'You plant your hooves and stop chasing afterimages. The crowd of grins turns, as one, to you.',
+            text: 'You stop chasing reflections, fix on the one grin that casts a shadow, and commit. The whole laughing crowd of it turns to meet you at once.',
             battle: 'ww-mistwood-mimic',
             next: 'end',
           },
         },
         {
-          id: 'slip-mist',
-          text: 'Slip back out through the mist',
+          id: 'let-be',
+          text: 'Decide that seeing through it was the real victory, and go',
           success: {
-            text: 'You back out the way you came, following your own hoofprints; the laughing fades behind you.',
+            text: 'You tip the Mimic the nod of one trickster to another and walk out unhurried, following your own true hoofprints. It lets you — it has rather enjoyed being properly SEEN for once — and leaves a few of its stranger treasures on the path by way of thanks.',
+            items: [
+              { id: 'timber', qty: 1 },
+              { id: 'rare-gem', qty: 1 },
+            ],
+            cubes: 8,
             next: 'end',
           },
         },
@@ -936,7 +910,6 @@ const MISTWOOD_MIMIC: AdventureScript = {
   },
 };
 
-// ── Green Grass — "The Bramble Gate" (combat-forward: a Knight-weak skirmish) ─
 // ── Green Grass — "The Windfall" (a SHORT, cozy errand: no fork, no winding deep, no fight — just a
 //    quick gather against the failing light, in and out before dark. The deliberately-brief shape.) ─
 const WINDFALL: AdventureScript = {

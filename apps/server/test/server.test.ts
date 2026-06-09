@@ -1392,7 +1392,7 @@ async function main(): Promise<void> {
       const r = await startRun(db, herdId, 'green-grass', [id], { seed: s });
       if (r.ok) ggDraws.add(r.scene.id);
     }
-    check('random GG draws never surface the keeper expedition', !ggDraws.has('keeper-meadow'));
+    check('random GG draws never surface the keeper expedition', !ggDraws.has('keeper-threshold'));
 
     // EARNED: a fresh herd must complete KEEPER_UNLOCK_EXPEDITIONS expeditions before it can challenge.
     const kHerd = (
@@ -2309,9 +2309,8 @@ async function main(): Promise<void> {
   });
   check('the Hollow-Keeper expedition starts (a chosen script)', bossRun.ok);
   if (bossRun.ok) {
-    await chooseInRun(db, herdId, bossRun.runId, 'press-quiet'); // meadow → fork
-    await chooseInRun(db, herdId, bossRun.runId, 'go-deeper'); // fork → clearing
-    const face = await chooseInRun(db, herdId, bossRun.runId, 'face-keeper'); // → boss battle
+    await chooseInRun(db, herdId, bossRun.runId, 'prod-it'); // threshold → rouse the Keeper
+    const face = await chooseInRun(db, herdId, bossRun.runId, 'declare'); // → boss battle
     check(
       'facing the boss ends the run and hands off to a battle vs the Hollow-Keeper',
       face.ok &&
@@ -2334,7 +2333,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // Banking at the fork skips the boss entirely (the push-deeper/bank tension).
+  // Bowing out after rousing the Keeper skips the boss entirely (the challenge is opt-in).
   const skipRun = await startRun(
     db,
     herdId,
@@ -2343,10 +2342,10 @@ async function main(): Promise<void> {
     { scriptId: 'hollow-keeper', seed: 2 },
   );
   if (skipRun.ok) {
-    await chooseInRun(db, herdId, skipRun.runId, 'press-quiet'); // → fork
-    const banked = await chooseInRun(db, herdId, skipRun.runId, 'bank-home'); // → end, no boss
+    await chooseInRun(db, herdId, skipRun.runId, 'prod-it'); // threshold → rouse the Keeper
+    const banked = await chooseInRun(db, herdId, skipRun.runId, 'bow-out'); // → end, no boss
     check(
-      'banking at the fork ends the run with no boss battle',
+      'bowing out after rousing the Keeper ends the run with no boss battle',
       banked.ok && banked.ended === true && banked.battle === null,
     );
   }
@@ -2360,9 +2359,8 @@ async function main(): Promise<void> {
     { scriptId: 'hollow-keeper', seed: 3 },
   );
   if (loseRun.ok) {
-    await chooseInRun(db, herdId, loseRun.runId, 'press-quiet');
-    await chooseInRun(db, herdId, loseRun.runId, 'go-deeper');
-    const face = await chooseInRun(db, herdId, loseRun.runId, 'face-keeper');
+    await chooseInRun(db, herdId, loseRun.runId, 'prod-it');
+    const face = await chooseInRun(db, herdId, loseRun.runId, 'declare');
     if (face.ok && face.ended && face.battle) {
       const lost = await driveBattle(face.battle.battleId);
       const keeper = ENEMY_BY_ID.get('gg-hollow-keeper')!;

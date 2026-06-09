@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { ITEM_SELL_VALUE, SELL_CONFIRM_IDS } from '@blorse/balance';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
@@ -15,7 +16,15 @@ async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | nu
 
 export function registerPastureRoutes(app: FastifyInstance, db: DB): void {
   app.get('/recipes', () => listRecipes()); // static content
-  app.get('/items', () => ITEMS); // static content — item catalog (names, kinds, flavor)
+  // static content — item catalog (names, kinds, flavor) + quick-sell value (so the Inventory page
+  // knows what's sellable, for how much, and what needs a confirm) without exposing balance to the client.
+  app.get('/items', () =>
+    ITEMS.map((i) => ({
+      ...i,
+      sellValue: ITEM_SELL_VALUE[i.id],
+      sellConfirm: SELL_CONFIRM_IDS.includes(i.id),
+    })),
+  );
 
   app.post('/craft', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

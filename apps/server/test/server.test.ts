@@ -84,7 +84,7 @@ import {
 import { advanceHerd } from '../src/services/daily.js';
 import { roam } from '../src/services/exploration.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
-import { consumeItems, grantItems, itemQty } from '../src/services/inventory.js';
+import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { compatibility } from '../src/services/personality.js';
 import {
@@ -2569,6 +2569,44 @@ async function main(): Promise<void> {
     audit.some((row) => row.action === 'market_list') &&
       audit.some((row) => row.action === 'trade_offer'),
   );
+
+  // ── Inventory quick-sell (§7/§10): a modest convenience dump, audited; rares/grains protected ──
+  {
+    const timber0 = await itemQty(db, herdId, 'timber');
+    await grantItems(db, herdId, [
+      { id: 'timber', qty: 5 },
+      { id: 'rare-gem', qty: 1 },
+      { id: 'grain-corn', qty: 3 },
+    ]);
+    const before =
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))?.cubes ?? 0;
+    const sold = await quickSellItem(db, herdId, 'timber', 3);
+    check(
+      'quick-sell pays the modest per-item value',
+      sold.ok && sold.gained === 6 && sold.sold === 3,
+    );
+    check(
+      'quick-sell removes the sold items',
+      (await itemQty(db, herdId, 'timber')) === timber0 + 2,
+    );
+    const after =
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))?.cubes ?? 0;
+    check('quick-sell credits the Cubes', after === before + 6);
+    check(
+      'quick-sell is audited',
+      (await getAudit(db, herdId)).some((r) => r.action === 'item_sell'),
+    );
+    // selling more than held clamps to the held quantity (never negative)
+    const remaining = await itemQty(db, herdId, 'timber');
+    const overSell = await quickSellItem(db, herdId, 'timber', 99);
+    check('quick-sell clamps to the held quantity', overSell.ok && overSell.sold === remaining);
+    // a cooking grain isn't quick-sellable (protected by exclusion from the value map)
+    const grainSell = await quickSellItem(db, herdId, 'grain-corn', 1);
+    check('grains are not quick-sellable', !grainSell.ok && grainSell.code === 'not_sellable');
+    // the rare gem IS sellable (a prestige cash-in) — the confirm is a UI gate; the value is real
+    const gemSell = await quickSellItem(db, herdId, 'rare-gem', 1);
+    check('the rare gem sells for its prestige value', gemSell.ok && gemSell.gained === 40);
+  }
 
   // ───────────────────────── Phase 11 — beta hardening ─────────────────────────
 

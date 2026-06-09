@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import type { HerdRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
+import { quickSellItem } from '../services/inventory.js';
 import { browseMarket, buyListing, cancelListing, listHorse } from '../services/market.js';
 import {
   acceptTrade,
@@ -19,6 +20,21 @@ async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | nu
 }
 
 export function registerEconomyRoutes(app: FastifyInstance, db: DB): void {
+  // ── Inventory quick-sell (convenience dump for surplus materials) ──
+  app.post('/inventory/sell', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    const body = (req.body ?? {}) as { itemId?: string; qty?: number };
+    if (!body.itemId) return reply.code(400).send({ error: 'itemId required' });
+    const result = await quickSellItem(db, herd.id, body.itemId, body.qty ?? 1);
+    if (!result.ok) {
+      return reply
+        .code(result.code === 'not_sellable' ? 400 : 409)
+        .send({ error: result.message, code: result.code });
+    }
+    return reply.send(result);
+  });
+
   // ── Marketplace ──
   app.get('/market', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

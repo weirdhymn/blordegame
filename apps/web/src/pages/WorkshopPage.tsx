@@ -54,7 +54,6 @@ export function WorkshopPage(): ReactElement {
   const have = (itemId: string): number => inv.find((i) => i.id === itemId)?.qty ?? 0;
   const canCraft = (r: Recipe): boolean => r.inputs.every((i) => have(i.id) >= i.qty);
   const flavorOf = (id: string): string | undefined => itemDefs.find((d) => d.id === id)?.flavor;
-  const flavoredHeld = inv.filter((i) => flavorOf(i.id));
 
   async function act(fn: () => Promise<unknown>, msg: string): Promise<void> {
     setBusy(true);
@@ -82,12 +81,14 @@ export function WorkshopPage(): ReactElement {
         </div>
       )}
 
-      <section className="section">
-        <h2 className="section-h">Stash</h2>
-        {inv.length === 0 ? (
-          <p className="muted">Empty. Roam a region (Explore) to gather materials.</p>
-        ) : (
-          <>
+      {/* Condensed into a dense three-panel grid (Stash | Crafting | Grounds); collapses to one
+          column on narrow screens. Item flavor lives in the chip tooltip (hover the ✦). */}
+      <div className="workshop-grid">
+        <section className="section">
+          <h2 className="section-h">Stash</h2>
+          {inv.length === 0 ? (
+            <p className="muted">Empty — gather in a region (Adventure) to stock up.</p>
+          ) : (
             <div className="guide-grid">
               {inv.map((i) => {
                 const fl = flavorOf(i.id);
@@ -99,82 +100,74 @@ export function WorkshopPage(): ReactElement {
                 );
               })}
             </div>
-            {flavoredHeld.length > 0 && (
-              <div className="curios">
-                {flavoredHeld.map((i) => (
-                  <p className="muted curio" key={i.id}>
-                    <strong>{pretty(i.id)} ✦</strong> — {flavorOf(i.id)}
-                  </p>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-
-      <section className="section">
-        <h2 className="section-h">Crafting</h2>
-        <ul className="list">
-          {recipes.map((r) => (
-            <li key={r.id}>
-              <span>
-                {r.name}{' '}
-                <span className="muted">
-                  — {r.inputs.map((i) => `${pretty(i.id)} ×${i.qty}`).join(', ')}
-                </span>
-              </span>
-              <button
-                className="primary"
-                disabled={busy || !canCraft(r)}
-                onClick={() => void act(() => craft(r.id), `Crafted a ${r.name}.`)}
-              >
-                {canCraft(r) ? 'Craft' : 'Need materials'}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="section">
-        <h2 className="section-h">
-          Grounds{' '}
-          {pasture && (
-            <span className="muted">
-              ({pasture.used}/{pasture.capacity} built)
-            </span>
           )}
-        </h2>
-        {pasture && (
+        </section>
+
+        <section className="section">
+          <h2 className="section-h">Crafting</h2>
           <ul className="list">
-            {pasture.buildable.map((b) => (
-              <li key={b.type}>
+            {recipes.map((r) => (
+              <li key={r.id}>
                 <span>
-                  {b.name}
-                  {b.job && <span className="muted"> — {b.job} job</span>}
-                  <br />
+                  {r.name}{' '}
                   <span className="muted">
-                    {b.buildCost.cubes} ⬡
-                    {b.buildCost.items.length
-                      ? ' + ' + b.buildCost.items.map((i) => `${pretty(i.id)} ×${i.qty}`).join(', ')
-                      : ''}
+                    — {r.inputs.map((i) => `${pretty(i.id)} ×${i.qty}`).join(', ')}
                   </span>
                 </span>
-                {b.built ? (
-                  <span className="muted">✓ built</span>
-                ) : (
-                  <button
-                    className="primary"
-                    disabled={busy}
-                    onClick={() => void act(() => build(b.type), `Built the ${b.name}.`)}
-                  >
-                    Build
-                  </button>
-                )}
+                <button
+                  className="primary"
+                  disabled={busy || !canCraft(r)}
+                  onClick={() => void act(() => craft(r.id), `Crafted a ${r.name}.`)}
+                >
+                  {canCraft(r) ? 'Craft' : 'Need materials'}
+                </button>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+
+        <section className="section">
+          <h2 className="section-h">
+            Grounds{' '}
+            {pasture && (
+              <span className="muted">
+                ({pasture.used}/{pasture.capacity} built)
+              </span>
+            )}
+          </h2>
+          {pasture && (
+            <ul className="list">
+              {pasture.buildable.map((b) => (
+                <li key={b.type}>
+                  <span>
+                    {b.name}
+                    {b.job && <span className="muted"> — {b.job} job</span>}
+                    <br />
+                    <span className="muted">
+                      {b.buildCost.cubes} ⬡
+                      {b.buildCost.items.length
+                        ? ' + ' +
+                          b.buildCost.items.map((i) => `${pretty(i.id)} ×${i.qty}`).join(', ')
+                        : ''}
+                    </span>
+                  </span>
+                  {b.built ? (
+                    <span className="muted">✓ built</span>
+                  ) : (
+                    <button
+                      className="primary"
+                      disabled={busy}
+                      onClick={() => void act(() => build(b.type), `Built the ${b.name}.`)}
+                    >
+                      Build
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

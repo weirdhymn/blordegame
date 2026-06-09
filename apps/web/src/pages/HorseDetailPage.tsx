@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import { ApiError } from '../api/client.js';
-import { care, getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
+import { getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
 import { assignJob, getJob, unassignJob, type JobAssignment } from '../api/jobs.js';
 import { getUploadQuote, uploadHorse, type UploadQuote } from '../api/upload.js';
 import { getPasture, type Buildable } from '../api/workshop.js';
@@ -40,8 +40,6 @@ export function HorseDetailPage(): ReactElement {
   const [horse, setHorse] = useState<Horse | null>(null);
   const [ped, setPed] = useState<Pedigree | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [careNote, setCareNote] = useState<string | null>(null);
-  const [careBusy, setCareBusy] = useState(false);
   const [job, setJob] = useState<JobAssignment | null>(null);
   const [jobStructures, setJobStructures] = useState<Buildable[]>([]);
   const [pick, setPick] = useState('');
@@ -101,20 +99,6 @@ export function HorseDetailPage(): ReactElement {
       cancelled = true;
     };
   }, [id]);
-
-  async function doCare(action: 'feed' | 'groom'): Promise<void> {
-    if (!id) return;
-    setCareBusy(true);
-    setCareNote(null);
-    try {
-      setCareNote((await care(id, action)).message);
-      setHorse(await getHorse(id)); // refresh caredToday / careCount / the Beloved mark
-    } catch (e) {
-      setCareNote(e instanceof ApiError ? e.message : 'Could not care for it.');
-    } finally {
-      setCareBusy(false);
-    }
-  }
 
   async function assign(): Promise<void> {
     if (!id || !pick) return;
@@ -229,22 +213,6 @@ export function HorseDetailPage(): ReactElement {
               )}
             </div>
           </div>
-
-          <h2 className="section-h">Care</h2>
-          <div className="row-actions">
-            <button disabled={careBusy} onClick={() => void doCare('feed')}>
-              🍎 Feed
-            </button>
-            <button disabled={careBusy} onClick={() => void doCare('groom')}>
-              🧽 Groom
-            </button>
-            {careNote && <span className="muted">{careNote}</span>}
-          </div>
-          <p className="muted">
-            {horse.caredToday
-              ? '🍎 Tended today — it sets out on adventures in good fettle (a small edge on its checks).'
-              : 'A fed-and-groomed horse fares a little better on its adventures today.'}
-          </p>
 
           {horse.lifeStage === 'adult' && (
             <>

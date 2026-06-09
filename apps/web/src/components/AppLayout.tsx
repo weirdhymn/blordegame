@@ -19,6 +19,7 @@ export function AppLayout(): ReactElement {
           <NavLink to="/tavern">Tavern</NavLink>
           <NavLink to="/adventure">⚔ Adventure</NavLink>
           <NavLink to="/workshop">Workshop</NavLink>
+          <NavLink to="/inventory">Inventory</NavLink>
           <NavLink to="/market">Market</NavLink>
           <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>

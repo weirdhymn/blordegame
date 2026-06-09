@@ -8,6 +8,7 @@ import { DebugPage } from './pages/DebugPage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
 import { HomePage } from './pages/HomePage.js';
 import { HorseDetailPage } from './pages/HorseDetailPage.js';
+import { InventoryPage } from './pages/InventoryPage.js';
 import { JournalPage } from './pages/JournalPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { TavernPage } from './pages/TavernPage.js';
@@ -54,6 +55,7 @@ export function App(): ReactElement {
         <Route path="/explore" element={<Navigate to="/adventure/venture" replace />} />
         <Route path="/spar" element={<Navigate to="/adventure/spar" replace />} />
         <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/herd" element={<HerdPage />} />
         <Route path="/journal" element={<JournalPage />} />

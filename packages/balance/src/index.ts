@@ -268,6 +268,29 @@ export const CARE_BELOVED_THRESHOLD = 10;
 export const WILD_ENCOUNTER_CHANCE = 0.5;
 export const RARE_ITEM = 'rare-gem';
 
+/** Quick-sell (Inventory): modest per-item Cube values — a convenience dump for surplus materials,
+ *  deliberately NOT an income strategy (gathering / adventuring / jobs are the real economy). Items
+ *  absent from this map are NOT quick-sellable: grains feed the morning cook, Saffron Bloom + Healing
+ *  Potion are reserved, cosmetics are kept. The lone valuable that IS sellable (rare-gem, a prestige
+ *  drop meant to be cashed in) is gated behind a UI confirm so it can't be dumped by accident. */
+export const ITEM_SELL_VALUE: Record<string, number> = {
+  timber: 2,
+  clay: 2,
+  'plant-fiber': 2,
+  ore: 2,
+  'marsh-sage': 2,
+  plank: 4,
+  brick: 4,
+  paper: 4,
+  ingot: 4,
+  book: 8,
+  'board-game': 8,
+  tool: 8,
+  'rare-gem': 40,
+};
+/** Selling one of these asks for a confirm first (valuable / easy to dump by accident). */
+export const SELL_CONFIRM_IDS: readonly string[] = ['rare-gem'];
+
 // ── Daily Care rituals: the cozy heartbeat (§6/§7) ──────────────────────────
 // Two bookends — cook a stat buff in the MORNING, groom at NIGHT. Rewarding to do, GENTLE to skip
 // (no penalties, no FOMO, no neglect spiral, ever). Both are whole-herd batch actions; the buff is

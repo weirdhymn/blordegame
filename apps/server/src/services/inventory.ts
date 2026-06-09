@@ -1,6 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm';
+import { ITEM_SELL_VALUE } from '@blorse/balance';
 import type { DB } from '../db/client.js';
-import { inventory } from '../db/schema.js';
+import { herds, inventory } from '../db/schema.js';
+import { logAudit } from './audit.js';
 
 export interface ItemStack {
   id: string;
@@ -51,4 +53,38 @@ export async function consumeItems(db: DB, herdId: string, items: ItemStack[]): 
       .where(and(eq(inventory.herdId, herdId), eq(inventory.itemId, need.id)));
   }
   return true;
+}
+
+export type SellResult =
+  | { ok: false; code: 'not_sellable' | 'none_held'; message: string }
+  | { ok: true; itemId: string; sold: number; gained: number; cubes: number };
+
+/**
+ * Quick-sell surplus items for a modest Cube sum (a convenience dump, never an income strategy —
+ * §7/§10). Sells up to the held quantity at the item's `ITEM_SELL_VALUE`; items without a sell value
+ * (grains, reserved finds, cosmetics) are refused. Server-authoritative + audited.
+ */
+export async function quickSellItem(
+  db: DB,
+  herdId: string,
+  itemId: string,
+  qty: number,
+): Promise<SellResult> {
+  const unit = ITEM_SELL_VALUE[itemId];
+  if (unit == null) {
+    return { ok: false, code: 'not_sellable', message: 'That item cannot be sold here.' };
+  }
+  const held = await itemQty(db, herdId, itemId);
+  const n = Math.min(held, Math.max(1, Math.floor(qty || 0)));
+  if (n <= 0 || !(await consumeItems(db, herdId, [{ id: itemId, qty: n }]))) {
+    return { ok: false, code: 'none_held', message: 'You have none of those to sell.' };
+  }
+  const gained = unit * n;
+  const [row] = await db
+    .update(herds)
+    .set({ cubes: sql`${herds.cubes} + ${gained}` })
+    .where(eq(herds.id, herdId))
+    .returning({ cubes: herds.cubes });
+  await logAudit(db, herdId, 'item_sell', { itemId, qty: n, gained });
+  return { ok: true, itemId, sold: n, gained, cubes: row?.cubes ?? 0 };
 }

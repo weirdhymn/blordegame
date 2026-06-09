@@ -42,6 +42,10 @@ export interface ItemDef {
   kind: string;
   /** Optional in-world flavor — e.g. why a terminal item isn't usable yet. */
   flavor?: string;
+  /** Quick-sell value per unit (absent → not quick-sellable). */
+  sellValue?: number;
+  /** Selling this asks for a confirm first (valuable). */
+  sellConfirm?: boolean;
 }
 
 export const getItems = (): Promise<ItemDef[]> => api.get<ItemDef[]>('/items');

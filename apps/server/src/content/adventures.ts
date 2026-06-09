@@ -1720,6 +1720,238 @@ const TOLL_KEEPER: AdventureScript = {
   },
 };
 
+// ── Weird Woods — "The Witch-Hazel" (a SHORT, urgent errand: the blooms last one hour at dusk, then
+//    deny they ever happened. No fork, no fight — just be quick and be weird about it.) ───────────
+const WITCH_HAZEL: AdventureScript = {
+  id: 'witch-hazel',
+  name: 'The Witch-Hazel',
+  regionId: 'weird-woods',
+  start: 'hazel-dusk',
+  scenes: {
+    'hazel-dusk': {
+      id: 'hazel-dusk',
+      stage: 1,
+      text: 'The witch-hazel of the Weird Woods blooms backwards — closed all day, then for one hour at dusk it throws open a thousand thread-thin yellow flowers, glowing faintly, smelling of cold pennies and rain. When the hour ends the branch folds up and will, if asked, deny the whole affair. The hour has just begun.',
+      choices: [
+        {
+          id: 'quick-pick',
+          text: 'Pick fast and clean while they are open',
+          check: { stat: 'dex', skill: 'foraging', dc: 11 },
+          success: {
+            text: 'Quick, light, no fumbling — you strip the open blooms by the fistful before a single one thinks to fold.',
+            items: [
+              { id: 'marsh-sage', qty: 2 },
+              { id: 'plant-fiber', qty: 1 },
+            ],
+            next: 'hazel-hour',
+          },
+          failure: {
+            text: 'Half of them snap shut the instant you breathe on them, offended. You salvage a respectable handful of the braver flowers.',
+            items: [{ id: 'marsh-sage', qty: 1 }],
+            next: 'hazel-hour',
+          },
+        },
+        {
+          id: 'coax-bloom',
+          text: 'Hum to the shy ones and coax them to stay open',
+          check: { stat: 'cha', skill: 'performance', dc: 12, harmony: true },
+          success: {
+            text: 'You sing the low note the woods likes, and the witch-hazel — flattered, suspicious — holds its blooms open a few minutes past its bedtime, just for you.',
+            items: [
+              { id: 'marsh-sage', qty: 3 },
+              { id: 'timber', qty: 1 },
+            ],
+            next: 'hazel-hour',
+          },
+          failure: {
+            text: 'The blooms are unmoved by your serenade and shut on schedule, primly. You gather what stayed.',
+            items: [{ id: 'marsh-sage', qty: 1 }],
+            next: 'hazel-hour',
+          },
+        },
+        {
+          id: 'pip-knows',
+          text: '“Pip says THIS branch blooms last. Pip is usually right about wrong things.”',
+          requires: { trait: 'o', min: 60 },
+          success: {
+            text: 'Your odd one leads you to a single crooked branch deep in the thicket that blooms a full quarter-hour after all the rest — the woods’ little secret, and tonight, yours.',
+            items: [
+              { id: 'marsh-sage', qty: 2 },
+              { id: 'plant-fiber', qty: 2 },
+            ],
+            next: 'hazel-hour',
+          },
+        },
+      ],
+    },
+    'hazel-hour': {
+      id: 'hazel-hour',
+      stage: 2,
+      text: 'The light is nearly gone and the blooms are folding all around you with a sound like a hundred small books closing. There is one last bright fistful glowing at the top of the thicket, and about ninety seconds in which to want it.',
+      choices: [
+        {
+          id: 'last-reach',
+          text: 'Lunge for the last of the glow before it closes',
+          check: { stat: 'wis', skill: 'foraging', dc: 12, harmony: true },
+          success: {
+            text: 'You take the last of it in the very last of the light, and walk home in the dark smelling of cold pennies, pockets faintly aglow.',
+            items: [{ id: 'marsh-sage', qty: 1 }],
+            cubes: 10,
+            next: 'end',
+          },
+          failure: {
+            text: 'It folds shut in your face with a soft, final snap, the branch already pretending it never bloomed at all. Cheek. You head home with the good handful you have.',
+            next: 'end',
+          },
+        },
+        {
+          id: 'let-fold',
+          text: 'Let it close, and leave the woods its secret',
+          success: {
+            text: 'You step back and let the last blooms fold in peace. The thicket goes dark and ordinary, and you carry home a fair share and the good manners of a welcome guest.',
+            cubes: 6,
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
+// ── Weird Woods — "The Long Way Round" (an UNCANNY MYSTERY: the woods has folded into a loop and
+//    keeps returning you to the same log. Three ways to break it → three different escapes.) ──────
+const LONG_WAY_ROUND: AdventureScript = {
+  id: 'long-way-round',
+  name: 'The Long Way Round',
+  regionId: 'weird-woods',
+  start: 'the-loop',
+  scenes: {
+    'the-loop': {
+      id: 'the-loop',
+      stage: 1,
+      text: 'Here is the lightning-split log again. You are certain you have not passed it before, and equally certain you have passed nothing else. Whichever way you walk away from it, the path bends, politely and without apology, and brings you back. The Weird Woods has folded itself shut around you like a closed hand, and it is in no hurry to open.',
+      choices: [
+        {
+          id: 'mark-trees',
+          text: 'Blaze the trees and map the loop by hard logic',
+          check: { stat: 'int', skill: 'foraging', dc: 13 },
+          success: {
+            text: 'Three loops, three blazes, and the truth: there is a SEAM, a place where two stretches of forest are stitched together wrong, the same six trees stamped twice like a misprint.',
+            next: 'the-seam',
+          },
+          failure: {
+            text: 'Your blazes start showing up on trees you have not reached yet, which is unhelpful and a little rude — but it does point, raggedly, at where the loop pinches tightest.',
+            next: 'the-seam',
+          },
+        },
+        {
+          id: 'find-difference',
+          text: 'Stop counting trees and watch for the ONE thing that changes',
+          check: { stat: 'wis', dc: 12, harmony: true },
+          success: {
+            text: 'There. Every time around, a single pale moth sits one tree further along — the only thing in the whole folded wood that is keeping honest time. You decide to keep its company.',
+            next: 'the-moth',
+          },
+          failure: {
+            text: 'Everything changes and nothing does and it is enough to make a horse dizzy — but you do catch it: a pale flicker, always a little ahead, always a little different. Worth following.',
+            next: 'the-moth',
+          },
+        },
+        {
+          id: 'trust-nose',
+          text: 'Ignore the path entirely and bull straight off through the undergrowth',
+          requires: { trait: 'c', min: 55 },
+          success: {
+            text: 'You refuse the path the courtesy of obeying it and crash dead-straight into the trackless green, antlers of bramble be damned. The loop, which only owns the PATH, loses its grip on you completely.',
+            next: 'off-path',
+          },
+        },
+      ],
+    },
+    'the-seam': {
+      id: 'the-seam',
+      stage: 2,
+      text: 'The seam is a shimmer in the air between two birches that are, on close inspection, the same birch. Step through it at the wrong angle and you will simply arrive back at the log forever. Step through it right and you are out — and the woods, embarrassed at being caught, has left a little something tucked in the fold by way of apology.',
+      choices: [
+        {
+          id: 'thread-seam',
+          text: 'Read the angle and thread the whole party through clean',
+          check: { stat: 'int', skill: 'athletics', dc: 13, harmony: true },
+          success: {
+            text: 'You line everyone up just so and walk them through the misprint in single file — and out into honest, un-folded forest, with a knot of strange smooth river-stones the seam had been hoarding.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'timber', qty: 1 },
+            ],
+            cubes: 20,
+            next: 'end',
+          },
+          failure: {
+            text: 'You get the angle a few degrees wrong and arrive, with a lurch, back at the log — twice — before it takes. You are out, eventually, frazzled, clutching what the fold spat up on the way.',
+            items: [{ id: 'timber', qty: 1 }],
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'the-moth': {
+      id: 'the-moth',
+      stage: 2,
+      text: 'The pale moth leads you off the bending path and down a stair of roots no loop could keep, to where it lives: a hollow stump packed with the soft cold light of a hundred of its kin, and the small bright debris of everything the folded wood has swallowed over the years.',
+      choices: [
+        {
+          id: 'follow-true',
+          text: 'Trust the moth all the way down and out',
+          check: { stat: 'wis', skill: 'foraging', dc: 12 },
+          success: {
+            text: 'You follow it true, and it walks you straight out the wood’s back door — pausing, at the stump, to let you pocket a glittering tithe of the loop’s long forgetting. The trees behind you unclench with an almost-audible sigh.',
+            items: [
+              { id: 'rare-gem', qty: 1 },
+              { id: 'plant-fiber', qty: 1 },
+            ],
+            cubes: 18,
+            next: 'end',
+          },
+          failure: {
+            text: 'You lose the moth twice in the dark and find it twice, and it gets you out in the end with fraying patience and a modest handful of its hoard for your trouble.',
+            items: [{ id: 'plant-fiber', qty: 1 }],
+            next: 'end',
+          },
+        },
+      ],
+    },
+    'off-path': {
+      id: 'off-path',
+      stage: 2,
+      text: 'Off the path the loop has no power, and you blunder, scratched and triumphant, straight into the thing it was folded around to hide: a still green glade with a fallen menhir at its heart, never meant to be found, thick with the rare growth that only thrives where nobody ever comes.',
+      choices: [
+        {
+          id: 'glean-glade',
+          text: 'Gather the hidden glade before the woods remembers you',
+          check: { stat: 'str', skill: 'foraging', dc: 12, harmony: true },
+          success: {
+            text: 'You crop the secret glade quick and grateful — ore furred green with age, timber gone hard as iron, herbs with no names — and shoulder back out before the loop can re-fold behind you.',
+            items: [
+              { id: 'ore', qty: 2 },
+              { id: 'timber', qty: 2 },
+              { id: 'marsh-sage', qty: 1 },
+            ],
+            cubes: 16,
+            next: 'end',
+          },
+          failure: {
+            text: 'You feel the woods stir and re-fold and grab a quick armful on your way out rather than push your luck in a glade that does not want company. Wise.',
+            items: [{ id: 'timber', qty: 1 }],
+            fatigue: 1,
+            next: 'end',
+          },
+        },
+      ],
+    },
+  },
+};
+
 // ── Green Grass — "The Lost Lamb" (a deep branching study, §9.3) ───────────
 // The showcase for real branching + cross-scene consequence, all on the scene-tree engine via the
 // herb-hunt feed-forward mechanism (route to a consequence-specific variant; carry materials in loot;
@@ -2099,6 +2331,8 @@ export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   // Weird Woods
   LANTERN_FLY_HUNT,
   TOLL_KEEPER,
+  WITCH_HAZEL,
+  LONG_WAY_ROUND,
   MISTWOOD_MIMIC,
 ];
 

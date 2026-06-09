@@ -1461,6 +1461,15 @@ async function main(): Promise<void> {
         ddPool.some((s) => s.id === 'lost-caravan') &&
         Math.min(...ddPool.map((s) => Object.keys(s.scenes).length)) <= 2,
     );
+    // Weird Woods too: a short errand + an uncanny mystery on top of the luminous + riddle ones.
+    const wwPool = ADVENTURE_POOLS.get('weird-woods') ?? [];
+    check(
+      'Weird Woods spans varied shapes (short errand + uncanny mystery + the rest)',
+      wwPool.length >= 4 &&
+        wwPool.some((s) => s.id === 'witch-hazel') &&
+        wwPool.some((s) => s.id === 'long-way-round') &&
+        Math.min(...wwPool.map((s) => Object.keys(s.scenes).length)) <= 2,
+    );
   }
 
   // --- "The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on the scene-tree engine ---

@@ -1,24 +1,17 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
-import { getProgression, upgradeProgression, type ProgressionView } from '../api/progression.js';
+import { getProgression, upgradeProgression } from '../api/progression.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 
 /** The Herd-Tier progression spine (§7) — the home base's one legible ladder: current tier, the next
  *  upgrade (cost + accomplishment gates + what it unlocks), and the Cubes-sink Upgrade button. */
 export function HerdTier(): ReactElement {
   const { refresh } = useSession();
-  const [prog, setProg] = useState<ProgressionView | null>(null);
+  const progLoad = useLoad(useCallback(() => getProgression(), []));
+  const prog = progLoad.data;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
-  const load = (): void => {
-    getProgression()
-      .then(setProg)
-      .catch(() => {
-        /* ignore */
-      });
-  };
-  useEffect(load, []);
 
   async function upgrade(): Promise<void> {
     setBusy(true);
@@ -27,7 +20,7 @@ export function HerdTier(): ReactElement {
       const r = await upgradeProgression();
       setMsg(`🎉 Upgraded to Tier ${r.tier} — ${r.tierName}!`);
       await refresh();
-      load();
+      progLoad.reload();
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : 'Upgrade failed.');
     } finally {
@@ -39,7 +32,13 @@ export function HerdTier(): ReactElement {
     return (
       <section className="card herd-tier">
         <h2 className="section-h">🏅 Herd Tier</h2>
-        <p className="muted">Loading…</p>
+        {progLoad.error ? (
+          <div className="error" role="alert">
+            {progLoad.error}
+          </div>
+        ) : (
+          <p className="muted">Loading…</p>
+        )}
       </section>
     );
   }

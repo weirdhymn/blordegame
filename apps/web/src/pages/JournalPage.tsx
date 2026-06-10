@@ -1,19 +1,20 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { getJournal, type JournalEvent } from '../api/social.js';
+import { useCallback, type ReactElement } from 'react';
+import { getJournal } from '../api/social.js';
+import { useLoad } from '../hooks/useLoad.js';
 
 export function JournalPage(): ReactElement {
-  const [events, setEvents] = useState<JournalEvent[] | null>(null);
-
-  useEffect(() => {
-    getJournal()
-      .then(setEvents)
-      .catch(() => setEvents([]));
-  }, []);
+  const journal = useLoad(useCallback(() => getJournal(), []));
+  const events = journal.data;
 
   return (
     <div className="journal">
       <h1>Journal</h1>
-      {events === null && <div className="loading">Loading…</div>}
+      {journal.error && (
+        <div className="error" role="alert">
+          {journal.error}
+        </div>
+      )}
+      {journal.loading && <div className="loading">Loading…</div>}
       {events && events.length === 0 && (
         <p className="sub">Quiet so far. Your herd&apos;s story fills in as the days pass.</p>
       )}

@@ -232,6 +232,7 @@ export function VenturePage(): ReactElement {
               <button
                 key={h.id}
                 className={party.includes(h.id) ? 'chip on' : 'chip'}
+                aria-pressed={party.includes(h.id)}
                 onClick={() => toggle(h.id)}
               >
                 {h.name ?? h.id.slice(0, 8)}

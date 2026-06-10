@@ -1,3 +1,27 @@
+/* ── Self-hosted pixel fonts (audit §11: no CDN dependency, no FOUT on a cold cache) ──
+   Silkscreen + Pixelify Sans, SIL OFL — see /fonts/LICENSE.txt. Latin subsets (~28 KB total). */
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/silkscreen-400-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/silkscreen-700-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 400 700; /* variable */
+  font-display: swap;
+  src: url('/fonts/pixelify-sans-latin.woff2') format('woff2');
+}
+
 :root {
   /* — warm palette (unchanged) — */
   --sage: #e7ecd7;

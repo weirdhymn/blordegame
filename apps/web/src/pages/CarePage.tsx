@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { cookMeal, getCare, groomHerd, type CareState } from '../api/care.js';
+import { useCallback, useState, type ReactElement } from 'react';
+import { cookMeal, getCare, groomHerd } from '../api/care.js';
 import { ApiError } from '../api/client.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { pretty } from '../util/format.js';
 import { useSession } from '../session.js';
 
@@ -24,20 +25,12 @@ function describeBuff(buffs: Record<string, number>): string {
  *  Rewarding to do, gentle to skip — nothing is gated behind either ritual. */
 export function CarePage(): ReactElement {
   const { refresh } = useSession();
-  const [care, setCare] = useState<CareState | null>(null);
+  const careLoad = useLoad(useCallback(() => getCare(), []));
+  const care = careLoad.data;
   const [pick, setPick] = useState<Record<string, number>>({});
   const [rares, setRares] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
-  const load = (): void => {
-    getCare()
-      .then(setCare)
-      .catch(() => {
-        /* ignore */
-      });
-  };
-  useEffect(load, []);
 
   const picked = Object.values(pick).reduce((a, b) => a + b, 0) + rares;
   const slots = care?.slots ?? 0;
@@ -57,7 +50,7 @@ export function CarePage(): ReactElement {
       setPick({});
       setRares(0);
       await refresh();
-      load();
+      careLoad.reload();
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : 'The pot tipped over.');
     } finally {
@@ -74,7 +67,7 @@ export function CarePage(): ReactElement {
         `🛏 Tucked in${r.soothed > 0 ? ` — ${r.soothed} soothed back to content` : ''}. A small ${r.pendingCubes} ⬡ thank-you waits at the next sunrise.`,
       );
       await refresh();
-      load();
+      careLoad.reload();
     } catch {
       setMsg('Could not groom just now.');
     } finally {
@@ -86,7 +79,13 @@ export function CarePage(): ReactElement {
     return (
       <div className="care">
         <h1>🐴 Care Hub</h1>
-        <p className="muted">Loading…</p>
+        {careLoad.error ? (
+          <div className="error" role="alert">
+            {careLoad.error}
+          </div>
+        ) : (
+          <p className="muted">Loading…</p>
+        )}
       </div>
     );
   }

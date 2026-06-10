@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
-import { getInventory, type ItemStack } from '../api/explore.js';
+import { getInventory } from '../api/explore.js';
 import { sellItem } from '../api/inventory.js';
 import { getItems, type ItemDef } from '../api/workshop.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
@@ -10,27 +11,17 @@ import { pretty } from '../util/format.js';
  *  Prices are modest (a convenience, not an income strategy); valuables ask for a confirm first. */
 export function InventoryPage(): ReactElement {
   const { refresh } = useSession();
-  const [inv, setInv] = useState<ItemStack[]>([]);
-  const [defs, setDefs] = useState<ItemDef[]>([]);
+  const stash = useLoad(
+    useCallback(async () => {
+      const [items, defs] = await Promise.all([getInventory(), getItems()]);
+      return { items, defs };
+    }, []),
+  );
+  const inv = stash.data?.items ?? [];
+  const defs = stash.data?.defs ?? [];
   const [confirming, setConfirming] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const load = (): void => {
-    getInventory()
-      .then(setInv)
-      .catch(() => {
-        /* ignore */
-      });
-  };
-  useEffect(() => {
-    getItems()
-      .then(setDefs)
-      .catch(() => {
-        /* ignore */
-      });
-    load();
-  }, []);
 
   const defOf = (id: string): ItemDef | undefined => defs.find((d) => d.id === id);
 
@@ -42,7 +33,7 @@ export function InventoryPage(): ReactElement {
       const r = await sellItem(itemId, qty);
       setNote(`Sold ${pretty(itemId)} ×${r.sold} for +${r.gained} ⬡.`);
       await refresh();
-      load();
+      stash.reload();
     } catch (e) {
       setNote(e instanceof ApiError ? e.message : 'Could not sell that.');
     } finally {
@@ -61,7 +52,13 @@ export function InventoryPage(): ReactElement {
         convenience dump (gathering and adventuring are the real economy).
       </p>
       {note && <div className="note">{note}</div>}
-      {inv.length === 0 && (
+      {stash.error && (
+        <div className="error" role="alert">
+          {stash.error}
+        </div>
+      )}
+      {stash.loading && <div className="loading">Loading…</div>}
+      {!stash.loading && inv.length === 0 && (
         <p className="muted">Empty — gather in a region (Adventure) to stock up.</p>
       )}
 

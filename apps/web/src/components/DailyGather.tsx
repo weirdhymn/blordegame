@@ -1,13 +1,7 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
-import {
-  getQuests,
-  getRegions,
-  roam,
-  type QuestView,
-  type RegionView,
-  type RoamResult,
-} from '../api/explore.js';
+import { getQuests, getRegions, roam, type RoamResult } from '../api/explore.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
@@ -15,33 +9,26 @@ import { pretty } from '../util/format.js';
  *  the grindable adventuring under the Adventure hub: a bigger stable simply gathers more, once a day. */
 export function DailyGather(): ReactElement {
   const { refresh } = useSession();
-  const [regions, setRegions] = useState<RegionView[]>([]);
+  const gatherLoad = useLoad(
+    useCallback(async () => {
+      const [regions, quests] = await Promise.all([getRegions(), getQuests()]);
+      return { regions, quests };
+    }, []),
+  );
+  const regions = gatherLoad.data?.regions ?? [];
+  const quests = gatherLoad.data?.quests ?? [];
   const [regionId, setRegionId] = useState('');
-  const [quests, setQuests] = useState<QuestView[]>([]);
   const [res, setRes] = useState<RoamResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const loadQuests = (): void => {
-    getQuests()
-      .then(setQuests)
-      .catch(() => {
-        /* ignore */
-      });
-  };
-
+  // Default the picker to the first unlocked region once the list lands.
   useEffect(() => {
-    getRegions()
-      .then((rs) => {
-        setRegions(rs);
-        const open = rs.find((r) => r.unlocked);
-        if (open) setRegionId(open.id);
-      })
-      .catch(() => {
-        /* ignore */
-      });
-    loadQuests();
-  }, []);
+    if (!regionId) {
+      const open = regions.find((r) => r.unlocked);
+      if (open) setRegionId(open.id);
+    }
+  }, [regions, regionId]);
 
   async function gather(): Promise<void> {
     if (!regionId) return;
@@ -50,7 +37,7 @@ export function DailyGather(): ReactElement {
     try {
       setRes(await roam(regionId));
       await refresh();
-      loadQuests();
+      gatherLoad.reload();
     } catch (e) {
       setRes(null);
       setError(e instanceof ApiError ? e.message : 'Could not gather.');
@@ -80,7 +67,7 @@ export function DailyGather(): ReactElement {
           {busy ? 'Foraging…' : '🧺 Forage'}
         </button>
       </div>
-      {error && <div className="note">{error}</div>}
+      {(error ?? gatherLoad.error) && <div className="note">{error ?? gatherLoad.error}</div>}
       {res && (
         <div className="note">
           <strong>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
 import {
   getClubs,
@@ -7,21 +7,29 @@ import {
   getJournal,
   getRelationships,
   sendMessage,
-  type Club,
   type HerdProfile,
-  type JournalEvent,
-  type Message,
-  type Relationship,
 } from '../api/social.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
 
 export function HerdPage(): ReactElement {
   const { herd } = useSession();
-  const [journal, setJournal] = useState<JournalEvent[]>([]);
-  const [clubs, setClubs] = useState<Club[]>([]);
-  const [rels, setRels] = useState<Relationship[]>([]);
-  const [inbox, setInbox] = useState<Message[]>([]);
+  const social = useLoad(
+    useCallback(async () => {
+      const [journal, clubs, rels, inbox] = await Promise.all([
+        getJournal(),
+        getClubs(),
+        getRelationships(),
+        getInbox(),
+      ]);
+      return { journal, clubs, rels, inbox };
+    }, []),
+  );
+  const journal = social.data?.journal ?? [];
+  const clubs = social.data?.clubs ?? [];
+  const rels = social.data?.rels ?? [];
+  const inbox = social.data?.inbox ?? [];
   const [visitId, setVisitId] = useState('');
   const [profile, setProfile] = useState<HerdProfile | null>(null);
   const [msgTo, setMsgTo] = useState('');
@@ -29,31 +37,6 @@ export function HerdPage(): ReactElement {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const load = useCallback(() => {
-    getJournal()
-      .then(setJournal)
-      .catch(() => {
-        /* ignore */
-      });
-    getClubs()
-      .then(setClubs)
-      .catch(() => {
-        /* ignore */
-      });
-    getRelationships()
-      .then(setRels)
-      .catch(() => {
-        /* ignore */
-      });
-    getInbox()
-      .then(setInbox)
-      .catch(() => {
-        /* ignore */
-      });
-  }, []);
-
-  useEffect(() => load(), [load]);
 
   async function send(): Promise<void> {
     setBusy(true);
@@ -87,11 +70,12 @@ export function HerdPage(): ReactElement {
         Your herd id: <code>{herd?.id}</code> — share it so others can visit, trade, or message you.
       </p>
       {note && <div className="note">{note}</div>}
-      {error && (
+      {(error ?? social.error) && (
         <div className="error" role="alert">
-          {error}
+          {error ?? social.error}
         </div>
       )}
+      {social.loading && <div className="loading">Loading…</div>}
 
       <section className="section">
         <h2 className="section-h">Journal</h2>
@@ -157,12 +141,14 @@ export function HerdPage(): ReactElement {
         )}
         <h3 className="section-h">Send a message</h3>
         <div className="row-actions">
-          <input placeholder="herd id" value={msgTo} onChange={(e) => setMsgTo(e.target.value)} />
-          <input
-            placeholder="message"
-            value={msgBody}
-            onChange={(e) => setMsgBody(e.target.value)}
-          />
+          <label className="field">
+            <span>To herd (id)</span>
+            <input value={msgTo} onChange={(e) => setMsgTo(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Message</span>
+            <input value={msgBody} onChange={(e) => setMsgBody(e.target.value)} maxLength={500} />
+          </label>
           <button
             className="primary"
             disabled={busy || !msgTo || !msgBody}
@@ -176,11 +162,10 @@ export function HerdPage(): ReactElement {
       <section className="section">
         <h2 className="section-h">Visit another herd</h2>
         <div className="row-actions">
-          <input
-            placeholder="herd id"
-            value={visitId}
-            onChange={(e) => setVisitId(e.target.value)}
-          />
+          <label className="field">
+            <span>Herd id</span>
+            <input value={visitId} onChange={(e) => setVisitId(e.target.value)} />
+          </label>
           <button disabled={!visitId} onClick={() => void visit()}>
             Visit
           </button>

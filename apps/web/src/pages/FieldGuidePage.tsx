@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { colorBySlug, formatGenotype, resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
-import { getFieldGuide, type FieldGuide } from '../api/social.js';
+import { getFieldGuide } from '../api/social.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 
 /** A discovered coat rendered as the actual pixel-horse sprite — the genetics engine's real output,
@@ -19,16 +20,9 @@ function CoatSprite({ slug, scale }: { slug: string; scale: number }): ReactElem
 /** The Field Guide (§9): not just a list of coat names — a visual record of every coat the herd has
  *  revealed, each the engine's actual render. Click one to study the genotype that produces it. */
 export function FieldGuidePage(): ReactElement {
-  const [fg, setFg] = useState<FieldGuide | null>(null);
+  const guide = useLoad(useCallback(() => getFieldGuide(), []));
+  const fg = guide.data;
   const [selected, setSelected] = useState<string | null>(null);
-
-  useEffect(() => {
-    getFieldGuide()
-      .then(setFg)
-      .catch(() => {
-        /* ignore */
-      });
-  }, []);
 
   const entry = selected ? colorBySlug(selected) : null;
   const selectedName = selected
@@ -38,7 +32,12 @@ export function FieldGuidePage(): ReactElement {
   return (
     <div className="guide">
       <h1>Field Guide</h1>
-      {!fg && <div className="loading">Loading…</div>}
+      {guide.error && (
+        <div className="error" role="alert">
+          {guide.error}
+        </div>
+      )}
+      {guide.loading && <div className="loading">Loading…</div>}
       {fg && (
         <>
           <p className="sub">

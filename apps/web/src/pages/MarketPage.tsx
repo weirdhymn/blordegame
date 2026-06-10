@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { ApiError } from '../api/client.js';
 import {
   acceptTrade,
@@ -10,17 +10,26 @@ import {
   declineTrade,
   listHorse,
   listTrades,
-  type Listing,
-  type Trade,
 } from '../api/economy.js';
-import { listHerdHorses, type Horse } from '../api/horses.js';
+import { listHerdHorses } from '../api/horses.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 
 export function MarketPage(): ReactElement {
   const { herd, refresh } = useSession();
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [myHorses, setMyHorses] = useState<Horse[]>([]);
+  const market = useLoad(
+    useCallback(async () => {
+      const [listings, trades, myHorses] = await Promise.all([
+        browseMarket(),
+        listTrades(),
+        herd ? listHerdHorses(herd.id) : Promise.resolve([]),
+      ]);
+      return { listings, trades, myHorses };
+    }, [herd]),
+  );
+  const listings = market.data?.listings ?? [];
+  const trades = market.data?.trades ?? [];
+  const myHorses = market.data?.myHorses ?? [];
   const [sellHorse, setSellHorse] = useState('');
   const [sellPrice, setSellPrice] = useState('');
   const [toHerd, setToHerd] = useState('');
@@ -30,27 +39,6 @@ export function MarketPage(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(() => {
-    browseMarket()
-      .then(setListings)
-      .catch(() => {
-        /* ignore */
-      });
-    listTrades()
-      .then(setTrades)
-      .catch(() => {
-        /* ignore */
-      });
-    if (herd)
-      listHerdHorses(herd.id)
-        .then(setMyHorses)
-        .catch(() => {
-          /* ignore */
-        });
-  }, [herd]);
-
-  useEffect(() => load(), [load]);
-
   async function act(fn: () => Promise<unknown>, msg: string): Promise<void> {
     setBusy(true);
     setError(null);
@@ -59,12 +47,17 @@ export function MarketPage(): ReactElement {
       await fn();
       setNote(msg);
       await refresh();
-      load();
+      market.reload();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'That did not work.');
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Destructive actions get a confirm (audit §11) — no accidental cancel/decline. */
+  function confirmAct(question: string, fn: () => Promise<unknown>, msg: string): void {
+    if (window.confirm(question)) void act(fn, msg);
   }
 
   const cubes = herd?.cubes ?? 0;
@@ -74,11 +67,12 @@ export function MarketPage(): ReactElement {
     <div className="market">
       <h1>Market</h1>
       {note && <div className="note">{note}</div>}
-      {error && (
+      {(error ?? market.error) && (
         <div className="error" role="alert">
-          {error}
+          {error ?? market.error}
         </div>
       )}
+      {market.loading && <div className="loading">Loading…</div>}
 
       <section className="section">
         <h2 className="section-h">For sale</h2>
@@ -96,7 +90,13 @@ export function MarketPage(): ReactElement {
                   {l.sellerId === myId ? (
                     <button
                       disabled={busy}
-                      onClick={() => void act(() => cancelListing(l.id), 'Listing cancelled.')}
+                      onClick={() =>
+                        confirmAct(
+                          'Cancel this listing?',
+                          () => cancelListing(l.id),
+                          'Listing cancelled.',
+                        )
+                      }
                     >
                       Cancel
                     </button>
@@ -121,21 +121,26 @@ export function MarketPage(): ReactElement {
       <section className="section">
         <h2 className="section-h">List a horse</h2>
         <div className="row-actions">
-          <select value={sellHorse} onChange={(e) => setSellHorse(e.target.value)}>
-            <option value="">— your horse —</option>
-            {myHorses.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name ?? h.id.slice(0, 8)}
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            placeholder="price"
-            value={sellPrice}
-            onChange={(e) => setSellPrice(e.target.value)}
-            className="num"
-          />
+          <label className="field">
+            <span>Your horse</span>
+            <select value={sellHorse} onChange={(e) => setSellHorse(e.target.value)}>
+              <option value="">— choose —</option>
+              {myHorses.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name ?? h.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Price (⬡)</span>
+            <input
+              type="number"
+              value={sellPrice}
+              onChange={(e) => setSellPrice(e.target.value)}
+              className="num"
+            />
+          </label>
           <button
             className="primary"
             disabled={busy || !sellHorse || !sellPrice}
@@ -174,7 +179,9 @@ export function MarketPage(): ReactElement {
                         </button>
                         <button
                           disabled={busy}
-                          onClick={() => void act(() => declineTrade(t.id), 'Declined.')}
+                          onClick={() =>
+                            confirmAct('Decline this trade?', () => declineTrade(t.id), 'Declined.')
+                          }
                         >
                           Decline
                         </button>
@@ -182,7 +189,9 @@ export function MarketPage(): ReactElement {
                     ) : (
                       <button
                         disabled={busy}
-                        onClick={() => void act(() => cancelTrade(t.id), 'Cancelled.')}
+                        onClick={() =>
+                          confirmAct('Cancel this trade?', () => cancelTrade(t.id), 'Cancelled.')
+                        }
                       >
                         Cancel
                       </button>

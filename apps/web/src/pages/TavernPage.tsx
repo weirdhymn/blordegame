@@ -1,24 +1,19 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
-import { listTavern, recruit, type TavernHorse } from '../api/tavern.js';
+import { listTavern, recruit } from '../api/tavern.js';
 import { TavernCard } from '../components/TavernCard.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 
 export function TavernPage(): ReactElement {
   const { herd, refresh } = useSession();
-  const [list, setList] = useState<TavernHorse[] | null>(null);
+  const tavern = useLoad(useCallback(() => listTavern(), []));
+  const list = tavern.data;
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false); // herd_full → link to the progression screen
   const [note, setNote] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    listTavern()
-      .then(setList)
-      .catch(() => setList([]));
-  }, []);
-  useEffect(() => load(), [load]);
 
   async function onRecruit(id: string): Promise<void> {
     setBusyId(id);
@@ -29,7 +24,7 @@ export function TavernPage(): ReactElement {
       await recruit(id);
       setNote('Recruited! It is grazing in your Pasture now.');
       await refresh();
-      load();
+      tavern.reload();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not recruit that horse.');
       setBlocked(e instanceof ApiError && e.code === 'herd_full');
@@ -46,9 +41,9 @@ export function TavernPage(): ReactElement {
         Wild horses that wandered in from the frontier. Recruit one with Cubes — you have {cubes} ⬡.
       </p>
       {note && <div className="note">{note}</div>}
-      {error && (
+      {(error ?? tavern.error) && (
         <div className="error" role="alert">
-          {error}
+          {error ?? tavern.error}
           {blocked && (
             <>
               {' '}
@@ -57,7 +52,7 @@ export function TavernPage(): ReactElement {
           )}
         </div>
       )}
-      {list === null && <div className="loading">Loading…</div>}
+      {tavern.loading && <div className="loading">Loading…</div>}
       {list && list.length === 0 && (
         <div className="card placeholder">
           <p>The Tavern is empty. Send a party adventuring — wild horses sometimes flee here.</p>

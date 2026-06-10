@@ -1,16 +1,24 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import { breed, getBreedOdds, type BreedOdds, type BreedSuccess } from '../api/breeding.js';
 import { ApiError } from '../api/client.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 import { useSession } from '../session.js';
 
 export function BreedPage(): ReactElement {
   const { herd, refresh } = useSession();
-  const [horses, setHorses] = useState<Horse[]>([]);
+  const herdLoad = useLoad(
+    useCallback(
+      async () =>
+        herd ? (await listHerdHorses(herd.id)).filter((h) => h.lifeStage === 'adult') : [],
+      [herd],
+    ),
+  );
+  const horses = herdLoad.data ?? [];
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const [odds, setOdds] = useState<BreedOdds | null>(null);
@@ -18,15 +26,6 @@ export function BreedPage(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false); // herd_full → link to the progression screen
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!herd) return;
-    listHerdHorses(herd.id)
-      .then((hs) => setHorses(hs.filter((h) => h.lifeStage === 'adult')))
-      .catch(() => {
-        /* ignore */
-      });
-  }, [herd]);
 
   useEffect(() => {
     setResult(null);
@@ -105,9 +104,9 @@ export function BreedPage(): ReactElement {
             {busy ? 'Breeding…' : 'Breed'}
           </button>
 
-          {error && (
+          {(error ?? herdLoad.error) && (
             <div className="error" role="alert">
-              {error}
+              {error ?? herdLoad.error}
               {blocked && (
                 <>
                   {' '}

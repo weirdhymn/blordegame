@@ -133,6 +133,7 @@ export function SparPage(): ReactElement {
             <button
               key={h.id}
               className={`spar-pick${partyIds.includes(h.id) ? ' on' : ''}`}
+              aria-pressed={partyIds.includes(h.id)}
               onClick={() => toggle(h.id)}
             >
               <span className="spar-pick-name">

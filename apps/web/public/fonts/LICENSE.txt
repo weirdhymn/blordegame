@@ -1,0 +1,10 @@
+Self-hosted webfonts (latin subsets, woff2), both licensed under the
+SIL Open Font License 1.1 (https://openfontlicense.org):
+
+- Silkscreen (400, 700) — Copyright 2001 The Silkscreen Project Authors
+  (Jason Kottke). https://github.com/jasonkottke/silkscreen
+- Pixelify Sans (variable 400-700) — Copyright 2021 The Pixelify Sans Project
+  Authors (Stefie Justprince). https://github.com/eifetx/Pixelify-Sans
+
+The OFL permits use, redistribution, and bundling with software, provided the
+fonts are not sold by themselves and copyright/license notices are retained.

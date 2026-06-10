@@ -70,7 +70,9 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
   app.setErrorHandler((err: FastifyError, _req, reply) => {
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
     const message = status >= 500 ? 'internal server error' : (err.message ?? 'error');
-    reply.code(status).send({ error: message, code: err.code });
+    // Schema-validation failures (routes/schemas.ts) read as a plain bad_request, not FST_ERR_*.
+    const code = err.code === 'FST_ERR_VALIDATION' ? 'bad_request' : err.code;
+    reply.code(status).send({ error: message, code });
   });
   // SPA fallback (prod): serve index.html for browser navigations to client routes (deep
   // links / refresh); everything else stays a 404 JSON. Off when no web build is served.

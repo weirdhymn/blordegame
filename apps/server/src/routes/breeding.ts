@@ -10,6 +10,7 @@ import {
   type BreedRejection,
 } from '../services/breeding.js';
 import { publicHorse } from './horses.js';
+import { bodySchema, id } from './schemas.js';
 
 const REJECTION_STATUS: Record<BreedRejection, number> = {
   not_found: 404,
@@ -22,7 +23,7 @@ const REJECTION_STATUS: Record<BreedRejection, number> = {
 };
 
 export function registerBreedingRoutes(app: FastifyInstance, db: DB): void {
-  app.post('/breed', async (req, reply) => {
+  app.post('/breed', bodySchema({ parentA: id, parentB: id }), async (req, reply) => {
     const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const herd = await getHerdForUser(db, user.id);

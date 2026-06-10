@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import {
   COOK_RARE_ITEM,
   cookMeal,
@@ -27,8 +27,8 @@ export async function getMealBuff(
 }
 
 async function herdHorseCount(db: DB, herdId: string): Promise<number> {
-  const rows = await db.select({ id: horses.id }).from(horses).where(eq(horses.herdId, herdId));
-  return rows.length;
+  const rows = await db.select({ n: count() }).from(horses).where(eq(horses.herdId, herdId));
+  return rows[0]?.n ?? 0;
 }
 
 export interface CareState {

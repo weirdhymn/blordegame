@@ -29,6 +29,11 @@ export async function createTrade(
   if (!offer.toHerd || offer.toHerd === fromHerd) {
     return { ok: false, code: 'bad_request', message: 'Pick another herd to trade with.' };
   }
+  // The recipient must actually exist — otherwise ghost trades clutter the table (audit §11).
+  const recipient = await db.query.herds.findFirst({ where: eq(herds.id, offer.toHerd) });
+  if (!recipient) {
+    return { ok: false, code: 'bad_request', message: 'No such herd to trade with.' };
+  }
   if (offerHorses.length + offerCubes + requestHorses.length + requestCubes === 0) {
     return { ok: false, code: 'bad_request', message: 'An empty trade.' };
   }

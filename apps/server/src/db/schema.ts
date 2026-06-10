@@ -81,9 +81,6 @@ export const horses = pgTable(
     bornAt: timestamp('born_at', { withTimezone: true }).notNull().defaultNow(),
     /** Per-parent breeding cooldown cursor (§7); null = never bred. */
     lastBredAt: timestamp('last_bred_at', { withTimezone: true }),
-    /** Light-care counter (§7) — a hook for small bonuses once stats land (Phase 8). */
-    careCount: integer('care_count').notNull().default(0),
-    lastCaredAt: timestamp('last_cared_at', { withTimezone: true }),
     /** Per-horse daily-gather cursor (§7) — the day's passive gather is capped at once per horse
      *  (GATHER_PER_HORSE_PER_DAY). Compared via gameDay(); null = never gathered. */
     lastGatheredAt: timestamp('last_gathered_at', { withTimezone: true }),

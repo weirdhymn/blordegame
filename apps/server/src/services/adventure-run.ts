@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import {
   ADVENTURE_HARMONY_FRESH_CAP,
   ADVENTURE_HARMONY_FRESH_DIV,
@@ -284,7 +284,7 @@ export interface StartOptions {
 /** How many expeditions a herd has completed (a run reached an ending) in a region — gates the keeper. */
 async function countEndedRuns(db: DB, herdId: string, regionId: string): Promise<number> {
   const rows = await db
-    .select({ id: adventureRuns.id })
+    .select({ n: count() })
     .from(adventureRuns)
     .where(
       and(
@@ -293,7 +293,7 @@ async function countEndedRuns(db: DB, herdId: string, regionId: string): Promise
         eq(adventureRuns.status, 'ended'),
       ),
     );
-  return rows.length;
+  return rows[0]?.n ?? 0;
 }
 
 export interface KeeperChallenge {

@@ -1,20 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import type { HerdRow } from '../db/schema.js';
 import { adventure } from '../services/adventure.js';
 import { chooseInRun, keeperChallenge, startRun } from '../services/adventure-run.js';
-import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { listTavern, recruitFromTavern } from '../services/tavern.js';
-
-async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
-  const user = await resolveSessionUser(db, cookie);
-  if (!user) return null;
-  return getHerdForUser(db, user.id);
-}
+import { bodySchema, id, idArray } from './schemas.js';
+import { herdFor } from './util.js';
 
 export function registerAdventureRoutes(app: FastifyInstance, db: DB): void {
-  app.post('/adventure', async (req, reply) => {
+  app.post('/adventure', bodySchema({ regionId: id, party: idArray(8) }), async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     const body = (req.body ?? {}) as { regionId?: string; party?: unknown };
@@ -40,42 +34,50 @@ export function registerAdventureRoutes(app: FastifyInstance, db: DB): void {
     return reply.send(await keeperChallenge(db, herd.id, regionId));
   });
 
-  app.post('/adventure/start', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { regionId?: string; party?: unknown; scriptId?: string };
-    if (!body.regionId || !Array.isArray(body.party)) {
-      return reply.code(400).send({ error: 'regionId and party[] required' });
-    }
-    const result = await startRun(db, herd.id, body.regionId, body.party as string[], {
-      scriptId: body.scriptId,
-    });
-    if (!result.ok) {
-      const status =
-        result.code === 'no_script'
-          ? 404
-          : result.code === 'locked' || result.code === 'keeper_locked'
-            ? 403
-            : 400;
-      return reply.code(status).send({ error: result.message, code: result.code });
-    }
-    return reply.send(result);
-  });
+  app.post(
+    '/adventure/start',
+    bodySchema({ regionId: id, party: idArray(8), scriptId: id }),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const body = (req.body ?? {}) as { regionId?: string; party?: unknown; scriptId?: string };
+      if (!body.regionId || !Array.isArray(body.party)) {
+        return reply.code(400).send({ error: 'regionId and party[] required' });
+      }
+      const result = await startRun(db, herd.id, body.regionId, body.party as string[], {
+        scriptId: body.scriptId,
+      });
+      if (!result.ok) {
+        const status =
+          result.code === 'no_script'
+            ? 404
+            : result.code === 'locked' || result.code === 'keeper_locked'
+              ? 403
+              : 400;
+        return reply.code(status).send({ error: result.message, code: result.code });
+      }
+      return reply.send(result);
+    },
+  );
 
-  app.post('/adventure/:runId/choose', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const { runId } = req.params as { runId: string };
-    const body = (req.body ?? {}) as { choiceId?: string };
-    if (!body.choiceId) return reply.code(400).send({ error: 'choiceId required' });
-    const result = await chooseInRun(db, herd.id, runId, body.choiceId);
-    if (!result.ok) {
-      const status =
-        result.code === 'not_found' ? 404 : result.code === 'locked_choice' ? 403 : 400;
-      return reply.code(status).send({ error: result.message, code: result.code });
-    }
-    return reply.send(result);
-  });
+  app.post(
+    '/adventure/:runId/choose',
+    bodySchema({ choiceId: id }, ['choiceId']),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const { runId } = req.params as { runId: string };
+      const body = (req.body ?? {}) as { choiceId?: string };
+      if (!body.choiceId) return reply.code(400).send({ error: 'choiceId required' });
+      const result = await chooseInRun(db, herd.id, runId, body.choiceId);
+      if (!result.ok) {
+        const status =
+          result.code === 'not_found' ? 404 : result.code === 'locked_choice' ? 403 : 400;
+        return reply.code(status).send({ error: result.message, code: result.code });
+      }
+      return reply.send(result);
+    },
+  );
 
   app.get('/tavern', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

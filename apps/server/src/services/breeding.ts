@@ -42,6 +42,8 @@ export type BreedResult =
 export interface BreedOptions {
   /** Inject the breeding RNG seed for deterministic/testable outcomes. */
   seed?: number;
+  /** Inject the clock (cooldown checks/stamps) — testable like seed (audit §11). */
+  nowMs?: number;
 }
 
 function onCooldown(h: HorseRow, now: number): boolean {
@@ -98,7 +100,7 @@ export async function breedHorses(
   if (a.lifeStage !== 'adult' || b.lifeStage !== 'adult')
     return { ok: false, code: 'not_adult', message: 'Both horses must be adults.' };
 
-  const now = Date.now();
+  const now = opts.nowMs ?? Date.now();
   if (onCooldown(a, now) || onCooldown(b, now))
     return {
       ok: false,

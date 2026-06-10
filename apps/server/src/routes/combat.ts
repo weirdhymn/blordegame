@@ -2,8 +2,6 @@ import { APPROACHES, type Approach, HORSE_CLASSES, type HorseClass } from '@blor
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import type { HerdRow } from '../db/schema.js';
-import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import {
   actInBattle,
   getBattleView,
@@ -11,12 +9,8 @@ import {
   startBattle,
   type BattleAction,
 } from '../services/combat.js';
-
-async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
-  const user = await resolveSessionUser(db, cookie);
-  if (!user) return null;
-  return getHerdForUser(db, user.id);
-}
+import { bodySchema, idArray } from './schemas.js';
+import { herdFor } from './util.js';
 
 function parseAction(body: unknown): BattleAction | null {
   const b = (body ?? {}) as {
@@ -50,21 +44,30 @@ function parseAction(body: unknown): BattleAction | null {
 
 export function registerCombatRoutes(app: FastifyInstance, db: DB): void {
   // Begin a battle (§9.4). v1 entry is standalone; the adventure run→battle handoff lands later.
-  app.post('/battle/start', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { enemies?: unknown; party?: unknown };
-    if (!Array.isArray(body.enemies) || !Array.isArray(body.party)) {
-      return reply.code(400).send({ error: 'enemies[] and party[] required' });
-    }
-    const result = await startBattle(db, herd.id, body.enemies as string[], body.party as string[]);
-    if (!result.ok) {
-      return reply
-        .code(result.code === 'bad_enemy' ? 404 : 400)
-        .send({ error: result.message, code: result.code });
-    }
-    return reply.code(201).send({ battleId: result.battleId, battle: result.view });
-  });
+  app.post(
+    '/battle/start',
+    bodySchema({ enemies: idArray(8), party: idArray(8) }),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const body = (req.body ?? {}) as { enemies?: unknown; party?: unknown };
+      if (!Array.isArray(body.enemies) || !Array.isArray(body.party)) {
+        return reply.code(400).send({ error: 'enemies[] and party[] required' });
+      }
+      const result = await startBattle(
+        db,
+        herd.id,
+        body.enemies as string[],
+        body.party as string[],
+      );
+      if (!result.ok) {
+        return reply
+          .code(result.code === 'bad_enemy' ? 404 : 400)
+          .send({ error: result.message, code: result.code });
+      }
+      return reply.code(201).send({ battleId: result.battleId, battle: result.view });
+    },
+  );
 
   app.post('/battle/:id/act', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

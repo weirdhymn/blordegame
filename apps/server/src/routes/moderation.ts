@@ -4,6 +4,7 @@ import type { DB } from '../db/client.js';
 import type { UserRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { createReport, getStats, isMod, listReports, setFrozen } from '../services/moderation.js';
+import { bodySchema, id, shortText } from './schemas.js';
 
 export function registerModerationRoutes(app: FastifyInstance, db: DB): void {
   // Resolve the session user, replying 401 if absent. Returns null once handled.
@@ -19,7 +20,10 @@ export function registerModerationRoutes(app: FastifyInstance, db: DB): void {
   // ── Player report flow (§11) ── any authed player; tightly rate-limited vs. spam.
   app.post(
     '/report',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    {
+      config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+      ...bodySchema({ targetType: id, targetId: id, reason: shortText(500) }),
+    },
     async (req, reply) => {
       const user = await authUser(req, reply);
       if (!user) return reply;

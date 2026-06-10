@@ -1,15 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import type { HerdRow } from '../db/schema.js';
-import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getProgression, upgradeHerd } from '../services/progression.js';
-
-async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
-  const user = await resolveSessionUser(db, cookie);
-  if (!user) return null;
-  return getHerdForUser(db, user.id);
-}
+import { herdFor } from './util.js';
 
 /** The Herd-Tier progression spine (§7): the Cubes sink + milestone-gated upgrade ladder. */
 export function registerProgressionRoutes(app: FastifyInstance, db: DB): void {

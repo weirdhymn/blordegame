@@ -37,25 +37,29 @@ export async function listHorse(
 }
 
 export async function browseMarket(db: DB, limit = 50) {
+  // One joined query (was a getHorse per listing — the audit's N+1).
   const rows = await db
-    .select()
+    .select({
+      id: marketListings.id,
+      horseId: marketListings.horseId,
+      price: marketListings.price,
+      sellerId: marketListings.herdId,
+      name: horses.name,
+      genotype: horses.genotype,
+    })
     .from(marketListings)
+    .leftJoin(horses, eq(marketListings.horseId, horses.id))
     .where(eq(marketListings.status, 'active'))
     .orderBy(desc(marketListings.createdAt))
     .limit(limit);
-  const out = [];
-  for (const l of rows) {
-    const h = await getHorse(db, l.horseId);
-    out.push({
-      id: l.id,
-      horseId: l.horseId,
-      price: l.price,
-      sellerId: l.herdId,
-      name: h?.name ?? null,
-      displayName: h ? resolve(h.genotype).displayName : null,
-    });
-  }
-  return out;
+  return rows.map((r) => ({
+    id: r.id,
+    horseId: r.horseId,
+    price: r.price,
+    sellerId: r.sellerId,
+    name: r.name,
+    displayName: r.genotype ? resolve(r.genotype).displayName : null,
+  }));
 }
 
 export type BuyResult =

@@ -1,18 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import type { HerdRow } from '../db/schema.js';
 import { getClubs, getRelationships } from '../services/autonomy.js';
-import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { getJournal } from '../services/journal.js';
 import { getInbox, sendMessage } from '../services/messaging.js';
 import { getHerdProfile } from '../services/visit.js';
-
-async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
-  const user = await resolveSessionUser(db, cookie);
-  if (!user) return null;
-  return getHerdForUser(db, user.id);
-}
+import { bodySchema, id, shortText } from './schemas.js';
+import { herdFor } from './util.js';
 
 export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
   // The journal — "here's what your herd did while you were away" (§8).
@@ -45,7 +39,7 @@ export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
   });
 
   // Async messaging (§10).
-  app.post('/messages', async (req, reply) => {
+  app.post('/messages', bodySchema({ toHerd: id, body: shortText(500) }), async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     const body = (req.body ?? {}) as { toHerd?: string; body?: string };

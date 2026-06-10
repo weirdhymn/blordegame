@@ -1,8 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
-import type { HerdRow } from '../db/schema.js';
-import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
 import { quickSellItem } from '../services/inventory.js';
 import { browseMarket, buyListing, cancelListing, listHorse } from '../services/market.js';
 import {
@@ -12,28 +10,28 @@ import {
   resolveTrade,
   type TradeOffer,
 } from '../services/trade.js';
-
-async function herdFor(db: DB, cookie: string | undefined): Promise<HerdRow | null> {
-  const user = await resolveSessionUser(db, cookie);
-  if (!user) return null;
-  return getHerdForUser(db, user.id);
-}
+import { bodySchema, bounded, id, idArray } from './schemas.js';
+import { herdFor } from './util.js';
 
 export function registerEconomyRoutes(app: FastifyInstance, db: DB): void {
   // ── Inventory quick-sell (convenience dump for surplus materials) ──
-  app.post('/inventory/sell', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { itemId?: string; qty?: number };
-    if (!body.itemId) return reply.code(400).send({ error: 'itemId required' });
-    const result = await quickSellItem(db, herd.id, body.itemId, body.qty ?? 1);
-    if (!result.ok) {
-      return reply
-        .code(result.code === 'not_sellable' ? 400 : 409)
-        .send({ error: result.message, code: result.code });
-    }
-    return reply.send(result);
-  });
+  app.post(
+    '/inventory/sell',
+    bodySchema({ itemId: id, qty: bounded(1_000_000) }, ['itemId']),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const body = (req.body ?? {}) as { itemId?: string; qty?: number };
+      if (!body.itemId) return reply.code(400).send({ error: 'itemId required' });
+      const result = await quickSellItem(db, herd.id, body.itemId, body.qty ?? 1);
+      if (!result.ok) {
+        return reply
+          .code(result.code === 'not_sellable' ? 400 : 409)
+          .send({ error: result.message, code: result.code });
+      }
+      return reply.send(result);
+    },
+  );
 
   // ── Marketplace ──
   app.get('/market', async (req, reply) => {
@@ -42,20 +40,24 @@ export function registerEconomyRoutes(app: FastifyInstance, db: DB): void {
     return reply.send(await browseMarket(db));
   });
 
-  app.post('/market', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { horseId?: string; price?: number };
-    if (!body.horseId || typeof body.price !== 'number') {
-      return reply.code(400).send({ error: 'horseId and price required' });
-    }
-    const result = await listHorse(db, herd.id, body.horseId, body.price);
-    if (!result.ok) {
-      const status = result.code === 'not_found' ? 404 : result.code === 'not_owned' ? 403 : 409;
-      return reply.code(status).send({ error: result.message, code: result.code });
-    }
-    return reply.code(201).send(result);
-  });
+  app.post(
+    '/market',
+    bodySchema({ horseId: id, price: bounded(1_000_000) }),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const body = (req.body ?? {}) as { horseId?: string; price?: number };
+      if (!body.horseId || typeof body.price !== 'number') {
+        return reply.code(400).send({ error: 'horseId and price required' });
+      }
+      const result = await listHorse(db, herd.id, body.horseId, body.price);
+      if (!result.ok) {
+        const status = result.code === 'not_found' ? 404 : result.code === 'not_owned' ? 403 : 409;
+        return reply.code(status).send({ error: result.message, code: result.code });
+      }
+      return reply.code(201).send(result);
+    },
+  );
 
   app.post('/market/:id/buy', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
@@ -91,16 +93,27 @@ export function registerEconomyRoutes(app: FastifyInstance, db: DB): void {
     return reply.send(await listTrades(db, herd.id));
   });
 
-  app.post('/trades', async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const result = await createTrade(db, herd.id, (req.body ?? {}) as TradeOffer);
-    if (!result.ok) {
-      const status = result.code === 'cant_afford' ? 402 : result.code === 'not_owned' ? 403 : 400;
-      return reply.code(status).send({ error: result.message, code: result.code });
-    }
-    return reply.code(201).send(result);
-  });
+  app.post(
+    '/trades',
+    bodySchema({
+      toHerd: id,
+      offerHorses: idArray(20),
+      requestHorses: idArray(20),
+      offerCubes: bounded(1_000_000, 0),
+      requestCubes: bounded(1_000_000, 0),
+    }),
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const result = await createTrade(db, herd.id, (req.body ?? {}) as TradeOffer);
+      if (!result.ok) {
+        const status =
+          result.code === 'cant_afford' ? 402 : result.code === 'not_owned' ? 403 : 400;
+        return reply.code(status).send({ error: result.message, code: result.code });
+      }
+      return reply.code(201).send(result);
+    },
+  );
 
   app.post('/trades/:id/accept', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

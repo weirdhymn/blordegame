@@ -15,6 +15,7 @@ import {
   debugReset,
   debugTick,
 } from '../services/debug.js';
+import { bodySchema, bounded, id } from './schemas.js';
 
 /**
  * Admin debug toolkit — fast play-test shortcuts to existing game logic (§dev). This whole plugin
@@ -48,12 +49,27 @@ async function adminHerd(
 
 export function registerDebugRoutes(app: FastifyInstance, db: DB): void {
   // Grant: top up Cubes and/or any item(s) by id.
-  app.post('/debug/grant', async (req, reply) => {
-    const herd = await adminHerd(db, req, reply);
-    if (!herd) return;
-    const body = (req.body ?? {}) as { cubes?: number; items?: { id: string; qty: number }[] };
-    return reply.send(await debugGrant(db, herd.id, { cubes: body.cubes, items: body.items }));
-  });
+  app.post(
+    '/debug/grant',
+    bodySchema({
+      cubes: bounded(1_000_000_000, 0),
+      items: {
+        type: 'array',
+        maxItems: 100,
+        items: {
+          type: 'object',
+          properties: { id, qty: bounded(1_000_000) },
+          required: ['id', 'qty'],
+        },
+      },
+    }),
+    async (req, reply) => {
+      const herd = await adminHerd(db, req, reply);
+      if (!herd) return;
+      const body = (req.body ?? {}) as { cubes?: number; items?: { id: string; qty: number }[] };
+      return reply.send(await debugGrant(db, herd.id, { cubes: body.cubes, items: body.items }));
+    },
+  );
 
   // Mint a custom horse (chosen OCEAN/stats/genotype). Returns the RAW row (incl. hidden luck).
   app.post('/debug/mint', async (req, reply) => {
@@ -71,7 +87,7 @@ export function registerDebugRoutes(app: FastifyInstance, db: DB): void {
   });
 
   // Time control — advance N days, a single tick, or mature one foal on demand.
-  app.post('/debug/advance-days', async (req, reply) => {
+  app.post('/debug/advance-days', bodySchema({ days: bounded(3650) }), async (req, reply) => {
     const herd = await adminHerd(db, req, reply);
     if (!herd) return;
     const days = (req.body as { days?: number } | undefined)?.days ?? 1;

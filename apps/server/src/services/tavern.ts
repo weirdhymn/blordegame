@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { BASE_FEE, FEE_MULT, RARITY_SCORE, SKILL_KEYS, STAT_KEYS } from '@blorse/balance';
 import { resolve, type Genotype } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
@@ -7,6 +7,10 @@ import { logAudit } from './audit.js';
 import { getHorse } from './horse.js';
 import { checkHerdCapacity } from './progression.js';
 import type { SkillBlock, StatBlock } from './stats.js';
+import { spendCubes } from './wallet.js';
+
+// Sentinel: the recruit fee didn't clear inside the claim transaction → roll the claim back.
+class FeeShort extends Error {}
 
 function rarityTier(genotype: Genotype): keyof typeof RARITY_SCORE {
   const r = resolve(genotype);
@@ -74,21 +78,32 @@ export async function recruitFromTavern(
   const room = await checkHerdCapacity(db, herdId);
   if (!room.ok) return { ok: false, code: 'herd_full', message: room.message };
 
-  // Atomic claim — succeeds only while the horse is still unowned.
-  const claimed = await db
-    .update(horses)
-    .set({ herdId, tavernFee: null })
-    .where(and(eq(horses.id, horseId), isNull(horses.herdId)))
-    .returning({ id: horses.id });
-  if (claimed.length === 0) {
-    return { ok: false, code: 'gone', message: 'Someone else recruited it first.' };
+  // Claim + fee in ONE transaction (§11 hardening): the claim succeeds only while the horse is
+  // still unowned, and the fee is a conditional spend — if the wallet comes up short (the read
+  // above was stale), throwing rolls the claim back too. First claimant wins; nobody overdraws.
+  const fee = h.tavernFee;
+  let gone = false;
+  try {
+    await db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(horses)
+        .set({ herdId, tavernFee: null })
+        .where(and(eq(horses.id, horseId), isNull(horses.herdId)))
+        .returning({ id: horses.id });
+      if (claimed.length === 0) {
+        gone = true;
+        return;
+      }
+      if ((await spendCubes(tx, herdId, fee)) === null) throw new FeeShort();
+    });
+  } catch (e) {
+    if (e instanceof FeeShort) {
+      return { ok: false, code: 'cant_afford', message: 'Not enough Cubes for the fee.' };
+    }
+    throw e;
   }
-
-  await db
-    .update(herds)
-    .set({ cubes: sql`${herds.cubes} - ${h.tavernFee}` })
-    .where(eq(herds.id, herdId));
-  await logAudit(db, herdId, 'tavern_recruit', { horseId, fee: h.tavernFee });
+  if (gone) return { ok: false, code: 'gone', message: 'Someone else recruited it first.' };
+  await logAudit(db, herdId, 'tavern_recruit', { horseId, fee });
   // firstEncounteredBy is retained for the recruit notification (delivered in Phase 9).
-  return { ok: true, horseId, fee: h.tavernFee };
+  return { ok: true, horseId, fee };
 }

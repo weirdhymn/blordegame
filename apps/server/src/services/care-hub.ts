@@ -87,6 +87,10 @@ export async function cook(
   rares: number,
   nowMs: number,
 ): Promise<CookResult> {
+  // Request-shape guard (not balance): a real pot only ever holds the six grains; refuse landslides.
+  if (Object.keys(grainCounts).length > 32) {
+    return { ok: false, code: 'too_many', message: 'That is not a pot, that is a landslide.' };
+  }
   const slots = cookSlots(await herdHorseCount(db, herdId));
   const rareN = Math.max(0, Math.floor(rares || 0));
   const consume: { id: string; qty: number }[] = [];
@@ -113,19 +117,25 @@ export async function cook(
       message: `Your pot holds ${slots} ingredients (one per horse) — a bigger herd cooks a bigger meal.`,
     };
   }
-  if (!(await consumeItems(db, herdId, consume))) {
+  // Consume the ingredients + set the meal in ONE transaction (§11 hardening) — the pantry can
+  // never be eaten without the day's buff landing.
+  const mealBuffs = cookMeal(byStat, rareN);
+  let paid = false;
+  await db.transaction(async (tx) => {
+    paid = await consumeItems(tx, herdId, consume);
+    if (!paid) return;
+    await tx
+      .update(herds)
+      .set({ mealDay: gameDay(nowMs), mealBuffs })
+      .where(eq(herds.id, herdId));
+  });
+  if (!paid) {
     return {
       ok: false,
       code: 'cant_afford',
       message: 'You do not have those ingredients in the pantry.',
     };
   }
-
-  const mealBuffs = cookMeal(byStat, rareN);
-  await db
-    .update(herds)
-    .set({ mealDay: gameDay(nowMs), mealBuffs })
-    .where(eq(herds.id, herdId));
   return { ok: true, mealBuffs, slots };
 }
 

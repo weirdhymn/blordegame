@@ -133,7 +133,13 @@ export function registerHorseRoutes(
   });
 
   app.get('/horses/:id/job', async (req, reply) => {
+    const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
+    if (!user) return reply.code(401).send({ error: 'unauthorized' });
+    const herd = await getHerdForUser(db, user.id);
+    if (!herd) return reply.code(404).send({ error: 'no herd' });
     const { id } = req.params as { id: string };
+    const horse = await getHorse(db, id);
+    if (!horse || horse.herdId !== herd.id) return reply.code(404).send({ error: 'not found' });
     return reply.send({ job: await getJob(db, id) });
   });
 

@@ -6,6 +6,12 @@ import * as schema from './schema.js';
 
 export type DB = PgliteDatabase<typeof schema>;
 
+/** The transaction handle `db.transaction((tx) => …)` passes — same query API as DB. */
+export type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];
+/** Accepted by services that must work both standalone and inside a caller's transaction —
+ *  the atomic-economy kernel (wallet/inventory) threads this through every value-moving flow. */
+export type DbLike = DB | Tx;
+
 /**
  * Phase 3 uses PGlite — an embedded Postgres — so the whole stack runs and is
  * tested with zero external services. The Drizzle schema is dialect-postgres, so

@@ -101,6 +101,7 @@ import {
   uploadHorse,
   uploadQuote,
 } from '../src/services/upload.js';
+import { creditCubes, spendCubes } from '../src/services/wallet.js';
 import { mulberry32 } from '../src/util/rng.js';
 
 let pass = 0;
@@ -2613,6 +2614,33 @@ async function main(): Promise<void> {
     // the rare gem IS sellable (a prestige cash-in) — the confirm is a UI gate; the value is real
     const gemSell = await quickSellItem(db, herdId, 'rare-gem', 1);
     check('the rare gem sells for its prestige value', gemSell.ok && gemSell.gained === 40);
+  }
+
+  // ── The atomic economy kernel (§11 hardening): conditional spends, all-or-nothing consumes ──
+  {
+    const balance = async (): Promise<number> =>
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))?.cubes ?? 0;
+    const b0 = await balance();
+    const afterSpend = await spendCubes(db, herdId, 10);
+    check('spendCubes deducts and returns the new balance', afterSpend === b0 - 10);
+    const tooMuch = await spendCubes(db, herdId, b0 + 1_000_000);
+    check('spendCubes refuses an overdraw (conditional update → null)', tooMuch === null);
+    check('a refused spend changes nothing', (await balance()) === b0 - 10);
+    const afterCredit = await creditCubes(db, herdId, 10);
+    check('creditCubes restores the balance', afterCredit === b0);
+
+    // consumeItems is all-or-nothing: one short item rolls the WHOLE batch back.
+    await grantItems(db, herdId, [{ id: 'plank', qty: 3 }]);
+    const plank0 = await itemQty(db, herdId, 'plank');
+    const partial = await consumeItems(db, herdId, [
+      { id: 'plank', qty: 2 },
+      { id: 'brick', qty: 999_999 }, // far more than held → the batch must fail
+    ]);
+    check('a short item refuses the whole consume batch', partial === false);
+    check(
+      'the refused batch left the other items untouched (rolled back)',
+      (await itemQty(db, herdId, 'plank')) === plank0,
+    );
   }
 
   // ───────────────────────── Phase 11 — beta hardening ─────────────────────────

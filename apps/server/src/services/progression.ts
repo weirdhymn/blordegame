@@ -147,10 +147,22 @@ export async function upgradeHerd(db: DB, herdId: string): Promise<UpgradeResult
       message: `Tier ${nextTier.tier} (${nextTier.name}) costs ${nextTier.cost} ⬡ — you have ${herd.cubes}.`,
     };
   }
-  await db
+  // Pay + level in ONE conditional statement (§11 hardening): `cubes >= cost` blocks an overdraw
+  // and `level = current` blocks a racing double-upgrade — the loser of a race simply no-ops.
+  const upgraded = await db
     .update(herds)
     .set({ level: nextTier.tier, cubes: sql`${herds.cubes} - ${nextTier.cost}` })
-    .where(eq(herds.id, herdId));
+    .where(
+      sql`${herds.id} = ${herdId} and ${herds.level} = ${herd.level} and ${herds.cubes} >= ${nextTier.cost}`,
+    )
+    .returning({ level: herds.level });
+  if (upgraded.length === 0) {
+    return {
+      ok: false,
+      code: 'cant_afford',
+      message: `Tier ${nextTier.tier} (${nextTier.name}) costs ${nextTier.cost} ⬡ — try again.`,
+    };
+  }
   return {
     ok: true,
     tier: nextTier.tier,

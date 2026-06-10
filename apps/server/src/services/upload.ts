@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   SKILL_KEYS,
   STAT_KEYS,
@@ -13,11 +13,12 @@ import {
 } from '@blorse/balance';
 import { resolve, type Genotype } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
-import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
+import { adventureRuns, horses, type HorseRow } from '../db/schema.js';
 import { logAudit } from './audit.js';
 import { getRelationships } from './autonomy.js';
 import { getHorse } from './horse.js';
 import type { SkillBlock, StatBlock } from './stats.js';
+import { creditCubes } from './wallet.js';
 
 // ── Reward (server-authoritative — the client never computes the payout) ─────
 /**
@@ -159,15 +160,24 @@ export async function uploadHorse(db: DB, herdId: string, horseId: string): Prom
   // FK-clean removal: a single horse may be a *parent* (parentA/parentB have no cascade), so null
   // those child links first, then delete — the delete cascades ancestry (horse_ancestors), jobs,
   // relationships, and market listings (the same FK surface debug Reset relies on). No dangling rows.
-  await db.update(horses).set({ parentA: null }).where(eq(horses.parentA, horseId));
-  await db.update(horses).set({ parentB: null }).where(eq(horses.parentB, horseId));
-  await db.delete(horses).where(eq(horses.id, horseId));
-
-  // The parting gift — reuse the Cubes economy (no new currency).
-  await db
-    .update(herds)
-    .set({ cubes: sql`${herds.cubes} + ${reward}` })
-    .where(eq(herds.id, herdId));
+  // Removal + parting gift run in ONE transaction (§11 hardening): the horse can never leave
+  // without the Cubes landing, and a concurrent double-upload deletes (and pays) only once.
+  let departed = false;
+  await db.transaction(async (tx) => {
+    await tx.update(horses).set({ parentA: null }).where(eq(horses.parentA, horseId));
+    await tx.update(horses).set({ parentB: null }).where(eq(horses.parentB, horseId));
+    const gone = await tx
+      .delete(horses)
+      .where(and(eq(horses.id, horseId), eq(horses.herdId, herdId)))
+      .returning({ id: horses.id });
+    if (gone.length === 0) return; // already uploaded by a racing request — pay nothing twice
+    departed = true;
+    // The parting gift — reuse the Cubes economy (no new currency).
+    await creditCubes(tx, herdId, reward);
+  });
+  if (!departed) {
+    return { ok: false, code: 'not_found', message: 'That horse is not in your herd.' };
+  }
   await logAudit(db, herdId, 'upload', { horseId, reward, coat });
   return { ok: true, reward, name, coat };
 }

@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import {
   acceptTrade,
@@ -65,6 +66,9 @@ export function MarketPage(): ReactElement {
 
   return (
     <div className="market">
+      <Link className="back-link" to="/town">
+        ← The Town
+      </Link>
       <h1>Market</h1>
       {note && <div className="note">{note}</div>}
       {(error ?? market.error) && (

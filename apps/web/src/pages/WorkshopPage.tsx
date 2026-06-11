@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { getInventory, type ItemStack } from '../api/explore.js';
 import {
@@ -73,6 +74,9 @@ export function WorkshopPage(): ReactElement {
 
   return (
     <div className="workshop">
+      <Link className="back-link" to="/town">
+        ← The Town
+      </Link>
       <h1>Workshop</h1>
       {note && <div className="note">{note}</div>}
       {error && (

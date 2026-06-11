@@ -1091,3 +1091,74 @@ a.companion:hover {
   max-width: 34rem;
   margin-bottom: 12px;
 }
+
+/* ── The Town (§7k) — storefront façades; banded awnings on the shared pixel grid ── */
+.town-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.bldg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-3) var(--sp-3);
+  background: var(--band-paper);
+  border: var(--bd) solid var(--ink);
+  box-shadow: var(--px) var(--px) 0 var(--sage-deep);
+  text-decoration: none;
+  color: inherit;
+}
+a.bldg {
+  transition: transform 0.08s ease;
+}
+a.bldg:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--sage-deep);
+  background: var(--sage);
+}
+.bldg-awning {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 14px;
+  border-bottom: var(--bd) solid var(--ink);
+}
+.bldg-tavern .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--gold) 0 12px, var(--paper) 12px 24px);
+}
+.bldg-workshop .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--berry) 0 12px, var(--paper) 12px 24px);
+}
+.bldg-market .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--leaf) 0 12px, var(--paper) 12px 24px);
+}
+.bldg-ring .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--ink-soft) 0 12px, var(--paper) 12px 24px);
+}
+.bldg-closed .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--sage-deep) 0 12px, var(--paper) 12px 24px);
+}
+.bldg-sign {
+  font-size: 2rem;
+  line-height: 1;
+}
+.bldg h2 {
+  margin: 0;
+}
+.bldg p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+.bldg p.bldg-live {
+  flex: 0;
+  font-weight: 700;
+  color: var(--leaf);
+}
+.bldg-closed {
+  border-style: dashed;
+  color: var(--ink-soft);
+}

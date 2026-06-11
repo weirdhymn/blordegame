@@ -13,6 +13,7 @@ import { InventoryPage } from './pages/InventoryPage.js';
 import { JournalPage } from './pages/JournalPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { TavernPage } from './pages/TavernPage.js';
+import { TownPage } from './pages/TownPage.js';
 import { WorkshopPage } from './pages/WorkshopPage.js';
 import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
@@ -48,7 +49,12 @@ export function App(): ReactElement {
         <Route path="/garden" element={<GardenPage />} />
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
-        <Route path="/tavern" element={<TavernPage />} />
+        <Route path="/town" element={<TownPage />} />
+        <Route path="/town/tavern" element={<TavernPage />} />
+        <Route path="/town/workshop" element={<WorkshopPage />} />
+        <Route path="/town/market" element={<MarketPage />} />
+        {/* Old flat routes redirect into the Town so existing links never break. */}
+        <Route path="/tavern" element={<Navigate to="/town/tavern" replace />} />
         <Route path="/adventure" element={<AdventurePage />} />
         <Route path="/adventure/venture" element={<VenturePage />} />
         <Route path="/adventure/spar" element={<SparPage />} />
@@ -56,9 +62,9 @@ export function App(): ReactElement {
         <Route path="/world" element={<Navigate to="/adventure/venture" replace />} />
         <Route path="/explore" element={<Navigate to="/adventure/venture" replace />} />
         <Route path="/spar" element={<Navigate to="/adventure/spar" replace />} />
-        <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/workshop" element={<Navigate to="/town/workshop" replace />} />
+        <Route path="/market" element={<Navigate to="/town/market" replace />} />
         <Route path="/inventory" element={<InventoryPage />} />
-        <Route path="/market" element={<MarketPage />} />
         <Route path="/herd" element={<HerdPage />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/guide" element={<FieldGuidePage />} />

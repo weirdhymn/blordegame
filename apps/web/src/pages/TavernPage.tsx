@@ -36,6 +36,9 @@ export function TavernPage(): ReactElement {
   const cubes = herd?.cubes ?? 0;
   return (
     <div className="tavern">
+      <Link className="back-link" to="/town">
+        ← The Town
+      </Link>
       <h1>The Tavern</h1>
       <p className="sub">
         Wild horses that wandered in from the frontier. Recruit one with Cubes — you have {cubes} ⬡.

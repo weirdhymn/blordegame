@@ -17,11 +17,9 @@ export function AppLayout(): ReactElement {
           </NavLink>
           <NavLink to="/care">🐴 Care</NavLink>
           <NavLink to="/garden">🌱 Garden</NavLink>
-          <NavLink to="/tavern">Tavern</NavLink>
           <NavLink to="/adventure">⚔ Adventure</NavLink>
-          <NavLink to="/workshop">Workshop</NavLink>
+          <NavLink to="/town">🏘 Town</NavLink>
           <NavLink to="/inventory">Inventory</NavLink>
-          <NavLink to="/market">Market</NavLink>
           <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>
           {user?.role === 'admin' && <NavLink to="/debug">🛠 Debug</NavLink>}

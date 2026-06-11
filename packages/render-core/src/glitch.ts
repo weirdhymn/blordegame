@@ -11,6 +11,10 @@ import type { GlitchKind } from './types.js';
  * Non-hex tokens (rare engine descriptors) pass through unchanged.
  */
 
+/** Every implemented glitch, in one runtime list (the type stays the source of truth).
+ *  Anything that rolls or offers a glitch — the mint roll, the Debug Shrine — draws from this. */
+export const GLITCH_KINDS: readonly GlitchKind[] = ['inverted', 'screen', 'shade'];
+
 const SCREEN_AMOUNT = 0.55;
 const SHADE_AMOUNT = 0.55;
 

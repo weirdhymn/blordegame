@@ -26,6 +26,7 @@ import {
   OMEN_GATHER_BONUS_QTY,
   POTION_HEAL_HP,
   REWARD_RETREAT_FRACTION,
+  SHRINE_PATCH_FEE,
   SKILL_KEYS,
   STARTING_CUBES,
   STAT_KEYS,
@@ -34,6 +35,7 @@ import {
   UPLOAD_FOAL_FACTOR,
 } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
+import { GLITCH_KINDS, type GlitchKind } from '@blorse/render-core';
 import { eq as drizzleEq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { PgliteDatabase } from 'drizzle-orm/pglite';
@@ -96,7 +98,13 @@ import {
   plantCrop,
   waterPlot,
 } from '../src/services/garden.js';
-import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
+import {
+  getHorse,
+  listHerdHorses,
+  mintHorse,
+  rollGlitch,
+  shareLineage,
+} from '../src/services/horse.js';
 import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { omenFor } from '../src/services/omens.js';
@@ -108,6 +116,7 @@ import {
   upgradeHerd,
 } from '../src/services/progression.js';
 import { getQuestState } from '../src/services/quests.js';
+import { induceGlitch, patchGlitch, SHRINE_OFFERING_ID } from '../src/services/shrine.js';
 import { skillCheck } from '../src/services/stats.js';
 import {
   coatRarityScore,
@@ -3507,6 +3516,129 @@ async function main(): Promise<void> {
     );
     const morning2 = await advanceHerd(db, gid, realNow + 4 * 86_400_000);
     check('not fed → simply no fertilizer (never a penalty)', morning2.fertilizer === 0);
+  }
+
+  // ── The Debug Shrine (§7l): deliberate glitch access + the natural birth roll ──
+  section('The Debug Shrine (§7l)');
+  {
+    const sid = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'sysadmin', password: 'shrinehorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const adult = await mintHorse(db, {
+      herdId: sid,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null, // explicit null suppresses the birth roll — the shrine writes it below
+    });
+    const foal = await mintHorse(db, {
+      herdId: sid,
+      genotype: { E: 'ee' },
+      origin: 'founder',
+      lifeStage: 'foal',
+      glitch: null,
+    });
+
+    // The natural roll (§5.7/§14.1): fires under GLITCH_CHANCE, uniform over the kinds.
+    check('birth roll: a miss leaves the horse normal', rollGlitch(() => 0.5) === null);
+    const seq = (vals: number[]): (() => number) => {
+      let i = 0;
+      return () => vals[i++] ?? 0;
+    };
+    check(
+      'birth roll: a hit picks uniformly over every implemented glitch',
+      rollGlitch(seq([0.0005, 0.01])) === 'inverted' &&
+        rollGlitch(seq([0.0005, 0.4])) === 'screen' &&
+        rollGlitch(seq([0.0005, 0.9])) === 'shade',
+    );
+    check(
+      'every implemented glitch is offered (render-core runtime list)',
+      GLITCH_KINDS.length === 3,
+    );
+
+    // No offering → the monks decline, nothing changes.
+    const broke = await induceGlitch(db, sid, adult.id, () => 0);
+    check(
+      'no fairy dust → declined, horse untouched',
+      !broke.ok && broke.code === 'cant_afford' && (await getHorse(db, adult.id))!.glitch === null,
+    );
+
+    await grantItems(db, sid, [{ id: SHRINE_OFFERING_ID, qty: 3 }]);
+    const foalTry = await induceGlitch(db, sid, foal.id, () => 0);
+    check(
+      'foals are refused (no bugs yet) and the offering survives',
+      !foalTry.ok && foalTry.code === 'foal' && (await itemQty(db, sid, SHRINE_OFFERING_ID)) === 3,
+    );
+
+    const r1 = await induceGlitch(db, sid, adult.id, () => 0.1); // floor(0.1×3)=0 → inverted
+    check(
+      'an offering buys a server-rolled glitch (rng low → inverted)',
+      r1.ok && r1.glitch === 'inverted' && (await getHorse(db, adult.id))!.glitch === 'inverted',
+    );
+    check('the offering is consumed', (await itemQty(db, sid, SHRINE_OFFERING_ID)) === 2);
+
+    const r2 = await induceGlitch(db, sid, adult.id, () => 0.9); // floor(0.9×3)=2 → shade
+    check(
+      're-offering rerolls in place (prior reported for the duplicate-ticket joke)',
+      r2.ok && r2.glitch === 'shade' && r2.prior === 'inverted',
+    );
+
+    // Patch = file a bug report: charges the fee, clears the column.
+    const balBefore = (await db.query.herds.findFirst({ where: drizzleEq(herds.id, sid) }))!.cubes;
+    const patched = await patchGlitch(db, sid, adult.id);
+    const balAfter = (await db.query.herds.findFirst({ where: drizzleEq(herds.id, sid) }))!.cubes;
+    check(
+      'patch clears the glitch and charges the filing fee',
+      patched.ok &&
+        patched.cleared === 'shade' &&
+        (await getHorse(db, adult.id))!.glitch === null &&
+        balAfter === balBefore - SHRINE_PATCH_FEE,
+    );
+    const rePatch = await patchGlitch(db, sid, adult.id);
+    check(
+      'patching a normal horse is refused free of charge',
+      !rePatch.ok &&
+        rePatch.code === 'not_glitched' &&
+        (await db.query.herds.findFirst({ where: drizzleEq(herds.id, sid) }))!.cubes === balAfter,
+    );
+
+    // Ownership: someone else's horse gets the same answer as no horse at all.
+    const stranger = await mintHorse(db, {
+      herdId: null,
+      genotype: { E: 'ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const notMine = await induceGlitch(db, sid, stranger.id, () => 0);
+    check('a horse you do not own is not_found', !notMine.ok && notMine.code === 'not_found');
+
+    // Breeding never copies a glitch (§5.7): the foal's column is its OWN birth roll
+    // (derived from its own seed — the same salt mintHorse uses), never a parent's kind.
+    // Asserting against the roll instead of `null` keeps this green even on the 1-in-1,000
+    // seed whose fresh roll legitimately fires.
+    const starter = (await listHerdHorses(db, sid)).find(
+      (h) => h.id !== adult.id && h.id !== foal.id && h.lifeStage === 'adult',
+    )!;
+    await db
+      .update(horses)
+      .set({ glitch: 'inverted' as GlitchKind })
+      .where(drizzleEq(horses.id, adult.id));
+    await db
+      .update(horses)
+      .set({ glitch: 'screen' as GlitchKind })
+      .where(drizzleEq(horses.id, starter.id));
+    const bred = await breedHorses(db, sid, adult.id, starter.id, { seed: 7 });
+    check(
+      'foals never inherit a glitch — their column is their own fresh birth roll',
+      bred.ok &&
+        bred.viable &&
+        bred.foal.glitch === rollGlitch(mulberry32((bred.foal.seed ^ 0x9d17ce2b) >>> 0)),
+    );
   }
 
   // ── "Your First Day" (§7i): the onboarding quest walks the whole daily rhythm ──

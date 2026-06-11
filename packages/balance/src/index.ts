@@ -27,6 +27,11 @@ export const CUBE_GOLD = 10_000;
 /** Non-heritable glitch chance per new horse (§5.7) — independent of coat genetics. */
 export const GLITCH_CHANCE = 0.001;
 
+// ── §7l The Debug Shrine — deliberate glitch access (offering is content: 1 fairy dust) ──
+/** Cubes to clear a glitch ("filing a bug report"). Cheap on purpose — cozy-first, nobody
+ *  is stuck with a look they hate. */
+export const SHRINE_PATCH_FEE = 50;
+
 // ── §14.2 Heritability (at birth; clamp to scale) ───────────────────────────
 export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight

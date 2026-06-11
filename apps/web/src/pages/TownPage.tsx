@@ -88,6 +88,17 @@ export function TownPage(): ReactElement {
           <span className="hub-go">Watch a bout →</span>
         </Link>
 
+        <Link to="/town/shrine" className="bldg bldg-shrine">
+          <span className="bldg-awning" aria-hidden="true" />
+          <span className="bldg-sign">⛩</span>
+          <h2>The Debug Shrine</h2>
+          <p>
+            It hums. The monks inside accept fairy dust and introduce exactly one bug per offering —
+            their pick, not yours. Bug reports filed while you wait.
+          </p>
+          <span className="hub-go">Ring the bell →</span>
+        </Link>
+
         <div className="bldg bldg-closed">
           <span className="bldg-awning" aria-hidden="true" />
           <span className="bldg-sign">🪧</span>

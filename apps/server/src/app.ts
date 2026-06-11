@@ -18,6 +18,7 @@ import { registerHorseRoutes } from './routes/horses.js';
 import { registerModerationRoutes } from './routes/moderation.js';
 import { registerPastureRoutes } from './routes/pasture.js';
 import { registerProgressionRoutes } from './routes/progression.js';
+import { registerShrineRoutes } from './routes/shrine.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { resolveSessionUser } from './services/auth.js';
 
@@ -125,6 +126,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerProgressionRoutes(instance, db);
       registerCareHubRoutes(instance, db);
       registerGardenRoutes(instance, db);
+      registerShrineRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerCombatRoutes(instance, db);
       registerSocialRoutes(instance, db);

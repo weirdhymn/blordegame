@@ -535,6 +535,10 @@ Preset plots; **plant the crop itself** (no seed items), harvest a real multipli
 
 One settlement, one screen: **`/town`** draws the frontier's storefronts as pixel façades (banded awnings on the shared grid) — the **Tavern** (recruitment), the **Workshop** (crafting), the **Market** (horse listings + direct trades), a cross-link to the **Sparring Ring** (fiction-ally in Town; flow stays under the Adventure hub), and one boarded-up façade reserved for the future NPC shops (§8 "The Town & NPCs"). Pure landing/navigation on the Adventure-hub pattern: pages moved to `/town/{tavern,workshop,market}`, old flat routes redirect forever, sub-pages carry a "← The Town" back-link, and the nav shrinks 10 → 8 tabs (🏘 Town). Live touches ride one parallel fetch (tavern headcount, market listing count). No server changes.
 
+### 7l The Debug Shrine (glitch access) + the live birth roll
+
+Glitches (§4.3b/§5.7) were fully built but dormant — nothing in live play ever rolled one. Two doors open at once. **The natural roll now actually runs:** every new horse (bred, wild, founder, starter) rolls `GLITCH_CHANCE` inside `mintHorse`, derived from its own seed (`rollGlitch`, uniform over `GLITCH_KINDS` — all three: `inverted`/`screen`/`shade`); explicit input (debug/tests) still wins, foals stay white until the reveal (the adapter already defers the glitch to adulthood), and breeding still never copies one — a foal's column is its own fresh roll. **The deliberate door is the Debug Shrine** (`/town/shrine`, a Town façade): offer **1 fairy dust** (Keeper-only drop — second sink beside magic fertilizer, a real choice) and the monks introduce one bug of the SHRINE'S choosing (server-rolled uniform; the client previews all three looks but never picks); **filing a bug report** (`SHRINE_PATCH_FEE` = 50 ⬡) clears it — cheap on purpose, nobody is stuck with a look they hate. Adults only ("foals have no bugs yet"). Routes `POST /api/shrine/{glitch,patch}`; audited; atomic via the consume/spend kernels. `GLITCH_KINDS` is render-core's new runtime export — the one list the roll, the shrine, and the previews all share.
+
 ### 9.5 Beta scope
 
 Ship: the six stats \+ hidden Luck, 4–6 skills, 2–3 jobs tied to starter structures, single-horse-and-small-party adventures with one encounter table per starter region, the **wild-encounter → party-recruit → Tavern** flow, dice resolution UI, accomplishments. Defer to **post-beta content waves**: large/strategic parties, deep job trees, multi-stage expeditions, and civil-society offices — all extend the same stat+dice+event spine.
@@ -620,7 +624,7 @@ Starting values, chosen for sane spreads and easy iteration. All are constants i
 - **Personality** (OCEAN): integer **0–100** per trait, population mean ≈ 50\.  
 - **Skill level**: **0–10** per skill at beta.  
 - **Cubes (currency):** store balances as integer **copper-equivalent**; display split into denominations. v0 ratio: **1 silver \= 100 copper, 1 gold \= 100 silver** (`CUBE_SILVER = 100`, `CUBE_GOLD = 10000`).  
-- **Glitch rarity** (non-heritable, §5.7): per new horse at birth/encounter, `GLITCH_CHANCE = 0.001` (≈1 in 1,000); if it fires, pick uniformly among *enabled* glitches (beta: just `inverted`). Independent of coat genetics; tune freely.  
+- **Glitch rarity** (non-heritable, §5.7): per new horse at birth/encounter, `GLITCH_CHANCE = 0.001` (≈1 in 1,000); if it fires, pick uniformly among *enabled* glitches (`GLITCH_KINDS` — all three: `inverted`/`screen`/`shade`, live since §7l). Independent of coat genetics; tune freely. Deliberate access via the Debug Shrine (§7l).  
 - All randomness server-side through the seeded RNG (same discipline as the genetics engine).
 
 ### 14.2 Heritability (at birth; clamp to scale)

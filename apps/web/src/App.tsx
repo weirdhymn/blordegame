@@ -19,6 +19,7 @@ import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
+import { ShrinePage } from './pages/ShrinePage.js';
 import { SparPage } from './pages/SparPage.js';
 import { VenturePage } from './pages/VenturePage.js';
 import { useSession } from './session.js';
@@ -53,6 +54,7 @@ export function App(): ReactElement {
         <Route path="/town/tavern" element={<TavernPage />} />
         <Route path="/town/workshop" element={<WorkshopPage />} />
         <Route path="/town/market" element={<MarketPage />} />
+        <Route path="/town/shrine" element={<ShrinePage />} />
         {/* Old flat routes redirect into the Town so existing links never break. */}
         <Route path="/tavern" element={<Navigate to="/town/tavern" replace />} />
         <Route path="/adventure" element={<AdventurePage />} />

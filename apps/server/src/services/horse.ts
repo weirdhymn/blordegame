@@ -1,8 +1,10 @@
 import { randomInt } from 'node:crypto';
+import { GLITCH_CHANCE } from '@blorse/balance';
 import { eq } from 'drizzle-orm';
 import { resolve, type Genotype } from '@blorse/genetics';
 import {
   buildRenderSpec,
+  GLITCH_KINDS,
   type GlitchKind,
   type LifeStage,
   type RenderSpec,
@@ -31,6 +33,13 @@ export interface MintInput {
   personality?: Record<string, number>;
 }
 
+/** The natural glitch roll (§5.7/§14.1): per NEW horse, never inherited. ~1 in 1,000 fires;
+ *  when it does, the kind is uniform over every implemented glitch. */
+export function rollGlitch(rng: () => number): GlitchKind | null {
+  if (rng() >= GLITCH_CHANCE) return null;
+  return GLITCH_KINDS[Math.floor(rng() * GLITCH_KINDS.length)] ?? null;
+}
+
 /** Store a new horse (genotype + seed [+ glitch]) and materialize its lineage closure. */
 export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
   const seed = input.seed ?? randomInt(1, 2 ** 31);
@@ -41,13 +50,17 @@ export async function mintHorse(db: DB, input: MintInput): Promise<HorseRow> {
     input.parentB,
     mulberry32((seed ^ 0x5bf03635) >>> 0),
   );
+  // Explicit glitch (debug/tests, incl. explicit null) wins; otherwise every new horse
+  // rolls the §5.7 chance, derived from its own seed so the mint stays reproducible.
+  const glitch =
+    input.glitch !== undefined ? input.glitch : rollGlitch(mulberry32((seed ^ 0x9d17ce2b) >>> 0));
   const [horse] = await db
     .insert(horses)
     .values({
       herdId: input.herdId,
       genotype: input.genotype,
       seed,
-      glitch: input.glitch ?? null,
+      glitch,
       lifeStage: input.lifeStage ?? 'foal',
       name: input.name ?? randomHorseName(), // default fruit/veg name (§9)
       origin: input.origin,

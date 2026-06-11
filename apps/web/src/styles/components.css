@@ -1140,6 +1140,10 @@ a.bldg:hover {
 .bldg-closed .bldg-awning {
   background: repeating-linear-gradient(90deg, var(--sage-deep) 0 12px, var(--paper) 12px 24px);
 }
+/* The shrine's awning is the odd one out — ink on gold, like a stack trace on parchment. */
+.bldg-shrine .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 12px, var(--gold) 12px 24px);
+}
 .bldg-sign {
   font-size: 2rem;
   line-height: 1;
@@ -1161,4 +1165,34 @@ a.bldg:hover {
 .bldg-closed {
   border-style: dashed;
   color: var(--ink-soft);
+}
+
+/* ── The Debug Shrine (§7l) — the preview court ── */
+.shrine-court {
+  max-width: 56rem;
+}
+.shrine-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0;
+}
+.shrine-look {
+  margin: 0;
+  padding: var(--sp-2);
+  border: var(--bd) solid var(--sage-deep);
+  background: var(--band-paper);
+  text-align: center;
+}
+.shrine-look .horse-canvas {
+  flex-shrink: 0; /* integer-scale rule: never let flex squeeze a sprite */
+}
+.shrine-look.active {
+  border-color: var(--ink);
+  box-shadow: var(--px) var(--px) 0 var(--sage-deep);
+}
+.shrine-look figcaption {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: var(--sp-1);
 }

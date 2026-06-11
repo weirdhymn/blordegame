@@ -88,6 +88,17 @@ export function TownPage(): ReactElement {
           <span className="hub-go">Watch a bout →</span>
         </Link>
 
+        <Link to="/town/studbook" className="bldg bldg-registrar">
+          <span className="bldg-awning" aria-hidden="true" />
+          <span className="bldg-sign">📖</span>
+          <h2>The Registrar</h2>
+          <p>
+            The Studbook lives here: standing requests for coats the book still lacks, and a line
+            for every line you found. Entries write themselves; the ink is very good.
+          </p>
+          <span className="hub-go">Open the book →</span>
+        </Link>
+
         <Link to="/town/shrine" className="bldg bldg-shrine">
           <span className="bldg-awning" aria-hidden="true" />
           <span className="bldg-sign">⛩</span>

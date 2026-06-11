@@ -21,6 +21,15 @@ export interface DigestQuest {
   cubes: number;
 }
 
+/** A studbook goal fulfilled by this check-in's coat reveals (§7m, rewards granted). */
+export interface StudbookBeat {
+  goalId: string;
+  title: string;
+  cubes: number;
+  horse: string | null;
+  coat: string;
+}
+
 export interface DailyResult {
   daysAdvanced: number;
   cubesGained: number;
@@ -29,6 +38,8 @@ export interface DailyResult {
   matured: MaturedFoal[];
   journal: DigestBeat[];
   questCompletions: DigestQuest[];
+  /** Studbook goals fulfilled by this check-in's reveals (§7m). */
+  studbook: StudbookBeat[];
   /** Basic fertilizer the horses produced overnight (only for fed days — §7j). */
   fertilizer: number;
   day: number;

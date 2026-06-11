@@ -5,6 +5,7 @@ import { buildRenderSpec } from '@blorse/render-core';
 import { breed, getBreedOdds, type BreedOdds, type BreedSuccess } from '../api/breeding.js';
 import { ApiError } from '../api/client.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
+import { getStudbook } from '../api/studbook.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 import { useSession } from '../session.js';
@@ -19,6 +20,9 @@ export function BreedPage(): ReactElement {
     ),
   );
   const horses = herdLoad.data ?? [];
+  // The Registrar's open requests (§7m) — direction for the pairing, never an obligation.
+  const book = useLoad(useCallback(() => getStudbook(), []));
+  const seeking = (book.data?.goals ?? []).filter((g) => !g.done).slice(0, 3);
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const [odds, setOdds] = useState<BreedOdds | null>(null);
@@ -75,6 +79,12 @@ export function BreedPage(): ReactElement {
     <div className="breed">
       <h1>Breed</h1>
       <p className="sub">Pick two adults. Closely related horses can&apos;t breed.</p>
+      {seeking.length > 0 && (
+        <p className="muted">
+          📖 The Registrar currently seeks: {seeking.map((s) => s.title).join(' · ')} —{' '}
+          <Link to="/town/studbook">the Studbook</Link> pays in Cubes and good ink.
+        </p>
+      )}
       {/* Breeding station: controls on the left, the live foal-odds + result on the right.
           Stacks to one column on narrow screens. */}
       <div className="breed-grid">

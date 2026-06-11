@@ -32,6 +32,11 @@ export const GLITCH_CHANCE = 0.001;
  *  is stuck with a look they hate. */
 export const SHRINE_PATCH_FEE = 50;
 
+// ── §7m The Studbook — standing breeding goals (no rotation, no timers: cozy) ──
+/** One-time Cube reward per fulfilled goal, by goal tier (Novice/Journeyman/Master pages).
+ *  Lifetime total across all 13 goals ≈ 4,050 ⬡ — meaningful beside the tier ladder, not silly. */
+export const STUDBOOK_TIER_CUBES: Record<number, number> = { 1: 100, 2: 250, 3: 600 };
+
 // ── §14.2 Heritability (at birth; clamp to scale) ───────────────────────────
 export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight

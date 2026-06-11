@@ -478,6 +478,25 @@ export const auditLog = pgTable(
   (t) => [index('audit_herd_idx').on(t.herdId)],
 );
 
+/** The Studbook (§7m): one row per fulfilled breeding goal — the Registrar's permanent record.
+ *  The goal ladder itself is content (content/studbook.ts); only completions are stored. */
+export const studbookEntries = pgTable(
+  'studbook_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    goalId: text('goal_id').notNull(),
+    /** The foal that fulfilled it (kept even if the horse later leaves — the line was founded). */
+    horseId: uuid('horse_id').references(() => horses.id, { onDelete: 'set null' }),
+    /** The coat as written at the reveal — the record survives the horse. */
+    coat: text('coat').notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('studbook_once_idx').on(t.herdId, t.goalId)],
+);
+
 /** Player reports for moderation review (§11). */
 export const reports = pgTable('reports', {
   id: uuid('id').defaultRandom().primaryKey(),

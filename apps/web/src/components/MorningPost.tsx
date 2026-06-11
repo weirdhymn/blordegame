@@ -94,6 +94,26 @@ export function MorningPost(props: {
           </ul>
         </section>
 
+        {daily.studbook.length > 0 && (
+          <section className="post-section">
+            <h3 className="section-h">📖 The Studbook</h3>
+            <ul className="post-ledger">
+              {daily.studbook.map((b) => (
+                <li key={b.goalId}>
+                  ✒ <strong>{b.horse ?? 'A foal'}</strong> fulfills “{b.title}” ({b.coat})
+                  {b.cubes > 0 && (
+                    <>
+                      {' '}
+                      — <strong>+{b.cubes} ⬡</strong>
+                    </>
+                  )}
+                  . The Registrar adds a line in good ink.
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {daily.questCompletions.length > 0 && (
           <section className="post-section">
             <h3 className="section-h">🎓 Quests complete</h3>

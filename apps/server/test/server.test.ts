@@ -31,10 +31,11 @@ import {
   STARTING_CUBES,
   STAT_KEYS,
   STAT_MAX,
+  STUDBOOK_TIER_CUBES,
   UPLOAD_BASE,
   UPLOAD_FOAL_FACTOR,
 } from '@blorse/balance';
-import { breedFoal, type Genotype } from '@blorse/genetics';
+import { breedFoal, resolve as resolveCoat, type Genotype } from '@blorse/genetics';
 import { GLITCH_KINDS, type GlitchKind } from '@blorse/render-core';
 import { eq as drizzleEq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -66,6 +67,7 @@ import { ENEMY_BY_ID } from '../src/content/enemies.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
 import { REGION_BY_ID } from '../src/content/regions.js';
+import { STUDBOOK_GOAL_BY_ID } from '../src/content/studbook.js';
 import { adventure } from '../src/services/adventure.js';
 import {
   availableChoices,
@@ -118,6 +120,7 @@ import {
 import { getQuestState } from '../src/services/quests.js';
 import { induceGlitch, patchGlitch, SHRINE_OFFERING_ID } from '../src/services/shrine.js';
 import { skillCheck } from '../src/services/stats.js';
+import { checkStudbookOnMature, getStudbook } from '../src/services/studbook.js';
 import {
   coatRarityScore,
   computeUploadReward,
@@ -3638,6 +3641,105 @@ async function main(): Promise<void> {
       bred.ok &&
         bred.viable &&
         bred.foal.glitch === rollGlitch(mulberry32((bred.foal.seed ^ 0x9d17ce2b) >>> 0)),
+    );
+  }
+
+  // ── The Studbook (§7m): standing breeding goals, checked at the coat reveal ──
+  section('The Studbook (§7m)');
+  {
+    // Goal predicates read the resolved phenotype (alleles + flags), not display strings.
+    const g = (id: string) => STUDBOOK_GOAL_BY_ID.get(id)!;
+    const bay = resolveCoat({ E: 'Ee', A: 'Aa' });
+    const paleDun = resolveCoat({ E: 'ee', C: 'CrCr', D: 'Dd' });
+    const dunalino = resolveCoat({ E: 'ee', C: 'CCr', D: 'Dd' });
+    check(
+      'predicates: a bay is The Classic and nothing fancier',
+      g('the-classic').test(bay) && !g('touched-by-gold').test(bay) && !g('born-to-fade').test(bay),
+    );
+    check(
+      'predicates: double cream is The Pale Page, NOT Touched by Gold',
+      g('the-pale-page').test(paleDun) && !g('touched-by-gold').test(paleDun),
+    );
+    check(
+      'predicates: dun-over-cream stacks three goals (single cream + stripe + the combo)',
+      g('touched-by-gold').test(dunalino) &&
+        g('wearing-the-stripe').test(dunalino) &&
+        g('stripe-on-gold').test(dunalino),
+    );
+
+    // Direct service flow: exact reward accounting + once-only.
+    const rid = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'registrar', password: 'studbookhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const cubesOf = async () =>
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, rid) }))!.cubes;
+    const bredBay = await mintHorse(db, {
+      herdId: rid,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'bred',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const before = await cubesOf();
+    const beats = await checkStudbookOnMature(db, rid, bredBay);
+    const expect = (STUDBOOK_TIER_CUBES[1] ?? 0) * 2; // open-the-book + the-classic
+    check(
+      'a bred bay reveal fulfills Open the Book + The Classic, paying both tiers exactly',
+      beats.length === 2 &&
+        beats.some((b) => b.goalId === 'open-the-book') &&
+        beats.some((b) => b.goalId === 'the-classic') &&
+        (await cubesOf()) === before + expect,
+    );
+    const again = await checkStudbookOnMature(db, rid, bredBay);
+    check(
+      'each goal fulfills once per herd — a second matching reveal pays nothing',
+      again.length === 0 && (await cubesOf()) === before + expect,
+    );
+    const wildling = await mintHorse(db, {
+      herdId: rid,
+      genotype: { E: 'ee', D: 'Dd' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    check(
+      'recruits and founders do not count — the studbook honors your own breeding only',
+      (await checkStudbookOnMature(db, rid, wildling)).length === 0,
+    );
+
+    // The daily pipeline: a bred foal matures at sunrise → beats ride the Morning Post.
+    const foalDun = await mintHorse(db, {
+      herdId: rid,
+      genotype: { E: 'ee', C: 'CCr', D: 'Dd' },
+      origin: 'bred',
+      lifeStage: 'foal',
+      glitch: null,
+    });
+    const reveal = await advanceHerd(db, rid, Date.now() + FOAL_TO_ADULT_MS + 60_000);
+    const expectDun = (STUDBOOK_TIER_CUBES[2] ?? 0) * 2 + (STUDBOOK_TIER_CUBES[3] ?? 0); // gold + stripe + combo
+    check(
+      'the reveal carries studbook beats into the daily digest (gold + stripe + the combo)',
+      reveal.matured.some((m) => m.id === foalDun.id) &&
+        reveal.studbook.length === 3 &&
+        reveal.studbook.reduce((s, b) => s + b.cubes, 0) === expectDun,
+    );
+
+    const book = await getStudbook(db, rid);
+    const doneIds = book.goals.filter((x) => x.done).map((x) => x.id);
+    check(
+      'the book shows 5 fulfilled goals with the fulfilling coat on each stamp',
+      doneIds.length === 5 &&
+        doneIds.includes('stripe-on-gold') &&
+        book.goals.every((x) => !x.done || x.done.coat.length > 0),
+    );
+    check(
+      'founded lines: every coat bred to adulthood, its first author on record',
+      book.registry.length >= 1 &&
+        book.registry.some((l) => l.firstId === bredBay.id && l.count >= 1),
     );
   }
 

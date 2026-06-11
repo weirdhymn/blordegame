@@ -17,6 +17,7 @@ import { grantItems } from './inventory.js';
 import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
 import { recordEvent } from './quests.js';
+import { checkStudbookOnMature, type StudbookBeat } from './studbook.js';
 
 /** Cap on per-day job resolution during catch-up so a long absence stays cheap (§8.2). */
 const MAX_JOB_CATCHUP_DAYS = 30;
@@ -56,6 +57,8 @@ export interface DailyResult {
   journal: DigestBeat[];
   /** Quests completed by this sunrise (rewards already granted) — the Post celebrates them. */
   questCompletions: DigestQuest[];
+  /** Studbook goals fulfilled by this check-in's reveals (§7m, rewards already granted). */
+  studbook: StudbookBeat[];
   /** Basic fertilizer the horses produced overnight (§7j) — only for days the herd was FED (the
    *  communal cook). A bonus for care, never a penalty for skipping. */
   fertilizer: number;
@@ -63,21 +66,28 @@ export interface DailyResult {
   nextRolloverMs: number;
 }
 
-/** Reveal foals whose maturation time has passed (white → adult coat, §4.2/§7). */
-async function matureFoals(db: DB, herdId: string, nowMs: number): Promise<MaturedFoal[]> {
+/** Reveal foals whose maturation time has passed (white → adult coat, §4.2/§7). The reveal is
+ *  also the Studbook's moment (§7m) — a coat can only fulfill a goal once it is real. */
+async function matureFoals(
+  db: DB,
+  herdId: string,
+  nowMs: number,
+): Promise<{ matured: MaturedFoal[]; studbook: StudbookBeat[] }> {
   const foals = await db
     .select()
     .from(horses)
     .where(and(eq(horses.herdId, herdId), eq(horses.lifeStage, 'foal')));
   const matured: MaturedFoal[] = [];
+  const studbook: StudbookBeat[] = [];
   for (const f of foals) {
     if (f.bornAt.getTime() + FOAL_TO_ADULT_MS <= nowMs) {
       await db.update(horses).set({ lifeStage: 'adult' }).where(eq(horses.id, f.id));
       await recordDiscovery(db, herdId, f); // the reveal enters the Field Guide
       matured.push({ id: f.id, name: f.name, coat: resolve(f.genotype).displayName });
+      studbook.push(...(await checkStudbookOnMature(db, herdId, f))); // §7m — bred foals only
     }
   }
-  return matured;
+  return { matured, studbook };
 }
 
 /**
@@ -98,13 +108,14 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       matured: [],
       journal: [],
       questCompletions: [],
+      studbook: [],
       fertilizer: 0,
       day,
       nextRolloverMs: nextRollover(nowMs),
     };
   }
 
-  const matured = await matureFoals(db, herdId, nowMs);
+  const { matured, studbook } = await matureFoals(db, herdId, nowMs);
   const daysAdvanced = Math.max(0, day - herd.lastSimTick);
 
   // Resolve jobs deterministically for each missed day (bounded for cheap catch-up).
@@ -177,6 +188,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     matured,
     journal,
     questCompletions,
+    studbook,
     fertilizer,
     day,
     nextRolloverMs: nextRollover(nowMs),

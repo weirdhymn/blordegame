@@ -20,6 +20,7 @@ import { registerPastureRoutes } from './routes/pasture.js';
 import { registerProgressionRoutes } from './routes/progression.js';
 import { registerShrineRoutes } from './routes/shrine.js';
 import { registerSocialRoutes } from './routes/social.js';
+import { registerStudbookRoutes } from './routes/studbook.js';
 import { resolveSessionUser } from './services/auth.js';
 
 export interface AppOptions {
@@ -127,6 +128,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerCareHubRoutes(instance, db);
       registerGardenRoutes(instance, db);
       registerShrineRoutes(instance, db);
+      registerStudbookRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerCombatRoutes(instance, db);
       registerSocialRoutes(instance, db);

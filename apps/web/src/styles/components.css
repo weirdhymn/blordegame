@@ -1144,6 +1144,10 @@ a.bldg:hover {
 .bldg-shrine .bldg-awning {
   background: repeating-linear-gradient(90deg, var(--ink) 0 12px, var(--gold) 12px 24px);
 }
+/* The Registrar wears a gold pinstripe — thinner stripes, a more serious building. */
+.bldg-registrar .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--gold) 0 6px, var(--paper) 6px 12px);
+}
 .bldg-sign {
   font-size: 2rem;
   line-height: 1;
@@ -1195,4 +1199,58 @@ a.bldg:hover {
   font-size: 12px;
   font-weight: 700;
   margin-top: var(--sp-1);
+}
+
+/* ── The Studbook (§7m) — the Registrar's pages ── */
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.goal-card {
+  padding: var(--sp-3);
+  border: var(--bd) solid var(--ink);
+  background: var(--band-paper);
+  box-shadow: var(--px) var(--px) 0 var(--sage-deep);
+}
+.goal-card.goal-done {
+  border-color: var(--leaf);
+  background: var(--sage);
+}
+.goal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.goal-reward {
+  font-weight: 700;
+  color: var(--gold);
+}
+.goal-done .goal-reward {
+  color: var(--leaf);
+}
+.goal-flavor {
+  margin: var(--sp-1) 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+.goal-stamp {
+  margin: var(--sp-2) 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--leaf);
+}
+.registry-table {
+  border-collapse: collapse;
+}
+.registry-table th,
+.registry-table td {
+  border: var(--bd) solid var(--sage-deep);
+  padding: var(--sp-1) var(--sp-3);
+  text-align: left;
+}
+.registry-table th {
+  background: var(--sage);
 }

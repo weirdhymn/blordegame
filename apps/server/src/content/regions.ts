@@ -48,6 +48,8 @@ export const REGIONS: Region[] = [
       { item: 'plant-fiber', weight: 6 },
       { item: 'timber', weight: 3 },
       { item: 'marsh-sage', weight: 2 }, // fen herb — the Brew Healing Potion input (§9.3)
+      { item: 'radish', weight: 2 }, // wild starter crops — gathering seeds the Garden (§7j)
+      { item: 'carrot', weight: 2 },
       { item: 'clay', weight: 1 },
       { item: 'bone', weight: 1 }, // rich-fertilizer input (§7j)
     ],
@@ -68,6 +70,7 @@ export const REGIONS: Region[] = [
     loot: [
       { item: 'clay', weight: 6 },
       { item: 'ore', weight: 3 },
+      { item: 'pumpkin', weight: 2 }, // hardy desert gourd — gatherable garden stock (§7j)
       { item: 'plant-fiber', weight: 1 },
       { item: 'bone', weight: 2 }, // the desert is generous with these (§7j)
     ],
@@ -88,6 +91,8 @@ export const REGIONS: Region[] = [
     loot: [
       { item: 'timber', weight: 6 },
       { item: 'ore', weight: 3 },
+      { item: 'apple', weight: 2 }, // feral orchards — gatherable garden stock (§7j)
+      { item: 'walnut', weight: 1 }, // rarest find for the slowest, richest tree (§7j)
       { item: 'clay', weight: 1 },
       { item: 'bone', weight: 1 }, // rich-fertilizer input (§7j)
     ],

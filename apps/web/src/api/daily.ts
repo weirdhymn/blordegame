@@ -29,6 +29,8 @@ export interface DailyResult {
   matured: MaturedFoal[];
   journal: DigestBeat[];
   questCompletions: DigestQuest[];
+  /** Basic fertilizer the horses produced overnight (only for fed days — §7j). */
+  fertilizer: number;
   day: number;
   nextRolloverMs: number;
 }

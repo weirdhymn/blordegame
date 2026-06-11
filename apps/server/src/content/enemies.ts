@@ -162,6 +162,7 @@ export const ENEMIES: EnemyDef[] = [
         { id: 'rare-gem', qty: 1 },
         { id: 'marsh-sage', qty: 2 },
         { id: 'saffron-bloom', qty: 1 }, // the rare cooking ingredient — a boss-fight find (§7)
+        { id: 'fairy-dust', qty: 1 }, // magic-fertilizer input — boss-only by design (§7j)
       ],
     },
   },
@@ -199,6 +200,7 @@ export const ENEMIES: EnemyDef[] = [
         { id: 'rare-gem', qty: 1 },
         { id: 'ore', qty: 3 },
         { id: 'saffron-bloom', qty: 1 },
+        { id: 'fairy-dust', qty: 1 },
       ],
     },
   },
@@ -236,6 +238,7 @@ export const ENEMIES: EnemyDef[] = [
         { id: 'rare-gem', qty: 1 },
         { id: 'timber', qty: 3 },
         { id: 'saffron-bloom', qty: 1 },
+        { id: 'fairy-dust', qty: 1 },
       ],
     },
   },

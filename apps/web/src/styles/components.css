@@ -1025,3 +1025,69 @@ a.companion {
 a.companion:hover {
   background: var(--sage);
 }
+
+/* ── The Garden (§7j) — plots wear their whole runway on their face ── */
+.garden-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.plot {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 10px 12px;
+}
+.plot-empty {
+  border-style: dashed;
+  border-color: var(--sage-deep);
+}
+.plot-drying {
+  border-color: #b08a3a;
+}
+.plot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.plot-stage {
+  font-size: 12px;
+  font-weight: 700;
+}
+.plot-crop {
+  margin: 4px 0;
+  font-weight: 700;
+}
+.plot .meter {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+.plot .meter-l {
+  font-size: 12px;
+}
+.plot .bar-fill.water {
+  background: #4a7a9b;
+}
+.plot .bar-fill.grow {
+  background: #5b8c3e;
+}
+.plot-grace {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a5a1a;
+}
+.plot-actions {
+  margin-top: 6px;
+}
+.plot-actions select {
+  max-width: 100%;
+  font-size: 12px;
+}
+.sprinkler-card {
+  max-width: 34rem;
+  margin-bottom: 12px;
+}

@@ -16,6 +16,7 @@ export function AppLayout(): ReactElement {
             Pasture
           </NavLink>
           <NavLink to="/care">🐴 Care</NavLink>
+          <NavLink to="/garden">🌱 Garden</NavLink>
           <NavLink to="/tavern">Tavern</NavLink>
           <NavLink to="/adventure">⚔ Adventure</NavLink>
           <NavLink to="/workshop">Workshop</NavLink>

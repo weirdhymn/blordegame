@@ -1,5 +1,10 @@
-import { and, eq, sql } from 'drizzle-orm';
-import { DAILY_CUBES, FOAL_TO_ADULT_MS, GROOM_CUBES } from '@blorse/balance';
+import { and, count, eq, sql } from 'drizzle-orm';
+import {
+  DAILY_CUBES,
+  FERTILIZER_PER_HORSE_PER_DAY,
+  FOAL_TO_ADULT_MS,
+  GROOM_CUBES,
+} from '@blorse/balance';
 import { resolve } from '@blorse/genetics';
 import { QUEST_BY_ID } from '../content/quests.js';
 import type { DB } from '../db/client.js';
@@ -8,6 +13,7 @@ import { gameDay, nextRollover } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { resolveAutonomyForDay } from './autonomy.js';
 import { recordDiscovery } from './fieldguide.js';
+import { grantItems } from './inventory.js';
 import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
 import { recordEvent } from './quests.js';
@@ -50,6 +56,9 @@ export interface DailyResult {
   journal: DigestBeat[];
   /** Quests completed by this sunrise (rewards already granted) — the Post celebrates them. */
   questCompletions: DigestQuest[];
+  /** Basic fertilizer the horses produced overnight (§7j) — only for days the herd was FED (the
+   *  communal cook). A bonus for care, never a penalty for skipping. */
+  fertilizer: number;
   day: number;
   nextRolloverMs: number;
 }
@@ -89,6 +98,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       matured: [],
       journal: [],
       questCompletions: [],
+      fertilizer: 0,
       day,
       nextRolloverMs: nextRollover(nowMs),
     };
@@ -99,10 +109,14 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
 
   // Resolve jobs deterministically for each missed day (bounded for cheap catch-up).
   let jobCubes = 0;
+  let fedDays = 0;
   const journal: DigestBeat[] = [];
   const jobDays = Math.min(daysAdvanced, MAX_JOB_CATCHUP_DAYS);
   for (let i = 0; i < jobDays; i++) {
     const tickDay = herd.lastSimTick + 1 + i;
+    // Fertilizer (§7j): the horses produce overnight only for a day the herd was FED — the
+    // communal cook. mealDay holds the most recent cook, so at most one catch-up day qualifies.
+    if (herd.mealDay === tickDay) fedDays++;
     // The morning meal buffs that day's jobs too (only the day it was actually cooked for, §7).
     const dayMeal = herd.mealDay === tickDay ? (herd.mealBuffs ?? {}) : {};
     jobCubes += await resolveJobsForDay(
@@ -146,6 +160,15 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     cubes: c.reward.cubes ?? 0,
   }));
 
+  // The morning's fertilizer (§7j): one per horse per FED day. Skipping the cook simply yields
+  // none — nothing worse (the §7g cozy guard).
+  let fertilizer = 0;
+  if (fedDays > 0) {
+    const [n] = await db.select({ n: count() }).from(horses).where(eq(horses.herdId, herdId));
+    fertilizer = (n?.n ?? 0) * FERTILIZER_PER_HORSE_PER_DAY * fedDays;
+    if (fertilizer > 0) await grantItems(db, herdId, [{ id: 'fertilizer', qty: fertilizer }]);
+  }
+
   return {
     daysAdvanced,
     cubesGained,
@@ -154,6 +177,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     matured,
     journal,
     questCompletions,
+    fertilizer,
     day,
     nextRolloverMs: nextRollover(nowMs),
   };

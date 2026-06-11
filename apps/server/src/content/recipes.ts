@@ -75,6 +75,25 @@ export const RECIPES: Recipe[] = [
       { id: 'plant-fiber', qty: 1 },
     ],
   },
+  // ── Garden fertilizers (§7j): basic comes from cared-for horses; these refine it. ──
+  {
+    id: 'rich-fertilizer',
+    name: 'Rich Fertilizer',
+    output: { id: 'rich-fertilizer', qty: 1 },
+    inputs: [
+      { id: 'fertilizer', qty: 2 },
+      { id: 'bone', qty: 1 },
+    ],
+  },
+  {
+    id: 'magic-fertilizer',
+    name: 'Magic Fertilizer',
+    output: { id: 'magic-fertilizer', qty: 1 },
+    inputs: [
+      { id: 'fertilizer', qty: 1 },
+      { id: 'fairy-dust', qty: 1 },
+    ],
+  },
 ];
 
 export const RECIPE_BY_ID = new Map(RECIPES.map((r) => [r.id, r]));

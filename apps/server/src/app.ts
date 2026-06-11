@@ -13,6 +13,7 @@ import { registerBreedingRoutes } from './routes/breeding.js';
 import { registerDailyRoutes } from './routes/daily.js';
 import { registerDebugRoutes } from './routes/debug.js';
 import { registerExplorationRoutes } from './routes/exploration.js';
+import { registerGardenRoutes } from './routes/garden.js';
 import { registerHorseRoutes } from './routes/horses.js';
 import { registerModerationRoutes } from './routes/moderation.js';
 import { registerPastureRoutes } from './routes/pasture.js';
@@ -123,6 +124,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
       registerPastureRoutes(instance, db);
       registerProgressionRoutes(instance, db);
       registerCareHubRoutes(instance, db);
+      registerGardenRoutes(instance, db);
       registerAdventureRoutes(instance, db);
       registerCombatRoutes(instance, db);
       registerSocialRoutes(instance, db);

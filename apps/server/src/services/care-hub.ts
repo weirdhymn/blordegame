@@ -1,10 +1,10 @@
 import { and, count, eq } from 'drizzle-orm';
 import {
+  COOK_IDS,
   COOK_RARE_ITEM,
+  COOK_STAT,
   cookMeal,
   cookSlots,
-  GRAIN_IDS,
-  GRAIN_STAT,
   GROOM_CUBES,
   MOOD_CONTENT,
   MOOD_RATTLED,
@@ -64,7 +64,8 @@ export async function getCareState(db: DB, herdId: string, nowMs: number): Promi
     mealBuffs: cookedToday ? (herd?.mealBuffs ?? {}) : {},
     slots: cookSlots(stable.length),
     herdSize: stable.length,
-    grains: GRAIN_IDS.map((id) => ({ id, stat: GRAIN_STAT[id]!, qty: qtyOf(id) })),
+    // The full cookable pantry (§7g + §7j): grains (gathered) and garden crops (grown).
+    grains: COOK_IDS.map((id) => ({ id, stat: COOK_STAT[id]!, qty: qtyOf(id) })),
     rares: qtyOf(COOK_RARE_ITEM),
     groomed: herd?.groomBonusPending ?? false,
     groomCubes: GROOM_CUBES,
@@ -100,7 +101,7 @@ export async function cook(
   for (const [grainId, raw] of Object.entries(grainCounts)) {
     const count = Math.max(0, Math.floor(raw || 0));
     if (count <= 0) continue;
-    const stat = GRAIN_STAT[grainId];
+    const stat = COOK_STAT[grainId];
     if (!stat) continue; // ignore non-grain ids
     consume.push({ id: grainId, qty: count });
     byStat[stat] = (byStat[stat] ?? 0) + count;

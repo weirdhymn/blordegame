@@ -82,6 +82,12 @@ export function MorningPost(props: {
                 🛏 A thank-you for tucking them in: <strong>+{daily.groomCubes} ⬡</strong>
               </li>
             )}
+            {daily.fertilizer > 0 && (
+              <li>
+                💩 The well-fed herd produced <strong>{daily.fertilizer} fertilizer</strong>{' '}
+                overnight. Astonishingly local.
+              </li>
+            )}
             {stipend <= 0 && daily.jobCubes <= 0 && daily.groomCubes <= 0 && (
               <li className="muted">Nothing in the till — the day is young.</li>
             )}

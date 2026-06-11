@@ -59,6 +59,7 @@ import {
   REGION_KEEPER,
   type Choice,
 } from '../src/content/adventures.js';
+import { MAGIC_CROP_POOL } from '../src/content/crops.js';
 import { ENEMY_BY_ID } from '../src/content/enemies.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
@@ -87,6 +88,14 @@ import {
 } from '../src/services/combat.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { roam } from '../src/services/exploration.js';
+import {
+  buySprinkler,
+  fertilizePlot,
+  getGarden,
+  harvestPlot,
+  plantCrop,
+  waterPlot,
+} from '../src/services/garden.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
@@ -3348,6 +3357,156 @@ async function main(): Promise<void> {
     await groom(db, cookHerd);
     const soothedHorse = await getHorse(db, sad[0]!.id);
     check('the evening groom soothes it back to content', soothedHorse?.mood === 'content');
+  }
+
+  // ── The Garden (§7j): plant the crop itself, harvest a multiplier; wither returns it ──
+  section('The Garden (§7j)');
+  {
+    const HOUR = 3_600_000;
+    const gid = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'gardener', password: 'gardenhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const freshHerd = async () =>
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, gid) }))!;
+    let gHerd = await freshHerd();
+    const T0 = Date.UTC(2027, 0, 1, 12);
+
+    const g0 = await getGarden(db, gHerd, T0);
+    check('plots ride the herd-tier spine (2 + tier = 3 at Smallholding)', g0.plots.length === 3);
+
+    const noCrop = await plantCrop(db, gHerd, 1, 'carrot', T0);
+    check(
+      'planting needs the crop itself in the pantry (the crop IS the seed)',
+      !noCrop.ok && noCrop.code === 'cant_afford',
+    );
+    await grantItems(db, gid, [
+      { id: 'carrot', qty: 2 },
+      { id: 'radish', qty: 6 },
+      { id: 'fertilizer', qty: 3 },
+      { id: 'rich-fertilizer', qty: 1 },
+      { id: 'magic-fertilizer', qty: 1 },
+    ]);
+    const planted = await plantCrop(db, gHerd, 1, 'carrot', T0);
+    check('planting consumes one crop', planted.ok && (await itemQty(db, gid, 'carrot')) === 1);
+
+    let v = (await getGarden(db, gHerd, T0 + 6 * HOUR)).plots[0]!;
+    check(
+      'a half-grown crop reads GROWING with a visible bar',
+      v.stage === 'growing' && v.growth > 0.4 && v.growth < 0.6,
+    );
+    v = (await getGarden(db, gHerd, T0 + 13 * HOUR)).plots[0]!;
+    check('a 12h crop is ripe after 12h', v.stage === 'ripe');
+
+    const h1 = await harvestPlot(db, gHerd, 1, T0 + 13 * HOUR, 5);
+    check(
+      'harvest = the multiplier PLUS the dual yield (carrot → carrots + greens)',
+      h1.ok &&
+        h1.harvested.some((s) => s.id === 'carrot' && s.qty === 3) &&
+        h1.harvested.some((s) => s.id === 'carrot-greens' && s.qty === 1),
+    );
+
+    // Basic fertilizer: faster, never bigger.
+    await fertilizePlot(db, gHerd, 1, 'fertilizer', T0);
+    await plantCrop(db, gHerd, 1, 'radish', T0);
+    v = (await getGarden(db, gHerd, T0 + 10 * HOUR)).plots[0]!;
+    check('basic fertilizer hurries growth (a 12h crop ripens by ~9.6h)', v.stage === 'ripe');
+    const hBasic = await harvestPlot(db, gHerd, 1, T0 + 10 * HOUR, 5);
+    check(
+      'basic fertilizer never changes the yield',
+      hBasic.ok && hBasic.harvested.find((s) => s.id === 'radish')?.qty === 4,
+    );
+
+    // Rich fertilizer: +1..2 extra base crops.
+    await fertilizePlot(db, gHerd, 2, 'rich-fertilizer', T0);
+    await plantCrop(db, gHerd, 2, 'radish', T0);
+    const hRich = await harvestPlot(db, gHerd, 2, T0 + 13 * HOUR, 7);
+    const richQty = hRich.ok ? (hRich.harvested.find((s) => s.id === 'radish')?.qty ?? 0) : 0;
+    check('rich fertilizer adds 1–2 extra base crops', hRich.ok && richQty >= 5 && richQty <= 6);
+
+    // Magic fertilizer: exactly ONE bonus crop, from the defined pool only.
+    await fertilizePlot(db, gHerd, 3, 'magic-fertilizer', T0);
+    await plantCrop(db, gHerd, 3, 'radish', T0);
+    const hMagic = await harvestPlot(db, gHerd, 3, T0 + 13 * HOUR, 11);
+    const magicTotal = hMagic.ok ? hMagic.harvested.reduce((s, x) => s + x.qty, 0) : 0;
+    check(
+      'magic fertilizer adds exactly one bonus crop from the defined pool',
+      hMagic.ok &&
+        magicTotal === 5 &&
+        hMagic.harvested.every((s) => MAGIC_CROP_POOL.includes(s.id)),
+    );
+
+    // ── The wither machine: drain → visible grace → the planted crop COMES BACK ──
+    await plantCrop(db, gHerd, 1, 'radish', T0);
+    v = (await getGarden(db, gHerd, T0 + 47 * HOUR)).plots[0]!;
+    check(
+      'the tank drains visibly (nearly dry at 47h)',
+      v.stage === 'ripe' && v.water > 0 && v.water < 0.05,
+    );
+    v = (await getGarden(db, gHerd, T0 + 49 * HOUR)).plots[0]!;
+    check(
+      'dry → DRYING with the grace runway visible',
+      v.stage === 'drying' &&
+        (v.graceLeftMs ?? 0) > 118 * HOUR &&
+        (v.graceLeftMs ?? 0) <= 120 * HOUR,
+    );
+    const rescue = await waterPlot(db, gHerd, 1, T0 + 49 * HOUR);
+    check('watering at any drying stage resets it to safe', rescue.ok && rescue.stage === 'ripe');
+    // Now let it truly go: dry again at +48h from the rescue, grace 120h → withers at 49+168h.
+    const radishBefore = await itemQty(db, gid, 'radish');
+    const gWither = await getGarden(db, gHerd, T0 + 220 * HOUR);
+    check(
+      'long neglect withers — and RETURNS the planted crop (0 net loss)',
+      gWither.returned.some((r) => r.slot === 1 && r.crop === 'radish') &&
+        (await itemQty(db, gid, 'radish')) === radishBefore + 1 &&
+        gWither.plots[0]!.stage === 'empty',
+    );
+
+    // Fertilizer is the only thing a wither costs.
+    const fertBefore = await itemQty(db, gid, 'fertilizer');
+    await fertilizePlot(db, gHerd, 1, 'fertilizer', T0 + 220 * HOUR);
+    await plantCrop(db, gHerd, 1, 'radish', T0 + 220 * HOUR);
+    const gWither2 = await getGarden(db, gHerd, T0 + 440 * HOUR);
+    check(
+      'a withered fertilized plot returns the crop but not the fertilizer',
+      gWither2.plots[0]!.stage === 'empty' &&
+        gWither2.plots[0]!.fertilizer === null &&
+        (await itemQty(db, gid, 'fertilizer')) === fertBefore - 1,
+    );
+
+    // ── The sprinkler: a convenience purchase that pins every tank full ──
+    gHerd = await freshHerd();
+    const TS = T0 + 500 * HOUR;
+    const spr = await buySprinkler(db, gHerd, 7, TS);
+    check('the sprinkler is a conditional Cubes purchase', spr.ok);
+    gHerd = await freshHerd(); // window now on the row
+    await plantCrop(db, gHerd, 1, 'radish', TS);
+    v = (await getGarden(db, gHerd, TS + 6 * 24 * HOUR)).plots[0]!;
+    check(
+      'while the sprinkler runs, nothing dries (6 days unwatered, tank full)',
+      v.stage === 'ripe' && v.water === 1,
+    );
+    v = (await getGarden(db, gHerd, TS + 11 * HOUR)).plots[0]!;
+    check('the sprinkler also hurries growth (a 12h crop ripe by 11h)', v.stage === 'ripe');
+
+    // ── Fertilizer from care: fed yesterday → fertilizer this morning; not fed → simply none ──
+    const realNow = Date.now();
+    await grantItems(db, gid, [{ id: 'grain-corn', qty: 1 }]);
+    const fedCook = await cook(db, gid, { 'grain-corn': 1 }, 0, realNow + 86_400_000);
+    check('the herd is fed (the communal cook)', fedCook.ok);
+    const basicBefore = await itemQty(db, gid, 'fertilizer');
+    const morning = await advanceHerd(db, gid, realNow + 2 * 86_400_000);
+    const herdHeads = (await listHerdHorses(db, gid)).length;
+    check(
+      'fed yesterday → each horse produced one fertilizer overnight',
+      morning.fertilizer === herdHeads &&
+        (await itemQty(db, gid, 'fertilizer')) === basicBefore + herdHeads,
+    );
+    const morning2 = await advanceHerd(db, gid, realNow + 4 * 86_400_000);
+    check('not fed → simply no fertilizer (never a penalty)', morning2.fertilizer === 0);
   }
 
   // ── "Your First Day" (§7i): the onboarding quest walks the whole daily rhythm ──

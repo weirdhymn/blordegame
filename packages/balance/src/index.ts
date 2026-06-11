@@ -273,6 +273,38 @@ export const KEEPER_UNLOCK_EXPEDITIONS = 3;
 export const OMEN_CHECK_BONUS = 2;
 /** Extra units of the omen's featured item each gathering horse brings home. */
 export const OMEN_GATHER_BONUS_QTY = 1;
+
+// ── The Garden (§7j): optional enrichment, never an obligation ───────────────
+// Plant the crop itself (no seeds), harvest a real multiplier + sometimes a second resource.
+// Cozy heart: withering RETURNS the planted crop (0 net loss) after a long, VISIBLE runway —
+// full water tank → gradual drain → tier-scaled grace → only then wither.
+
+/** Growth tiers (hours). Value rises with patience but only gently — a playstyle, not an answer. */
+export const CROP_TIER_HOURS: Record<number, number> = { 1: 12, 2: 24, 3: 48, 4: 72, 5: 96 };
+/** A full watering (manual or at planting) drains to dry over this many hours. */
+export const GARDEN_WATER_DRAIN_H = 48;
+/** Grace after the tank hits dry, before wither — scales with tier so slow crops are hard to
+ *  lose: max(120h, 2× grow time). With the 48h tank: runway ≥ 7 days on every tier. */
+export const gardenGraceH = (tierHours: number): number => Math.max(120, 2 * tierHours);
+/** Garden plots ride the ONE progression spine: 2 + Herd Tier (3 at Smallholding → 7 at Dynasty). */
+export const gardenPlotsForLevel = (level: number): number => 2 + Math.max(1, Math.min(5, level));
+/** Manual watering while GROWING also hurries things: 10% of the tier time, but only when the
+ *  tank is below this fraction (no spam-clicking a full tank). */
+export const GARDEN_WATER_BONUS_FRACTION = 0.1;
+export const GARDEN_WATER_TOPUP_BELOW = 0.8;
+/** Basic fertilizer (the honest kind): grow-time multiplier (×0.8 → 20% faster). */
+export const FERT_BASIC_TIME_MULT = 0.8;
+/** Rich fertilizer: +1..2 extra base crops at harvest. */
+export const FERT_RICH_BONUS_MIN = 1;
+export const FERT_RICH_BONUS_MAX = 2;
+/** Each horse produces one basic fertilizer per day — but only if the herd was fed (the communal
+ *  cook) the prior day. A bonus for care, never a penalty for skipping (§7g principle). */
+export const FERTILIZER_PER_HORSE_PER_DAY = 1;
+/** The sprinkler (a Cubes sink): pay per day of runtime; while running it pins every tank full
+ *  AND growth hours count this much extra (×1.125 ≈ 11% faster). Convenience, never "pay or die". */
+export const SPRINKLER_CUBES_PER_DAY = 15;
+export const SPRINKLER_MAX_DAYS = 14;
+export const SPRINKLER_GROWTH_BONUS = 0.125;
 export const RARE_ITEM = 'rare-gem';
 
 /** Quick-sell (Inventory): modest per-item Cube values — a convenience dump for surplus materials,
@@ -286,6 +318,14 @@ export const ITEM_SELL_VALUE: Record<string, number> = {
   'plant-fiber': 2,
   ore: 2,
   'marsh-sage': 2,
+  bone: 2,
+  // garden crops (§7j) — same modest yardstick as raw materials
+  radish: 2,
+  carrot: 2,
+  'carrot-greens': 2,
+  pumpkin: 2,
+  apple: 2,
+  walnut: 2,
   plank: 4,
   brick: 4,
   paper: 4,
@@ -314,6 +354,19 @@ export const GRAIN_STAT: Record<string, StatKey> = {
   'grain-rye': 'cha',
 };
 export const GRAIN_IDS = Object.keys(GRAIN_STAT);
+/** The FULL cook map (§7g + §7j): grains (a random gather byproduct) AND garden crops (grown on
+ *  purpose) each feed one stat. The garden is the deliberate way to cook a chosen loadout;
+ *  gathering stays the random way — same pot, two roads in. */
+export const COOK_STAT: Record<string, StatKey> = {
+  ...GRAIN_STAT,
+  radish: 'dex',
+  carrot: 'wis',
+  'carrot-greens': 'con',
+  pumpkin: 'str',
+  apple: 'cha',
+  walnut: 'int',
+};
+export const COOK_IDS = Object.keys(COOK_STAT);
 /** The rare cooking ingredient — a far-rarer adventuring find that multiplies the whole dish. */
 export const COOK_RARE_ITEM = 'saffron-bloom';
 

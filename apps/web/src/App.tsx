@@ -6,6 +6,7 @@ import { BreedPage } from './pages/BreedPage.js';
 import { CarePage } from './pages/CarePage.js';
 import { DebugPage } from './pages/DebugPage.js';
 import { FieldGuidePage } from './pages/FieldGuidePage.js';
+import { GardenPage } from './pages/GardenPage.js';
 import { HomePage } from './pages/HomePage.js';
 import { HorseDetailPage } from './pages/HorseDetailPage.js';
 import { InventoryPage } from './pages/InventoryPage.js';
@@ -44,6 +45,7 @@ export function App(): ReactElement {
       >
         <Route path="/" element={<HomePage />} />
         <Route path="/care" element={<CarePage />} />
+        <Route path="/garden" element={<GardenPage />} />
         <Route path="/horses/:id" element={<HorseDetailPage />} />
         <Route path="/breed" element={<BreedPage />} />
         <Route path="/tavern" element={<TavernPage />} />

@@ -49,6 +49,7 @@ export const REGIONS: Region[] = [
       { item: 'timber', weight: 3 },
       { item: 'marsh-sage', weight: 2 }, // fen herb — the Brew Healing Potion input (§9.3)
       { item: 'clay', weight: 1 },
+      { item: 'bone', weight: 1 }, // rich-fertilizer input (§7j)
     ],
   },
   {
@@ -68,6 +69,7 @@ export const REGIONS: Region[] = [
       { item: 'clay', weight: 6 },
       { item: 'ore', weight: 3 },
       { item: 'plant-fiber', weight: 1 },
+      { item: 'bone', weight: 2 }, // the desert is generous with these (§7j)
     ],
   },
   {
@@ -87,6 +89,7 @@ export const REGIONS: Region[] = [
       { item: 'timber', weight: 6 },
       { item: 'ore', weight: 3 },
       { item: 'clay', weight: 1 },
+      { item: 'bone', weight: 1 }, // rich-fertilizer input (§7j)
     ],
   },
 ];

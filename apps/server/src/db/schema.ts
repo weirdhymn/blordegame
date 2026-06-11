@@ -58,8 +58,37 @@ export const herds = pgTable('herds', {
   mealBuffs: jsonb('meal_buffs').$type<Record<string, number>>(),
   /** Set by the evening groom; the next daily rollover pays GROOM_CUBES and clears it. */
   groomBonusPending: boolean('groom_bonus_pending').notNull().default(false),
+  // ── The Garden's sprinkler window (§7j) — garden-wide; while now < until, every tank is full. ──
+  sprinklerFrom: timestamp('sprinkler_from', { withTimezone: true }),
+  sprinklerUntil: timestamp('sprinkler_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * A Garden plot (§7j). Everything about a plot's STAGE is derived from these timestamps at read
+ * time (growing/ripe/drying/grace/withered — same derived-not-stored spirit as phenotype); only
+ * the facts are stored. Plot count rides the herd-tier spine (gardenPlotsForLevel).
+ */
+export const gardenPlots = pgTable(
+  'garden_plots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    slot: integer('slot').notNull(),
+    /** The planted crop's item id; null = empty. */
+    crop: text('crop'),
+    /** Fertilizer kind applied to the EMPTY plot (consumed at harvest or wither). */
+    fertilizer: text('fertilizer'),
+    plantedAt: timestamp('planted_at', { withTimezone: true }),
+    /** The last moment the tank was FULL (planting waters it; manual watering refills it). */
+    lastWateredAt: timestamp('last_watered_at', { withTimezone: true }),
+    /** Accrued growth credit from manual hurry-up waterings, in ms. */
+    bonusMs: integer('bonus_ms').notNull().default(0),
+  },
+  (t) => [uniqueIndex('garden_plots_herd_slot_idx').on(t.herdId, t.slot)],
+);
 
 /** A horse. Phenotype is derived from (genotype, seed[, glitch]) — never stored (§2, §6). */
 export const horses = pgTable(

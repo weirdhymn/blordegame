@@ -1,4 +1,13 @@
-export type ItemKind = 'material' | 'book' | 'game' | 'tool' | 'cosmetic' | 'consumable' | 'grain';
+export type ItemKind =
+  | 'material'
+  | 'book'
+  | 'game'
+  | 'tool'
+  | 'cosmetic'
+  | 'consumable'
+  | 'grain'
+  | 'crop'
+  | 'fertilizer';
 
 export interface ItemDef {
   id: string;
@@ -81,6 +90,70 @@ export const ITEMS: ItemDef[] = [
     kind: 'consumable',
     flavor:
       'A potent brew, corked and waiting. No use for it on these gentle roads — but tuck it away; rougher ones are coming.',
+  },
+  // ── Garden crops (§7j) — plant the crop itself, harvest a multiplier. Each feeds the cook pot. ──
+  { id: 'radish', name: 'Radish', kind: 'crop', flavor: 'Quick, peppery — a Dexterity buff.' },
+  {
+    id: 'carrot',
+    name: 'Carrot',
+    kind: 'crop',
+    flavor: 'Good for the eyes, they say — a Wisdom buff. The greens are a bonus.',
+  },
+  {
+    id: 'carrot-greens',
+    name: 'Carrot Greens',
+    kind: 'crop',
+    flavor: 'The leafy half of the bargain — a Constitution buff.',
+  },
+  {
+    id: 'pumpkin',
+    name: 'Pumpkin',
+    kind: 'crop',
+    flavor: 'Enormous and sincere — a Strength buff. The vines make good fiber.',
+  },
+  {
+    id: 'apple',
+    name: 'Apple',
+    kind: 'crop',
+    flavor: 'Shines a coat from the inside — a Charisma buff. The tree throws good wood.',
+  },
+  {
+    id: 'walnut',
+    name: 'Walnut',
+    kind: 'crop',
+    flavor: 'Suspiciously brain-shaped — an Intelligence buff. The old folk consider this proof.',
+  },
+  // ── Fertilizers (§7j) — optional, additive, never required. The joke is played entirely straight. ──
+  {
+    id: 'fertilizer',
+    name: 'Fertilizer',
+    kind: 'fertilizer',
+    flavor: 'Locally produced. Astonishingly local. Crops grow a little faster.',
+  },
+  {
+    id: 'rich-fertilizer',
+    name: 'Rich Fertilizer',
+    kind: 'fertilizer',
+    flavor: 'Aged with bone meal of unspecified provenance. The harvest comes up heavier.',
+  },
+  {
+    id: 'magic-fertilizer',
+    name: 'Magic Fertilizer',
+    kind: 'fertilizer',
+    flavor: 'Cut with fairy dust. Something extra comes up. Nobody can say what. That is the fun.',
+  },
+  // ── Garden craft inputs from the existing world (§7j) ──
+  {
+    id: 'bone',
+    name: 'Bone',
+    kind: 'material',
+    flavor: 'Of unspecified provenance. The horses have agreed not to ask.',
+  },
+  {
+    id: 'fairy-dust',
+    name: 'Fairy Dust',
+    kind: 'material',
+    flavor: 'Confiscated from a region Keeper, who absolutely should not have had it either.',
   },
 ];
 

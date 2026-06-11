@@ -34,9 +34,11 @@ import {
 } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import { eq as drizzleEq } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { PgliteDatabase } from 'drizzle-orm/pglite';
 import type { InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
-import { createPgliteDb } from '../src/db/client.js';
+import { createDb, createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import {
   adventureRuns,
@@ -3338,6 +3340,20 @@ async function main(): Promise<void> {
   }
 
   await app.close();
+
+  // ── Postgres adapter routing (§6): DATABASE_URL picks the driver ──
+  section('Postgres adapter routing (§6)');
+  {
+    const prev = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = 'postgres://user:pw@localhost:5432/blorse';
+    const pgDb = createDb(); // the Pool connects lazily — construction alone proves the routing
+    check('postgres:// routes to the node-postgres driver', pgDb instanceof NodePgDatabase);
+    delete process.env.DATABASE_URL;
+    const memDb = createDb();
+    check('unset DATABASE_URL routes to embedded PGlite', memDb instanceof PgliteDatabase);
+    if (prev === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = prev;
+  }
 
   process.exit(summarize());
 }

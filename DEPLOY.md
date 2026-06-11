@@ -107,9 +107,15 @@ fly machine restart <machine-id>           # next boot re-migrates an empty DB
 **open** (no invite needed) and the cookie isn't `secure`. The client's Vite proxy forwards
 `/api` to the server (same path as prod). Mint stays admin-only unless you set `ALLOW_MINT=true`.
 
-## 9. Scaling beyond one machine (deferred)
+## 9. Scaling beyond one machine
 
 PGlite is in-process → single instance only. When the beta outgrows one box, move to managed
-Postgres. That means **wiring `drizzle-orm/node-postgres`** in `apps/server/src/db/client.ts`
-(it currently guards `postgres://` with an explicit error) and resolving the DB-type union
-across the services — a real refactor, **not** a config flip. Don't do it for a few testers.
+Postgres — **now a config flip**: the node-postgres driver is wired (`createNodePgDb` in
+`apps/server/src/db/client.ts`; every service types against the driver-agnostic `DB` base, and
+`runMigrations` picks the right migrator). Set `DATABASE_URL=postgres://user:pw@host/db` and
+deploy; migrations apply on boot exactly as with PGlite.
+
+Caveat before flipping for real: the postgres:// path is verified by type-safety + a driver-routing
+test, but has **not yet run against a live Postgres** (no local instance) — on first cut-over, run
+the §5 persistence canary against the new DB before inviting players back. Keep the volume around
+until then.

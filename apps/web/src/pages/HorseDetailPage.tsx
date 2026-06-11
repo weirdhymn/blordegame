@@ -3,13 +3,18 @@ import { Link, useParams } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import { ApiError } from '../api/client.js';
-import { getHorse, getPedigree, type Horse, type Pedigree } from '../api/horses.js';
+import { getHorse, getPedigree, listHerdHorses, type Horse, type Pedigree } from '../api/horses.js';
 import { assignJob, getJob, unassignJob, type JobAssignment } from '../api/jobs.js';
+import { getRelationships } from '../api/social.js';
 import { getUploadQuote, uploadHorse, type UploadQuote } from '../api/upload.js';
 import { getPasture, type Buildable } from '../api/workshop.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
+import { companionsOf } from '../util/herdmates.js';
+
+const TIE_GLYPH: Record<string, string> = { bonded: '💞', friend: '🤝', rival: '⚡' };
 
 const PERSONALITY_LABELS: Record<string, string> = {
   o: 'Openness',
@@ -44,13 +49,32 @@ export function HorseDetailPage(): ReactElement {
   const [jobStructures, setJobStructures] = useState<Buildable[]>([]);
   const [pick, setPick] = useState('');
   const [jobBusy, setJobBusy] = useState(false);
-  const { refresh } = useSession();
+  const { herd, refresh } = useSession();
   const [quote, setQuote] = useState<UploadQuote | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [sentOff, setSentOff] = useState<{ name: string; coat: string; reward: number } | null>(
     null,
   );
+
+  // The Living Herd's ties (§8) — this horse's companions, names resolved from the herd list.
+  const social = useLoad(
+    useCallback(async () => {
+      const [rels, herdmates] = await Promise.all([
+        getRelationships(),
+        herd ? listHerdHorses(herd.id) : Promise.resolve([] as Horse[]),
+      ]);
+      return { rels, herdmates };
+    }, [herd]),
+  );
+  const companions =
+    id && social.data
+      ? companionsOf(
+          id,
+          social.data.rels,
+          (hid) => social.data?.herdmates.find((h) => h.id === hid)?.name ?? 'a herdmate',
+        )
+      : [];
 
   const loadJob = useCallback(() => {
     if (!id) return;
@@ -291,6 +315,24 @@ export function HorseDetailPage(): ReactElement {
               </div>
             ))}
           </div>
+
+          {companions.length > 0 && (
+            <>
+              <h2 className="section-h">Companions</h2>
+              <div className="guide-grid">
+                {companions.map((c) => (
+                  <Link
+                    to={`/horses/${c.horseId}`}
+                    className="guide-chip companion"
+                    key={c.horseId}
+                    title={`affinity ${c.affinity}`}
+                  >
+                    {TIE_GLYPH[c.type] ?? '•'} {c.name} <span className="muted">· {c.type}</span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
 
           {ped && ped.parents.length > 0 && (
             <>

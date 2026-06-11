@@ -1010,3 +1010,18 @@ button.ghost {
   color: var(--leaf, #2c5a1d);
   font-weight: 700;
 }
+
+/* ── Living-Herd surfacing (§8) — the day's pasture scene + companion chips ── */
+.vignette {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+a.companion {
+  text-decoration: none;
+  color: var(--ink);
+}
+a.companion:hover {
+  background: var(--sage);
+}

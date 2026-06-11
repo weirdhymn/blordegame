@@ -4,8 +4,16 @@ import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
 import type { Horse } from '../api/horses.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
+import type { BondBadge } from '../util/herdmates.js';
 
-export function HorseCard({ horse }: { horse: Horse }): ReactElement {
+export function HorseCard({
+  horse,
+  bond,
+}: {
+  horse: Horse;
+  /** The strongest Living-Herd tie this horse wears (💞/🤝/⚡), if any (§8). */
+  bond?: BondBadge | null;
+}): ReactElement {
   // Preview render only (golden rule): the look is derived client-side from the stored
   // (genotype, seed, glitch, lifeStage) — pixel-identical to the server's /spec.
   const spec = useMemo(
@@ -26,6 +34,7 @@ export function HorseCard({ horse }: { horse: Horse }): ReactElement {
           <span title="Had a rough day — groom to cheer it up">😟 </span>
         )}
         {horse.name ?? 'Unnamed'}
+        {bond && <span title={bond.label}> {bond.glyph}</span>}
       </div>
       <div className="horse-coat">{spec.foalWhite ? 'Foal · coat hidden' : spec.displayName}</div>
     </Link>

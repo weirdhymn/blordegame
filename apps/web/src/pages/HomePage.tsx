@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { checkIn, hasNews, type DailyResult } from '../api/daily.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
+import { getRelationships } from '../api/social.js';
 import { DailyGather } from '../components/DailyGather.js';
 import { HerdTier } from '../components/HerdTier.js';
 import { HorseCard } from '../components/HorseCard.js';
 import { MorningPost } from '../components/MorningPost.js';
+import { useLoad } from '../hooks/useLoad.js';
+import { bondBadge, dailyVignette } from '../util/herdmates.js';
 import { useSession } from '../session.js';
 
 export function HomePage(): ReactElement {
@@ -36,6 +39,19 @@ export function HomePage(): ReactElement {
     const daily = consumeDaily();
     if (daily && hasNews(daily)) setPost(daily);
   }, [consumeDaily]);
+
+  // The Living Herd's ties (§8) — bond badges on the cards + the day's little pasture scene.
+  const relsLoad = useLoad(useCallback(() => getRelationships(), []));
+  const rels = relsLoad.data ?? [];
+  const nameOf = useCallback(
+    (id: string): string => horses?.find((h) => h.id === id)?.name ?? 'a herdmate',
+    [horses],
+  );
+  // Day-grained seed: the vignette is the day's scene, not a per-render slot machine.
+  const vignette =
+    horses && horses.length > 0
+      ? dailyVignette(rels, nameOf, Math.floor(Date.now() / 86_400_000))
+      : null;
 
   async function run(fn: () => Promise<DailyResult>): Promise<void> {
     setBusy(true);
@@ -82,6 +98,7 @@ export function HomePage(): ReactElement {
         </aside>
         <div className="pasture-main">
           <h2 className="section-h">Your herd</h2>
+          {vignette && <p className="vignette">{vignette}</p>}
           {horses === null && <div className="loading">Loading your herd…</div>}
           {horses && horses.length === 0 && (
             <div className="card placeholder">
@@ -91,7 +108,7 @@ export function HomePage(): ReactElement {
           {horses && horses.length > 0 && (
             <div className="horse-grid">
               {horses.map((h) => (
-                <HorseCard key={h.id} horse={h} />
+                <HorseCard key={h.id} horse={h} bond={bondBadge(h.id, rels)} />
               ))}
             </div>
           )}

@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { DAILY_CUBES, FOAL_TO_ADULT_MS, GROOM_CUBES } from '@blorse/balance';
+import { resolve } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay, nextRollover } from '../util/clock.js';
@@ -12,6 +13,21 @@ import { resolveJobsForDay } from './jobs.js';
 /** Cap on per-day job resolution during catch-up so a long absence stays cheap (§8.2). */
 const MAX_JOB_CATCHUP_DAYS = 30;
 
+/** A foal whose coat was revealed this check-in — the Morning Post's headline moment. */
+export interface MaturedFoal {
+  id: string;
+  name: string | null;
+  /** The revealed coat's display name (derived — never stored, §4). */
+  coat: string;
+}
+
+/** A Living-Herd beat written during THIS catch-up (the Morning Post's news column, §8). */
+export interface DigestBeat {
+  day: number;
+  text: string;
+  glyph: string | null;
+}
+
 export interface DailyResult {
   daysAdvanced: number;
   cubesGained: number;
@@ -19,24 +35,26 @@ export interface DailyResult {
   jobCubes: number;
   /** The next-morning bonus from last night's groom (§7), if one was pending. */
   groomCubes: number;
-  /** Horse ids whose coat was revealed (foal → adult) this check-in. */
-  matured: string[];
+  /** Foals whose coat was revealed (foal → adult) this check-in. */
+  matured: MaturedFoal[];
+  /** The autonomy beats generated during this catch-up, in day order (also in the Journal). */
+  journal: DigestBeat[];
   day: number;
   nextRolloverMs: number;
 }
 
 /** Reveal foals whose maturation time has passed (white → adult coat, §4.2/§7). */
-async function matureFoals(db: DB, herdId: string, nowMs: number): Promise<string[]> {
+async function matureFoals(db: DB, herdId: string, nowMs: number): Promise<MaturedFoal[]> {
   const foals = await db
     .select()
     .from(horses)
     .where(and(eq(horses.herdId, herdId), eq(horses.lifeStage, 'foal')));
-  const matured: string[] = [];
+  const matured: MaturedFoal[] = [];
   for (const f of foals) {
     if (f.bornAt.getTime() + FOAL_TO_ADULT_MS <= nowMs) {
       await db.update(horses).set({ lifeStage: 'adult' }).where(eq(horses.id, f.id));
       await recordDiscovery(db, herdId, f); // the reveal enters the Field Guide
-      matured.push(f.id);
+      matured.push({ id: f.id, name: f.name, coat: resolve(f.genotype).displayName });
     }
   }
   return matured;
@@ -58,6 +76,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       jobCubes: 0,
       groomCubes: 0,
       matured: [],
+      journal: [],
       day,
       nextRolloverMs: nextRollover(nowMs),
     };
@@ -68,6 +87,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
 
   // Resolve jobs deterministically for each missed day (bounded for cheap catch-up).
   let jobCubes = 0;
+  const journal: DigestBeat[] = [];
   const jobDays = Math.min(daysAdvanced, MAX_JOB_CATCHUP_DAYS);
   for (let i = 0; i < jobDays; i++) {
     const tickDay = herd.lastSimTick + 1 + i;
@@ -79,13 +99,16 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       mulberry32((herd.simSeed ^ tickDay) >>> 0),
       dayMeal,
     );
-    // The Living Herd (§8): relationships + clubs evolve, producing journal beats.
+    // The Living Herd (§8): relationships + clubs evolve, producing journal beats. They land in
+    // the Journal as before — AND ride along in the result, so the Morning Post can read them
+    // without a second query.
     const events = await resolveAutonomyForDay(
       db,
       herdId,
       mulberry32((herd.simSeed ^ tickDay ^ 0x9e3779b9) >>> 0),
     );
     await addJournalEvents(db, herdId, tickDay, events);
+    for (const e of events) journal.push({ day: tickDay, text: e.text, glyph: e.glyph ?? null });
   }
 
   // "Wake to a reward": a pending groom from last night pays its small flat bonus at this rollover.
@@ -108,6 +131,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     jobCubes,
     groomCubes,
     matured,
+    journal,
     day,
     nextRolloverMs: nextRollover(nowMs),
   };

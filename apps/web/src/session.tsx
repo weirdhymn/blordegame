@@ -3,11 +3,13 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react';
 import { getMe, logout as apiLogout, type Herd, type SessionUser } from './api/auth.js';
+import type { DailyResult } from './api/daily.js';
 
 interface SessionState {
   user: SessionUser | null;
@@ -16,8 +18,11 @@ interface SessionState {
   /** Re-fetch /me (e.g. after an action that changes Cubes). */
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
-  /** Adopt a session from a register/login response without a round-trip. */
-  setSession: (user: SessionUser, herd: Herd) => void;
+  /** Adopt a session from a register/login response without a round-trip. Login's daily
+   *  catch-up digest rides along so the Pasture can show the Morning Post on arrival. */
+  setSession: (user: SessionUser, herd: Herd, daily?: DailyResult) => void;
+  /** Take (and clear) the digest the login carried — consumed once by the Pasture. */
+  consumeDaily: () => DailyResult | null;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -54,14 +59,26 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactEle
     setHerd(null);
   }, []);
 
-  const setSession = useCallback((u: SessionUser, h: Herd): void => {
+  // The login digest waits here (a ref: consume-once survives StrictMode's double effects).
+  const pendingDaily = useRef<DailyResult | null>(null);
+
+  const setSession = useCallback((u: SessionUser, h: Herd, daily?: DailyResult): void => {
     setUser(u);
     setHerd(h);
+    if (daily) pendingDaily.current = daily;
     setLoading(false);
   }, []);
 
+  const consumeDaily = useCallback((): DailyResult | null => {
+    const d = pendingDaily.current;
+    pendingDaily.current = null;
+    return d;
+  }, []);
+
   return (
-    <SessionContext.Provider value={{ user, herd, loading, refresh, signOut, setSession }}>
+    <SessionContext.Provider
+      value={{ user, herd, loading, refresh, signOut, setSession, consumeDaily }}
+    >
       {children}
     </SessionContext.Provider>
   );

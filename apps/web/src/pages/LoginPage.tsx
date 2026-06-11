@@ -18,7 +18,7 @@ export function LoginPage(): ReactElement {
     setError(null);
     try {
       const res = await login(username.trim(), password);
-      setSession(res.user, res.herd);
+      setSession(res.user, res.herd, res.daily); // the digest rides to the Pasture's Morning Post
       navigate('/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not log in.');

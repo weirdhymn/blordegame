@@ -18,7 +18,7 @@ import {
 import { dayToMs, gameDay } from '../util/clock.js';
 import { grantStarterHorses } from './auth.js';
 import { getRelationships } from './autonomy.js';
-import { advanceHerd, type DailyResult } from './daily.js';
+import { advanceHerd, type DailyResult, type MaturedFoal } from './daily.js';
 import { getHorse, mintHorse } from './horse.js';
 import { getInventory, grantItems, type ItemStack } from './inventory.js';
 
@@ -109,7 +109,7 @@ export async function debugMatureHorse(
   db: DB,
   herdId: string,
   horseId: string,
-): Promise<{ ok: boolean; code?: string; matured?: string[] }> {
+): Promise<{ ok: boolean; code?: string; matured?: MaturedFoal[] }> {
   const horse = await getHorse(db, horseId);
   if (!horse || horse.herdId !== herdId) return { ok: false, code: 'not_found' };
   if (horse.lifeStage === 'adult') return { ok: false, code: 'already_adult' };

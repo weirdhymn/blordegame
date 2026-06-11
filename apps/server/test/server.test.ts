@@ -548,7 +548,14 @@ async function main(): Promise<void> {
     true,
   );
   const matured = await advanceHerd(db, herdId, baseNow + FOAL_TO_ADULT_MS + 60_000);
-  check('foal matured on check-in', matured.matured.includes(foal.id));
+  check(
+    'foal matured on check-in',
+    matured.matured.some((m) => m.id === foal.id),
+  );
+  check(
+    'the reveal names the coat (the Morning Post headline)',
+    (matured.matured.find((m) => m.id === foal.id)?.coat ?? '').length > 0,
+  );
   const grown = await inject({ method: 'GET', url: `/horses/${foal.id}` });
   eq('matured foal is now adult', grown.json<{ lifeStage: string }>().lifeStage, 'adult');
   const afterSpec = await inject({ method: 'GET', url: `/horses/${foal.id}/spec` });

@@ -1,30 +1,20 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
-import { checkIn, type DailyResult } from '../api/daily.js';
+import { checkIn, hasNews, type DailyResult } from '../api/daily.js';
 import { listHerdHorses, type Horse } from '../api/horses.js';
 import { DailyGather } from '../components/DailyGather.js';
 import { HerdTier } from '../components/HerdTier.js';
 import { HorseCard } from '../components/HorseCard.js';
+import { MorningPost } from '../components/MorningPost.js';
 import { useSession } from '../session.js';
 
-function describe(r: DailyResult): string {
-  if (r.daysAdvanced === 0) return 'All caught up — nothing new today.';
-  const bits = [
-    `+${r.daysAdvanced} day${r.daysAdvanced > 1 ? 's' : ''}`,
-    `+${r.cubesGained} Cubes`,
-  ];
-  if (r.jobCubes > 0) bits.push(`+${r.jobCubes} from jobs`);
-  if (r.matured.length > 0)
-    bits.push(`${r.matured.length} foal${r.matured.length > 1 ? 's' : ''} grew up`);
-  return bits.join(' · ');
-}
-
 export function HomePage(): ReactElement {
-  const { herd, refresh } = useSession();
+  const { herd, refresh, consumeDaily } = useSession();
   const [horses, setHorses] = useState<Horse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [post, setPost] = useState<DailyResult | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadHorses = useCallback(() => {
@@ -41,12 +31,20 @@ export function HomePage(): ReactElement {
     loadHorses();
   }, [loadHorses]);
 
+  // Login carried the overnight digest here (§8.2) — deliver the Morning Post on arrival.
+  useEffect(() => {
+    const daily = consumeDaily();
+    if (daily && hasNews(daily)) setPost(daily);
+  }, [consumeDaily]);
+
   async function run(fn: () => Promise<DailyResult>): Promise<void> {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      setNote(describe(await fn()));
+      const r = await fn();
+      if (hasNews(r)) setPost(r);
+      else setNote('All caught up — nothing new today.');
       await refresh();
       loadHorses();
     } catch (e) {
@@ -58,6 +56,7 @@ export function HomePage(): ReactElement {
 
   return (
     <div className="pasture">
+      {post && <MorningPost daily={post} horses={horses ?? []} onClose={() => setPost(null)} />}
       <h1>The Pasture</h1>
       {note && <div className="note">{note}</div>}
       {error && (

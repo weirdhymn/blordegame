@@ -935,3 +935,54 @@ button.ghost {
   color: var(--ink-soft);
   font-weight: 400;
 }
+
+/* ── The Morning Post (§8.2) — the overnight digest, dressed as a tiny pixel newspaper ── */
+.morning-post {
+  max-width: 34rem;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.post-masthead {
+  font-family: var(--font-display, inherit);
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+}
+.post-dateline {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px dashed var(--sage-deep);
+}
+.post-section {
+  margin: 0 0 12px;
+}
+.post-ledger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.post-reveal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.post-reveal .horse-canvas {
+  /* never flex-squeeze the sprite — fractional scaling blurs pixel art (the integer-scale rule) */
+  flex-shrink: 0;
+}
+.post-reveal p {
+  margin: 0;
+}
+.post-actions {
+  justify-content: center;
+  margin-top: 12px;
+}

@@ -34,7 +34,7 @@ import {
 } from '@blorse/balance';
 import { breedFoal, type Genotype } from '@blorse/genetics';
 import { eq as drizzleEq } from 'drizzle-orm';
-import type { FastifyInstance, InjectOptions } from 'fastify';
+import type { InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createPgliteDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
@@ -103,28 +103,7 @@ import {
 } from '../src/services/upload.js';
 import { creditCubes, spendCubes } from '../src/services/wallet.js';
 import { mulberry32 } from '../src/util/rng.js';
-
-let pass = 0;
-let fail = 0;
-function check(desc: string, cond: boolean): void {
-  if (cond) pass++;
-  else {
-    fail++;
-    console.error(`  ✗ ${desc}`);
-  }
-}
-function eq<T>(desc: string, actual: T, expected: T): void {
-  check(
-    `${desc} (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)})`,
-    actual === expected,
-  );
-}
-
-type InjectResult = Awaited<ReturnType<FastifyInstance['inject']>>;
-function cookieOf(res: InjectResult): string {
-  const c = res.cookies.find((x) => x.name === 'blorse_session');
-  return c ? `blorse_session=${c.value}` : '';
-}
+import { check, cookieOf, eq, section, summarize } from './harness.js';
 
 async function main(): Promise<void> {
   const db = createPgliteDb();
@@ -140,6 +119,7 @@ async function main(): Promise<void> {
     app.inject({ ...opts, url: `/api${typeof opts.url === 'string' ? opts.url : ''}` });
 
   // --- register: creates User + 1:1 Herd, issues a session ---
+  section('register: creates User + 1:1 Herd, issues a session');
   const reg = await inject({
     method: 'POST',
     url: '/auth/register',
@@ -153,6 +133,7 @@ async function main(): Promise<void> {
   check('session cookie set', cookieOf(reg).includes('blorse_session='));
 
   // --- cold-start grant (§6, §14): a fresh account is immediately playable ---
+  section('cold-start grant (§6, §14): a fresh account is immediately playable');
   const startHerd = reg.json<{ herd: { id: string; cubes: number } }>().herd;
   eq('new herd starts with the Cubes purse', startHerd.cubes, STARTING_CUBES);
   const starters = (await inject({ method: 'GET', url: `/herds/${startHerd.id}/horses` })).json<
@@ -173,6 +154,7 @@ async function main(): Promise<void> {
   await db.update(herds).set({ level: 5 }).where(drizzleEq(herds.id, startHerd.id));
 
   // --- duplicate + weak input ---
+  section('duplicate + weak input');
   const dup = await inject({
     method: 'POST',
     url: '/auth/register',
@@ -187,6 +169,7 @@ async function main(): Promise<void> {
   eq('weak credentials → 400', weak.statusCode, 400);
 
   // --- login + /me ---
+  section('login + /me');
   const login = await inject({
     method: 'POST',
     url: '/auth/login',
@@ -206,6 +189,7 @@ async function main(): Promise<void> {
   eq('wrong password → 401', badPw.statusCode, 401);
 
   // --- mint + load + render spec (derived, cached, deterministic) ---
+  section('mint + load + render spec (derived, cached, deterministic)');
   const mint = await inject({
     method: 'POST',
     url: '/horses',
@@ -234,6 +218,7 @@ async function main(): Promise<void> {
   eq('mint without auth → 401', noAuth.statusCode, 401);
 
   // --- lineage closure (§5.4a), transitive ---
+  section('lineage closure (§5.4a), transitive');
   const a = await mintHorse(db, { herdId: null, genotype: { E: 'Ee', A: 'Aa' }, origin: 'wild' });
   const b = await mintHorse(db, { herdId: null, genotype: { E: 'ee' }, origin: 'wild' });
   const e = await mintHorse(db, { herdId: null, genotype: { E: 'Ee', A: 'aa' }, origin: 'wild' });
@@ -258,6 +243,7 @@ async function main(): Promise<void> {
   eq('unrelated may breed', await shareLineage(db, a.id, e.id), false);
 
   // --- Phase 4: breeding ---
+  section('Phase 4: breeding');
   const herdId = me.json<{ herd: { id: string } }>().herd.id;
   const mateRes = await inject({
     method: 'POST',
@@ -368,6 +354,7 @@ async function main(): Promise<void> {
   check('viable breed after non-viable (no cooldown burned)', afterNv.ok && afterNv.viable);
 
   // --- Phase 5: exploration & quests ---
+  section('Phase 5: exploration & quests');
   // the viable breeds above advanced the 'A New Foal' breed quest to completion
   const quests0 = await inject({ method: 'GET', url: '/quests', headers: { cookie } });
   eq('quests → 200', quests0.statusCode, 200);
@@ -467,6 +454,7 @@ async function main(): Promise<void> {
   );
 
   // --- per-horse daily gather cap (§7): controlled-clock service tests ---
+  section('per-horse daily gather cap (§7): controlled-clock service tests');
   eq('the gather cap is once per horse per day', GATHER_PER_HORSE_PER_DAY, 1);
   {
     const forager = await inject({
@@ -535,6 +523,7 @@ async function main(): Promise<void> {
   }
 
   // --- Phase 6: aging, care & daily rhythm ---
+  section('Phase 6: aging, care & daily rhythm');
   const DAY_MS = 86_400_000;
   const baseNow = Date.now();
 
@@ -581,6 +570,7 @@ async function main(): Promise<void> {
   eq('POST /daily → 200', daily.statusCode, 200);
 
   // --- Phase 7: Pasture, gathering & crafting ---
+  section('Phase 7: Pasture, gathering & crafting');
   // stock raw materials (as if from roaming): timber → planks, clay → bricks
   await grantItems(db, herdId, [
     { id: 'timber', qty: 20 },
@@ -672,6 +662,7 @@ async function main(): Promise<void> {
   );
 
   // --- Phase 8a: stats, dice & jobs ---
+  section('Phase 8a: stats, dice & jobs');
   const horseView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{
     stats: Record<string, number>;
     skills: Record<string, { level: number; xp: number }>;
@@ -913,6 +904,7 @@ async function main(): Promise<void> {
   );
 
   // --- Phase 8b: adventures & the Tavern ---
+  section('Phase 8b: adventures & the Tavern');
   const advRun = await inject({
     method: 'POST',
     url: '/adventure',
@@ -974,6 +966,7 @@ async function main(): Promise<void> {
   check('re-recruiting a claimed horse fails (atomic)', recruit2.statusCode !== 201);
 
   // --- Phase 8c: interactive "story" adventures (§9.3) ---
+  section('Phase 8c: interactive "story" adventures (§9.3)');
   // Pure scene resolution is deterministic under a seeded RNG.
   const flatStats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const calm1 = await mintHorse(db, {
@@ -1357,6 +1350,7 @@ async function main(): Promise<void> {
   );
 
   // ── Expedition selection + the deliberate Keeper challenge (§7/§9.4c) ────────────────────────────
+  section('Expedition selection + the deliberate Keeper challenge (§7/§9.4c)');
   // Regular expeditions are randomized (region-pick only); each region boss is a separate, EARNED
   // Keeper challenge — out of the random pool. Confirm every progression boss stays reachable, and a
   // random draw never hands one back.
@@ -1474,6 +1468,7 @@ async function main(): Promise<void> {
   }
 
   // --- "The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on the scene-tree engine ---
+  section('"The Lost Lamb" (§9.3): deep branching + cross-scene consequence, on t');
   {
     const lamb = ADVENTURE_BY_ID.get('lost-lamb');
     check('lost-lamb script exists in the Green Grass pool', !!lamb);
@@ -1676,6 +1671,7 @@ async function main(): Promise<void> {
   }
 
   // --- Uploading to The Cloud (§14.3a): reward scaling, guards, FK-clean deletion ---
+  section('Uploading to The Cloud (§14.3a): reward scaling, guards, FK-clean dele');
   const flat6 = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const maxedSkills: Record<string, { level: number; xp: number }> = {};
   for (const k of SKILL_KEYS) maxedSkills[k] = { level: 8, xp: 0 };
@@ -1870,6 +1866,7 @@ async function main(): Promise<void> {
   );
 
   // --- Adventures train horses (§9.3): per-check skill XP + the cosmetic "Seasoned" mark ---
+  section('Adventures train horses (§9.3): per-check skill XP + the cosmetic "Sea');
   const trainee = await mintHorse(db, {
     herdId,
     genotype: { E: 'Ee', A: 'Aa' },
@@ -1934,6 +1931,7 @@ async function main(): Promise<void> {
   );
 
   // --- Phase 8d: turn-based combat (§9.4) — the minimum playable battle ---
+  section('Phase 8d: turn-based combat (§9.4) — the minimum playable battle');
   const POTION = 'healing-potion';
   const herdCubes = async (): Promise<number> =>
     (await inject({ method: 'GET', url: '/me', headers: { cookie } })).json<{
@@ -2375,6 +2373,7 @@ async function main(): Promise<void> {
   }
 
   // --- Phase 9: The Living Herd ---
+  section('Phase 9: The Living Herd');
   const pView = (await inject({ method: 'GET', url: `/horses/${id}` })).json<{
     personality: Record<string, number>;
     name: string;
@@ -2469,6 +2468,7 @@ async function main(): Promise<void> {
   );
 
   // --- Phase 10: social & economy ---
+  section('Phase 10: social & economy');
   // Marketplace: plum lists a horse, cherry buys it
   const list = await inject({
     method: 'POST',
@@ -2579,6 +2579,7 @@ async function main(): Promise<void> {
   );
 
   // ── Inventory quick-sell (§7/§10): a modest convenience dump, audited; rares/grains protected ──
+  section('Inventory quick-sell (§7/§10): a modest convenience dump, audited; rar');
   {
     const timber0 = await itemQty(db, herdId, 'timber');
     await grantItems(db, herdId, [
@@ -2617,6 +2618,7 @@ async function main(): Promise<void> {
   }
 
   // ── The atomic economy kernel (§11 hardening): conditional spends, all-or-nothing consumes ──
+  section('The atomic economy kernel (§11 hardening): conditional spends, all-or-');
   {
     const balance = async (): Promise<number> =>
       (await db.query.herds.findFirst({ where: drizzleEq(herds.id, herdId) }))?.cubes ?? 0;
@@ -2644,6 +2646,7 @@ async function main(): Promise<void> {
   }
 
   // ───────────────────────── Phase 11 — beta hardening ─────────────────────────
+  section('Phase 11 — beta hardening');
 
   // Report flow: any authed player can file a report.
   const rep1 = await inject({
@@ -2786,6 +2789,7 @@ async function main(): Promise<void> {
   check('the report endpoint rate-limits a burst (429)', sawRateLimit);
 
   // ───────────────────────── prod-hardening gates ─────────────────────────
+  section('prod-hardening gates');
   // Fresh app instances exercise the production gates (the main suite runs with them open).
 
   // 1) Auth rate limit — a burst of logins from one IP gets throttled.
@@ -3082,6 +3086,7 @@ async function main(): Promise<void> {
   }
 
   // ── §7 herd-tier progression spine (the Cubes sink + milestone-gated ladder) ──
+  section('§7 herd-tier progression spine (the Cubes sink + milestone-gated ladde');
   {
     const minimalBattle = { round: 1, turnIndex: 0, order: [], combatants: [], log: [] };
     const freshHerd = async (name: string): Promise<string> => {
@@ -3216,6 +3221,7 @@ async function main(): Promise<void> {
   }
 
   // ── §7 Daily Care hub: cook (morning ritual) + groom (evening ritual) ──
+  section('§7 Daily Care hub: cook (morning ritual) + groom (evening ritual)');
   {
     // cookMeal (pure): the per-stat cap and the rare multiplier
     check('cookMeal caps a stat at +5 (5 grains to max it)', cookMeal({ str: 9 }).str === 5);
@@ -3333,10 +3339,7 @@ async function main(): Promise<void> {
 
   await app.close();
 
-  console.log(
-    `\n=== BLORSE server tests ===\npassed: ${pass}   failed: ${fail}   total: ${pass + fail}`,
-  );
-  process.exit(fail === 0 ? 0 : 1);
+  process.exit(summarize());
 }
 
 main().catch((err: unknown) => {

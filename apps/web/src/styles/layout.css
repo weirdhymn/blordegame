@@ -1,0 +1,202 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   DESKTOP DASHBOARD LAYOUT — wide, multi-panel composition instead of a tall
+   single column. Desktop-first: optimise for wide screens, collapse cleanly to
+   one column on narrow ones. The horizontal space buys MORE PANELS side-by-side,
+   never wider text — content widths inside each panel stay comfortable.
+   POC: the Pasture only. Other screens keep a centred readable column until the
+   pattern is approved + rolled out.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Un-migrated pages keep a comfortable single column, centred in the wide shell
+   (so the extra width never stretches their text lines edge-to-edge). */
+.page > * {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+/* ── The Pasture dashboard ── */
+.page > .pasture {
+  max-width: none; /* break out of the readable-column cap to use the full desktop width */
+}
+.pasture-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* base (narrow): one stacked column */
+  gap: var(--sp-3);
+  align-items: start;
+}
+.pasture-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+/* Tighten the herd cards so three fit per row in the centre panel on a desktop screen. */
+.pasture-main .horse-grid {
+  gap: var(--sp-2);
+}
+.pasture-main .horse-card {
+  padding: var(--sp-1);
+}
+.pasture-side > .card {
+  margin-bottom: 0; /* the flex gap owns the spacing — no doubled margin */
+}
+.pasture-main {
+  min-width: 0; /* let the grid track shrink rather than overflow the sprites */
+}
+
+@media (min-width: 900px) {
+  /* Desktop: herd grid centre-stage on the left, the panels as a right-hand rail. */
+  .pasture-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .pasture-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .pasture-side {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: var(--sp-4); /* the rail stays in view while a big herd scrolls past */
+  }
+}
+
+/* ── Other information-rich screens — same desktop-first, multi-panel pattern ── */
+.page > .care,
+.page > .breed,
+.page > .detail {
+  max-width: 1100px; /* room for two panels without stretching text edge-to-edge */
+}
+.care-grid,
+.breed-grid,
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* base (narrow): a single stacked column */
+  gap: var(--sp-4);
+  align-items: start;
+}
+.care-grid > .card,
+.breed-outcome > .card {
+  margin-bottom: 0; /* the grid gap owns the spacing between side-by-side panels */
+}
+@media (min-width: 900px) {
+  /* Care: the two daily rituals side-by-side — cook (wider) | groom. */
+  .care-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+  /* Breeding station: parent controls (fixed rail) | the live foal-odds + result. */
+  .breed-grid {
+    grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  }
+  /* Horse detail = a character sheet: portrait + actions | the stat block. */
+  .detail-grid {
+    grid-template-columns: minmax(0, 470px) minmax(0, 1fr);
+  }
+}
+
+/* These migrated screens break out of the 760 reading column into their own multi-panel layouts. */
+.page > .workshop,
+.page > .guide,
+.page > .inventory {
+  max-width: 1100px;
+}
+
+/* ── Workshop — condensed into a dense three-panel grid (Stash | Crafting | Grounds) ── */
+.workshop-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* narrow: one stacked column */
+  gap: var(--sp-4);
+  align-items: start;
+}
+.workshop-grid > .section {
+  margin: 0; /* the grid gap owns the spacing */
+}
+@media (min-width: 900px) {
+  .workshop-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── Field Guide — a visual catalog of revealed coats + a study panel ── */
+.guide-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .guide-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  .guide-detail {
+    position: sticky;
+    top: var(--sp-4);
+  }
+}
+.guide-coat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  box-shadow: var(--sp-1) var(--sp-1) 0 0 var(--sage-deep);
+}
+.guide-coat:hover {
+  background: var(--band-paper);
+  box-shadow: var(--sp-1) var(--sp-1) 0 0 var(--ink);
+}
+.guide-coat.on {
+  background: var(--band-sage);
+  box-shadow: var(--sp-1) var(--sp-1) 0 0 var(--ink);
+}
+.guide-coat .horse-canvas,
+.guide-detail .horse-canvas {
+  border: var(--bd) solid var(--ink);
+  background: var(--sage);
+}
+.guide-coat-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+.guide-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.guide-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.guide-swatch {
+  display: inline-block;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: var(--bd) solid var(--ink);
+  background: var(--sage-deep);
+}
+.guide-swatch.lg {
+  width: 150px;
+  height: 126px;
+}
+
+/* ── Inventory — a responsive grid of item cards with quick-sell ── */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.inv-item {
+  padding: var(--sp-3);
+  gap: var(--sp-2);
+}
+.inv-item.kept {
+  opacity: 0.8;
+}
+.inv-name {
+  font-weight: 700;
+}
+.inv-kind {
+  text-transform: capitalize;
+}

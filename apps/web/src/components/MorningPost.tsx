@@ -88,6 +88,25 @@ export function MorningPost(props: {
           </ul>
         </section>
 
+        {daily.questCompletions.length > 0 && (
+          <section className="post-section">
+            <h3 className="section-h">🎓 Quests complete</h3>
+            <ul className="post-ledger">
+              {daily.questCompletions.map((q) => (
+                <li key={q.questId}>
+                  ✓ <strong>{q.title}</strong>
+                  {q.cubes > 0 && (
+                    <>
+                      {' '}
+                      — <strong>+{q.cubes} ⬡</strong>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {beats.length > 0 && (
           <section className="post-section">
             <h3 className="section-h">📰 While you were away</h3>

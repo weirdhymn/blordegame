@@ -1,8 +1,15 @@
-export type ObjectiveType = 'roam' | 'breed' | 'collect';
+export type ObjectiveType =
+  | 'roam'
+  | 'breed'
+  | 'collect'
+  | 'cook'
+  | 'groom'
+  | 'expedition'
+  | 'sunrise';
 
 export interface QuestObjective {
   type: ObjectiveType;
-  /** For 'roam'. */
+  /** For 'roam' (required) and 'expedition' (optional — omit to match any region). */
   regionId?: string;
   /** For 'collect'. */
   itemId?: string;
@@ -27,6 +34,27 @@ export interface QuestDef {
 // A small starter chain. Completing 'first-steps' / 'into-the-dunes' also unlocks the
 // next region (regions reference these via `requiresQuest`).
 export const QUESTS: QuestDef[] = [
+  // The onboarding checklist (§7i): one quest that walks the whole daily rhythm in order —
+  // forage (grains come home) → cook → expedition → groom → wake to the reward. The order is
+  // taught by the labels, never enforced (cozy: it's a rhythm, not a railroad).
+  {
+    id: 'first-day',
+    title: 'Your First Day',
+    requires: null,
+    objectives: [
+      {
+        type: 'roam',
+        regionId: 'green-grass',
+        count: 1,
+        label: '🧺 Send the herd foraging (grains ride home with them)',
+      },
+      { type: 'cook', count: 1, label: '🍳 Cook a morning meal at the Care hub' },
+      { type: 'expedition', count: 1, label: '🗺 Set out on an expedition (Adventure)' },
+      { type: 'groom', count: 1, label: '🌙 Groom the herd at dusk' },
+      { type: 'sunrise', count: 1, label: '☀ Greet the next sunrise' },
+    ],
+    reward: { cubes: 250 },
+  },
   {
     id: 'first-steps',
     title: 'First Steps',

@@ -13,7 +13,11 @@ import { grantItems } from './inventory.js';
 export type GameEvent =
   | { type: 'roam'; regionId: string }
   | { type: 'breed' }
-  | { type: 'collect'; itemId: string };
+  | { type: 'collect'; itemId: string }
+  | { type: 'cook' }
+  | { type: 'groom' }
+  | { type: 'expedition'; regionId: string }
+  | { type: 'sunrise' };
 
 export interface QuestCompletion {
   questId: string;
@@ -80,7 +84,9 @@ function objectiveMatches(obj: QuestObjective, event: GameEvent): boolean {
   if (obj.type !== event.type) return false;
   if (event.type === 'roam') return obj.regionId === event.regionId;
   if (event.type === 'collect') return obj.itemId === event.itemId;
-  return true; // breed
+  // An expedition objective may pin a region, or omit it to match any.
+  if (event.type === 'expedition') return !obj.regionId || obj.regionId === event.regionId;
+  return true; // breed / cook / groom / sunrise carry no qualifiers
 }
 
 async function grantReward(db: DB, herdId: string, def: QuestDef): Promise<void> {

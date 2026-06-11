@@ -35,7 +35,7 @@ import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { omenFor } from './omens.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
-import { isQuestCompleted } from './quests.js';
+import { isQuestCompleted, recordEvent } from './quests.js';
 import {
   accomplishmentsForLevel,
   grantSkillXp,
@@ -549,6 +549,7 @@ export async function chooseInRun(
     const summary = await bankAndEnd(db, {
       id: run.id,
       herdId,
+      regionId: run.regionId,
       step,
       loot,
       cubes,
@@ -604,6 +605,7 @@ export async function chooseInRun(
 interface RunEndState {
   id: string;
   herdId: string;
+  regionId: string;
   step: number;
   loot: Record<string, number>;
   cubes: number;
@@ -635,5 +637,7 @@ async function bankAndEnd(
       befriended: run.befriended,
     })
     .where(eq(adventureRuns.id, run.id));
+  // A completed expedition advances the first-day rhythm quest (§7i) — any ending counts.
+  await recordEvent(db, run.herdId, { type: 'expedition', regionId: run.regionId });
   return { loot, cubes: run.cubes, fatigue: run.fatigue, befriended: run.befriended };
 }

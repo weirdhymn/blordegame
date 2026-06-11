@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { DAILY_CUBES, FOAL_TO_ADULT_MS, GROOM_CUBES } from '@blorse/balance';
 import { resolve } from '@blorse/genetics';
+import { QUEST_BY_ID } from '../content/quests.js';
 import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay, nextRollover } from '../util/clock.js';
@@ -9,6 +10,7 @@ import { resolveAutonomyForDay } from './autonomy.js';
 import { recordDiscovery } from './fieldguide.js';
 import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
+import { recordEvent } from './quests.js';
 
 /** Cap on per-day job resolution during catch-up so a long absence stays cheap (§8.2). */
 const MAX_JOB_CATCHUP_DAYS = 30;
@@ -28,6 +30,13 @@ export interface DigestBeat {
   glyph: string | null;
 }
 
+/** A quest that completed at this sunrise (the first-day rhythm chain ends here, §7i). */
+export interface DigestQuest {
+  questId: string;
+  title: string;
+  cubes: number;
+}
+
 export interface DailyResult {
   daysAdvanced: number;
   cubesGained: number;
@@ -39,6 +48,8 @@ export interface DailyResult {
   matured: MaturedFoal[];
   /** The autonomy beats generated during this catch-up, in day order (also in the Journal). */
   journal: DigestBeat[];
+  /** Quests completed by this sunrise (rewards already granted) — the Post celebrates them. */
+  questCompletions: DigestQuest[];
   day: number;
   nextRolloverMs: number;
 }
@@ -77,6 +88,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       groomCubes: 0,
       matured: [],
       journal: [],
+      questCompletions: [],
       day,
       nextRolloverMs: nextRollover(nowMs),
     };
@@ -125,6 +137,15 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       .where(eq(herds.id, herdId));
   }
 
+  // A real rollover greets the sunrise — the last beat of the first-day rhythm quest (§7i).
+  // Quest rewards are granted inside recordEvent; the Post gets titles to celebrate with.
+  const sunrise = daysAdvanced > 0 ? await recordEvent(db, herdId, { type: 'sunrise' }) : [];
+  const questCompletions: DigestQuest[] = sunrise.map((c) => ({
+    questId: c.questId,
+    title: QUEST_BY_ID.get(c.questId)?.title ?? c.questId,
+    cubes: c.reward.cubes ?? 0,
+  }));
+
   return {
     daysAdvanced,
     cubesGained,
@@ -132,6 +153,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     groomCubes,
     matured,
     journal,
+    questCompletions,
     day,
     nextRolloverMs: nextRollover(nowMs),
   };

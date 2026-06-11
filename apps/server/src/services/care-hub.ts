@@ -14,6 +14,7 @@ import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { consumeItems, getInventory } from './inventory.js';
+import { recordEvent } from './quests.js';
 
 /** The herd's LIVE meal buff (per-stat DC reduction) — only while it was cooked *today*, else {}. */
 export async function getMealBuff(
@@ -136,6 +137,7 @@ export async function cook(
       message: 'You do not have those ingredients in the pantry.',
     };
   }
+  await recordEvent(db, herdId, { type: 'cook' }); // advances the first-day rhythm quest (§7i)
   return { ok: true, mealBuffs, slots };
 }
 
@@ -156,5 +158,6 @@ export async function groom(db: DB, herdId: string): Promise<GroomResult> {
     .where(and(eq(horses.herdId, herdId), eq(horses.mood, MOOD_RATTLED)))
     .returning({ id: horses.id });
   await db.update(herds).set({ groomBonusPending: true }).where(eq(herds.id, herdId));
+  await recordEvent(db, herdId, { type: 'groom' }); // advances the first-day rhythm quest (§7i)
   return { ok: true, soothed: soothed.length, pendingCubes: GROOM_CUBES };
 }

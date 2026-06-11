@@ -98,6 +98,7 @@ import {
   herdHorseCount,
   upgradeHerd,
 } from '../src/services/progression.js';
+import { getQuestState } from '../src/services/quests.js';
 import { skillCheck } from '../src/services/stats.js';
 import {
   coatRarityScore,
@@ -3347,6 +3348,67 @@ async function main(): Promise<void> {
     await groom(db, cookHerd);
     const soothedHorse = await getHorse(db, sad[0]!.id);
     check('the evening groom soothes it back to content', soothedHorse?.mood === 'content');
+  }
+
+  // ── "Your First Day" (§7i): the onboarding quest walks the whole daily rhythm ──
+  section('First-day rhythm quest (§7i)');
+  {
+    const fdHerd = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'firstday', password: 'firstdayhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const fdQuest = async () =>
+      (await getQuestState(db, fdHerd)).find((q) => q.questId === 'first-day');
+    const fresh = await fdQuest();
+    check(
+      'a fresh herd opens Your First Day with five rhythm steps',
+      fresh?.status === 'active' && fresh.objectives.length === 5,
+    );
+
+    // Walk the rhythm on a controlled clock (a couple of days out so the rollover is real).
+    const dayMs = Date.now() + 2 * 86_400_000;
+    const roamed = await roam(db, fdHerd, 'green-grass', dayMs, 99);
+    check('step 1 — the herd forages', roamed.ok);
+    await grantItems(db, fdHerd, [{ id: 'grain-corn', qty: 1 }]);
+    const cooked = await cook(db, fdHerd, { 'grain-corn': 1 }, 0, dayMs);
+    check('step 2 — the morning meal is cooked', cooked.ok);
+    const fdRun = await startRun(db, fdHerd, 'green-grass', [], { scriptId: 'windfall' });
+    check('step 3 — an expedition begins (The Windfall)', !fdRun.ok); // empty party refused…
+    const fdAdult = (await listHerdHorses(db, fdHerd)).find((h) => h.lifeStage === 'adult');
+    const fdRun2 = fdAdult
+      ? await startRun(db, fdHerd, 'green-grass', [fdAdult.id], { scriptId: 'windfall', seed: 3 })
+      : { ok: false as const, code: 'bad_party' as const, message: '' };
+    check('…and with a real party it sets out', fdRun2.ok);
+    if (fdRun2.ok) {
+      await chooseInRun(db, fdHerd, fdRun2.runId, 'sweep-low'); // either outcome → dusk
+      const ended = await chooseInRun(db, fdHerd, fdRun2.runId, 'call-it'); // safe → end
+      check('the short errand banks and ends', ended.ok && ended.ended === true);
+    }
+    await groom(db, fdHerd);
+    const beforeSunrise = await fdQuest();
+    check(
+      'four steps done, the sunrise still waits',
+      beforeSunrise?.status === 'active' &&
+        beforeSunrise.objectives.filter((o) => o.have >= o.need).length === 4,
+    );
+
+    const balBefore =
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, fdHerd) }))?.cubes ?? 0;
+    const sunrise = await advanceHerd(db, fdHerd, dayMs + 86_400_000);
+    check(
+      'the next sunrise completes Your First Day — celebrated in the Morning Post',
+      sunrise.questCompletions.some((q) => q.questId === 'first-day' && q.cubes === 250),
+    );
+    const balAfter =
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, fdHerd) }))?.cubes ?? 0;
+    check(
+      'the reward landed on top of the morning ledger',
+      balAfter === balBefore + sunrise.cubesGained + 250,
+    );
+    check('the quest reads completed', (await fdQuest())?.status === 'completed');
   }
 
   // ── Daily region omens (§7): world weather — deterministic, buff-only ──

@@ -14,6 +14,13 @@ export interface DigestBeat {
   glyph: string | null;
 }
 
+/** A quest that completed at this sunrise (rewards already granted server-side). */
+export interface DigestQuest {
+  questId: string;
+  title: string;
+  cubes: number;
+}
+
 export interface DailyResult {
   daysAdvanced: number;
   cubesGained: number;
@@ -21,6 +28,7 @@ export interface DailyResult {
   groomCubes: number;
   matured: MaturedFoal[];
   journal: DigestBeat[];
+  questCompletions: DigestQuest[];
   day: number;
   nextRolloverMs: number;
 }

@@ -8,6 +8,7 @@ import {
   ADVENTURE_SKILL_XP_SUCCESS,
   BONDED_THRESHOLD,
   KEEPER_UNLOCK_EXPEDITIONS,
+  OMEN_CHECK_BONUS,
   PARTY_MAX,
   type PersonalityKey,
   type SkillKey,
@@ -25,12 +26,14 @@ import {
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
+import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { getRelationships } from './autonomy.js';
 import { getMealBuff } from './care-hub.js';
 import { startBattle, type BattleView } from './combat.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
+import { omenFor } from './omens.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
 import { isQuestCompleted } from './quests.js';
 import {
@@ -181,6 +184,7 @@ export function resolveChoice(
   rng: () => number,
   bonds: PartyBond[] = [],
   mealBuff: Record<string, number> = {},
+  omenBuff: Record<string, number> = {},
 ): ChoiceResolution {
   if (!choice.check) return { outcome: choice.success, roll: null, trained: null };
   const { stat, skill, dc, harmony } = choice.check;
@@ -188,7 +192,15 @@ export function resolveChoice(
   const harmonyBonus = harmony ? partyHarmony(party, bonds) : 0;
   // The morning meal buffs this stat's checks for the whole herd, today (§7) — a DC reduction.
   const meal = mealBuff[stat] ?? 0;
-  const check = skillCheck(who.statValue, who.skillLevel, who.luck, dc - harmonyBonus - meal, rng);
+  // The region's omen (world weather, §7) favours one stat today — the same sky for every herd.
+  const omen = omenBuff[stat] ?? 0;
+  const check = skillCheck(
+    who.statValue,
+    who.skillLevel,
+    who.luck,
+    dc - harmonyBonus - meal - omen,
+    rng,
+  );
   const outcome = check.success ? choice.success : (choice.failure ?? choice.success);
   return {
     outcome,
@@ -459,12 +471,16 @@ export async function chooseInRun(
 
   const bonds = await getRelationships(db, herdId);
   const mealBuff = await getMealBuff(db, herdId, Date.now()); // today's cooked stat loadout (§7)
+  // Today's regional omen (world weather) — a small DC reduction when it favours the check's stat.
+  const omen = omenFor(run.regionId, gameDay(Date.now()));
+  const omenBuff = omen?.stat ? { [omen.stat]: OMEN_CHECK_BONUS } : {};
   const { outcome, roll, trained } = resolveChoice(
     party,
     choice,
     stepRng(run.seed, run.step),
     bonds,
     mealBuff,
+    omenBuff,
   );
   // Did a real friendship/bond (not just a shared temperament) help this harmony check? (→ 💞)
   const bonded = !!choice.check?.harmony && partyHasBond(party, bonds);

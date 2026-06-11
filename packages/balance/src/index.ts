@@ -264,6 +264,15 @@ export const WILD_ENCOUNTER_CHANCE = 0.5;
 /** Expeditions a herd completes in a region before its boss "Keeper" challenge unlocks — so the
  *  tier-gating fight is EARNED by exploring the area, not stumbled into via a random reroll (§7/§9.4c). */
 export const KEEPER_UNLOCK_EXPEDITIONS = 3;
+
+// ── Daily region omens (§7/§9.3): world weather ─────────────────────────────
+// One omen per region per game day, seeded by (region, day) ONLY — the same sky for every herd,
+// derived never stored. Cozy: buff-only (a DC reduction on one stat's checks in that region, or a
+// small gather kicker, or pure flavor) — weather never punishes.
+/** DC reduction on the omen's stat for expedition checks in that region today. */
+export const OMEN_CHECK_BONUS = 2;
+/** Extra units of the omen's featured item each gathering horse brings home. */
+export const OMEN_GATHER_BONUS_QTY = 1;
 export const RARE_ITEM = 'rare-gem';
 
 /** Quick-sell (Inventory): modest per-item Cube values — a convenience dump for surplus materials,

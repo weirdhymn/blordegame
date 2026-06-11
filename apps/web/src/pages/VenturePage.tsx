@@ -205,6 +205,14 @@ export function VenturePage(): ReactElement {
         </select>
       </label>
 
+      {selected?.omen && !storyActive && (
+        <div className="omen">
+          <span className="omen-name">🌦 {selected.omen.name}</span>
+          <p className="omen-text">{selected.omen.text}</p>
+          {selected.omen.hint && <p className="omen-hint">✦ {selected.omen.hint}</p>}
+        </div>
+      )}
+
       {selected?.interactive && !storyActive && (
         <p className="hint">
           Each expedition is a surprise drawn from {selected.name}&apos;s pool — set out and see

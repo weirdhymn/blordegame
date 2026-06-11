@@ -47,6 +47,9 @@ export function DailyGather(): ReactElement {
   }
 
   const unlocked = regions.filter((r) => r.unlocked);
+  // Surface a gather-flavoured omen ("foragers bring home extra…") right where it matters.
+  const selectedOmen = regions.find((r) => r.id === regionId)?.omen;
+  const gatherHint = selectedOmen?.hint?.includes('Foragers') ? selectedOmen : null;
 
   return (
     <section className="daily-gather card">
@@ -67,6 +70,11 @@ export function DailyGather(): ReactElement {
           {busy ? 'Foraging…' : '🧺 Forage'}
         </button>
       </div>
+      {gatherHint && (
+        <p className="omen-hint">
+          🌦 {gatherHint.name} — {gatherHint.hint}
+        </p>
+      )}
       {(error ?? gatherLoad.error) && <div className="note">{error ?? gatherLoad.error}</div>}
       {res && (
         <div className="note">

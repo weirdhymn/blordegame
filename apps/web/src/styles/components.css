@@ -986,3 +986,27 @@ button.ghost {
   justify-content: center;
   margin-top: 12px;
 }
+
+/* ── Daily region omens (§7) — the day's sky over a region, a small banded weather plate ── */
+.omen {
+  background: var(--band-paper, var(--paper));
+  border: 2px solid var(--sage-deep);
+  padding: 8px 12px;
+  margin: 8px 0;
+  max-width: 34rem;
+}
+.omen-name {
+  font-weight: 700;
+}
+.omen-text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.omen-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--leaf, #2c5a1d);
+  font-weight: 700;
+}

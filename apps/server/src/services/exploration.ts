@@ -2,18 +2,30 @@ import { randomInt } from 'node:crypto';
 import {
   GATHER_PER_HORSE_PER_DAY,
   GRAIN_IDS,
+  OMEN_GATHER_BONUS_QTY,
   ROAM_DROPS_MAX,
   ROAM_DROPS_MIN,
 } from '@blorse/balance';
 import { and, eq, inArray } from 'drizzle-orm';
 import { ADVENTURE_POOLS } from '../content/adventures.js';
+import { ITEM_BY_ID } from '../content/items.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { horses } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { grantItems, type ItemStack } from './inventory.js';
+import { omenFor } from './omens.js';
 import { isQuestCompleted, recordEvent, type QuestCompletion } from './quests.js';
+
+/** Today's omen as the client sees it — the voice line + a pre-worded qualitative hint (no
+ *  balance numbers leak; the server owns the magnitudes). */
+export interface RegionOmenView {
+  id: string;
+  name: string;
+  text: string;
+  hint: string | null;
+}
 
 export interface RegionView {
   id: string;
@@ -23,6 +35,28 @@ export interface RegionView {
   unlocked: boolean;
   /** Has an authored scene library → the Explore "Set out" runs the interactive flow (§9.3). */
   interactive: boolean;
+  /** The day's world weather over this region (§7) — the same sky for every herd. */
+  omen: RegionOmenView | null;
+}
+
+const STAT_NAME: Record<string, string> = {
+  str: 'Strength',
+  dex: 'Dexterity',
+  con: 'Constitution',
+  int: 'Intelligence',
+  wis: 'Wisdom',
+  cha: 'Charisma',
+};
+
+function omenView(regionId: string, nowMs: number): RegionOmenView | null {
+  const o = omenFor(regionId, gameDay(nowMs));
+  if (!o) return null;
+  const hint = o.stat
+    ? `${STAT_NAME[o.stat] ?? o.stat} checks come a little easier here today.`
+    : o.bonusItem
+      ? `Foragers bring home extra ${ITEM_BY_ID.get(o.bonusItem)?.name ?? o.bonusItem} today.`
+      : null;
+  return { id: o.id, name: o.name, text: o.text, hint };
 }
 
 export async function listRegions(db: DB, herdId: string): Promise<RegionView[]> {
@@ -35,6 +69,7 @@ export async function listRegions(db: DB, herdId: string): Promise<RegionView[]>
       recommendedPower: r.recommendedPower,
       unlocked: await isQuestCompleted(db, herdId, r.requiresQuest),
       interactive: (ADVENTURE_POOLS.get(r.id)?.length ?? 0) > 0,
+      omen: omenView(r.id, Date.now()),
     });
   }
   return out;
@@ -110,6 +145,10 @@ export async function roam(
 
   // Each eligible horse forages once (seeded; a bigger stable simply rolls more times) and brings home
   // one random cooking grain (§7) — so grain supply scales with herd size, feeding the morning cook.
+  // A gather omen (world weather) features one item today: each forager brings a little extra.
+  // Read AFTER the seeded rolls each loop so the omen never shifts the RNG stream (same seed, same
+  // base haul, omen day or not).
+  const omen = omenFor(regionId, gameDay(nowMs));
   const rng = mulberry32(seed ?? randomInt(1, 2 ** 31));
   const tally = new Map<string, number>();
   for (let h = 0; h < eligible.length; h++) {
@@ -120,6 +159,9 @@ export async function roam(
     }
     const grain = GRAIN_IDS[Math.floor(rng() * GRAIN_IDS.length)]!;
     tally.set(grain, (tally.get(grain) ?? 0) + 1);
+    if (omen?.bonusItem) {
+      tally.set(omen.bonusItem, (tally.get(omen.bonusItem) ?? 0) + OMEN_GATHER_BONUS_QTY);
+    }
   }
   const found: ItemStack[] = [...tally.entries()].map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, found);

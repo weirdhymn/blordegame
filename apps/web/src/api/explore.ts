@@ -1,6 +1,14 @@
 import { api } from './client.js';
 import type { BattleView } from './combat.js';
 
+/** The day's world weather over a region — the voice line + a qualitative hint. */
+export interface RegionOmen {
+  id: string;
+  name: string;
+  text: string;
+  hint: string | null;
+}
+
 export interface RegionView {
   id: string;
   name: string;
@@ -9,6 +17,8 @@ export interface RegionView {
   unlocked: boolean;
   /** Has an authored scene library → "Set out" launches the interactive story flow. */
   interactive: boolean;
+  /** Today's omen (the same sky for every herd); null only if the region has no weather table. */
+  omen: RegionOmen | null;
 }
 
 export interface Encounter {

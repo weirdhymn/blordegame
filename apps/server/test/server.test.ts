@@ -23,6 +23,7 @@ import {
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
   KEEPER_UNLOCK_EXPEDITIONS,
+  OMEN_GATHER_BONUS_QTY,
   POTION_HEAL_HP,
   REWARD_RETREAT_FRACTION,
   SKILL_KEYS,
@@ -89,6 +90,7 @@ import { roam } from '../src/services/exploration.js';
 import { getHorse, listHerdHorses, mintHorse, shareLineage } from '../src/services/horse.js';
 import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
+import { omenFor } from '../src/services/omens.js';
 import { compatibility } from '../src/services/personality.js';
 import {
   checkJobSlots,
@@ -104,6 +106,7 @@ import {
   uploadQuote,
 } from '../src/services/upload.js';
 import { creditCubes, spendCubes } from '../src/services/wallet.js';
+import { gameDay } from '../src/util/clock.js';
 import { mulberry32 } from '../src/util/rng.js';
 import { check, cookieOf, eq, section, summarize } from './harness.js';
 
@@ -3344,6 +3347,97 @@ async function main(): Promise<void> {
     await groom(db, cookHerd);
     const soothedHorse = await getHorse(db, sad[0]!.id);
     check('the evening groom soothes it back to content', soothedHorse?.mood === 'content');
+  }
+
+  // ── Daily region omens (§7): world weather — deterministic, buff-only ──
+  section('Daily region omens (§7)');
+  {
+    const o1 = omenFor('green-grass', 5);
+    check(
+      'the same (region, day) always draws the same omen',
+      o1 !== null && o1.id === omenFor('green-grass', 5)?.id,
+    );
+    const skies = new Set<string>();
+    for (let d = 0; d < 14; d++) skies.add(omenFor('green-grass', d)?.id ?? '');
+    check('the sky varies across a fortnight', skies.size >= 2);
+    check(
+      'every region has weather',
+      ['green-grass', 'dusty-dunes', 'weird-woods'].every((r) => omenFor(r, 3) !== null),
+    );
+
+    // The omen buff genuinely helps a check (mirrors the meal-buff DC flip).
+    const omenHorse = await mintHorse(db, {
+      herdId,
+      genotype: { E: 'Ee' } as Genotype,
+      origin: 'wild',
+      lifeStage: 'adult',
+    });
+    const hopeless: Choice = {
+      id: 'om',
+      text: 'om',
+      check: { stat: 'dex', dc: 40 },
+      success: { text: 'WIN', next: 'end' },
+      failure: { text: 'LOSE', next: 'end' },
+    };
+    const noOmen = resolveChoice([omenHorse], hopeless, mulberry32(7), [], {}, {});
+    const bigOmen = resolveChoice([omenHorse], hopeless, mulberry32(7), [], {}, { dex: 50 });
+    check(
+      'an omen buff turns a hopeless check into a win (DC reduction)',
+      noOmen.outcome.text === 'LOSE' && bigOmen.outcome.text === 'WIN',
+    );
+
+    // The gather kicker: same seed on a kicker day vs a plain day → the base haul is identical
+    // (the omen never shifts the RNG stream) plus exactly the featured bonus per forager.
+    const base = Date.UTC(2026, 0, 5, 12);
+    let kickerMs = 0;
+    let plainMs = 0;
+    let kickerItem = '';
+    for (let k = 0; k < 60 && (kickerMs === 0 || plainMs === 0); k++) {
+      const ms = base + k * 86_400_000;
+      const o = omenFor('green-grass', gameDay(ms));
+      if (o?.bonusItem && kickerMs === 0) {
+        kickerMs = ms;
+        kickerItem = o.bonusItem;
+      } else if (!o?.bonusItem && plainMs === 0) {
+        plainMs = ms;
+      }
+    }
+    check('a kicker day and a plain day both exist in the horizon', kickerMs > 0 && plainMs > 0);
+    const omenHerd = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'omenherd', password: 'omenhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const qtyOf = (r: Awaited<ReturnType<typeof roam>>, id: string): number =>
+      r.ok ? (r.found.find((f) => f.id === id)?.qty ?? 0) : -1;
+    // Run chronologically so the per-day gather cap resets between the two roams.
+    const firstMs = Math.min(kickerMs, plainMs);
+    const secondMs = Math.max(kickerMs, plainMs);
+    const seedRoam = 4242;
+    const first = await roam(db, omenHerd, 'green-grass', firstMs, seedRoam);
+    const second = await roam(db, omenHerd, 'green-grass', secondMs, seedRoam);
+    const onKicker = firstMs === kickerMs ? first : second;
+    const onPlain = firstMs === kickerMs ? second : first;
+    check('roams succeed on both days', onPlain.ok && onKicker.ok);
+    if (onPlain.ok && onKicker.ok) {
+      check(
+        'the kicker day adds exactly the featured bonus per forager (same base haul)',
+        onKicker.horsesGathered === onPlain.horsesGathered &&
+          qtyOf(onKicker, kickerItem) - qtyOf(onPlain, kickerItem) ===
+            onKicker.horsesGathered * OMEN_GATHER_BONUS_QTY,
+      );
+    }
+
+    // The regions view carries the day's omen for the Venture Out banner.
+    const regs = (await inject({ method: 'GET', url: '/regions', headers: { cookie } })).json<
+      { id: string; omen: { name: string; text: string } | null }[]
+    >();
+    check(
+      'GET /regions carries the day’s omen',
+      regs.length > 0 && regs.every((r) => r.omen !== null && r.omen.name.length > 0),
+    );
   }
 
   await app.close();

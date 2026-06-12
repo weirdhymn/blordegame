@@ -8,6 +8,7 @@ import {
   type HorseClass,
 } from '../api/combat.js';
 import { useSession } from '../session.js';
+import { pretty } from '../util/format.js';
 
 const CLASS_META: Record<HorseClass, { label: string; icon: string; attack: string }> = {
   knight: { label: 'Knight', icon: '🛡', attack: 'Cleave' },
@@ -62,8 +63,11 @@ export function BattleArena({
     setError(null);
     setPicking(null);
     try {
-      setBattle((await actInBattle(battle.battleId, action)).battle);
-      await refresh(); // reward Cubes land in the topbar badge
+      const next = (await actInBattle(battle.battleId, action)).battle;
+      setBattle(next);
+      // Reward Cubes only land when the battle ENDS — refreshing /me per click was a
+      // round-trip storm in the hottest loop in the game (audit P2).
+      if (next.status !== 'active') await refresh();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'That move did not land.');
     } finally {
@@ -216,7 +220,7 @@ export function BattleArena({
               🎉 Victory! The foe yields the field. Banked{' '}
               <strong>{battle.reward?.cubes ?? 0} ⬡</strong>
               {battle.reward && battle.reward.items.length > 0
-                ? ` + ${battle.reward.items.map((i) => `${i.qty}× ${i.id}`).join(', ')}`
+                ? ` + ${battle.reward.items.map((i) => `${pretty(i.id)} ×${i.qty}`).join(', ')}`
                 : ''}
               .
             </p>

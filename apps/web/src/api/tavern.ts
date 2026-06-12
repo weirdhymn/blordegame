@@ -1,3 +1,5 @@
+import type { Genotype } from '@blorse/genetics';
+import type { GlitchKind } from '@blorse/render-core';
 import { api } from './client.js';
 
 export interface TavernHorse {
@@ -5,6 +7,10 @@ export interface TavernHorse {
   name: string;
   fee: number;
   firstEncounteredBy: string | null;
+  /** Render fields ride the listing (always adults — nothing to redact). */
+  genotype: Genotype;
+  seed: number;
+  glitch: GlitchKind | null;
 }
 
 export const listTavern = (): Promise<TavernHorse[]> => api.get<TavernHorse[]>('/tavern');

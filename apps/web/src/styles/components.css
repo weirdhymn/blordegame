@@ -69,7 +69,7 @@ a {
   font-size: 0.9rem;
 }
 .tier-caps .cap.full {
-  color: #b4541a;
+  color: var(--berry); /* matches the pixel-theme override that was shadowing a dead literal */
   font-weight: 700;
 }
 .tier-next {
@@ -151,9 +151,9 @@ a {
 }
 
 .error {
-  color: #7c1d1d;
+  color: var(--alert);
   background: #f3e1e1;
-  border: 2px solid #7c1d1d;
+  border: 2px solid var(--alert);
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
@@ -226,6 +226,9 @@ a {
   border: 2px solid var(--ink);
   border-radius: 8px;
   padding: 0.6rem;
+  /* Cards are links (folded here from a second .horse-card block — audit P2). */
+  text-decoration: none;
+  color: var(--ink);
 }
 
 .horse-canvas {
@@ -303,11 +306,7 @@ a {
   padding: 1.25rem;
 }
 
-/* ── Horse card link ── */
-.horse-card {
-  text-decoration: none;
-  color: var(--ink);
-}
+/* ── Horse card link states (base link styling lives on .horse-card above) ── */
 .horse-card:hover {
   border-color: var(--ink-soft);
 }
@@ -417,7 +416,7 @@ a {
   font-weight: 700;
 }
 .warn {
-  color: #7c1d1d;
+  color: var(--alert);
   font-size: 0.8rem;
 }
 .foal-result {
@@ -500,9 +499,9 @@ a {
 
 /* ── Shared bits for the feature pages ── */
 .note {
-  color: #2c5a1d;
+  color: var(--leaf);
   background: #e3f0d8;
-  border: 2px solid #2c5a1d;
+  border: 2px solid var(--leaf);
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
   font-size: 0.82rem;
@@ -611,7 +610,7 @@ code {
   border-left-color: #b08a3a;
 }
 .story-log .train {
-  color: #2c5a1d;
+  color: var(--leaf);
   font-style: normal;
   font-weight: 700;
 }
@@ -877,12 +876,13 @@ button.ghost {
 .battle-log li:last-child {
   border-bottom: none;
 }
+/* Log accents on AA-proven tokens (audit P2: the literals sat at ~3.7:1 on paper). */
 .battle-log .log-ko {
-  color: #a8543a;
+  color: var(--berry);
   font-weight: 700;
 }
 .battle-log .log-item {
-  color: #5b8c3e;
+  color: var(--leaf);
   font-weight: 700;
 }
 .battle-log .log-intro {
@@ -890,11 +890,11 @@ button.ghost {
   color: var(--ink-soft);
 }
 .battle-log .log-weak {
-  color: #4e7d33;
+  color: var(--leaf);
   font-weight: 700;
 }
 .battle-log .log-resist {
-  color: #9a7b3a;
+  color: var(--gold);
 }
 .foe-tell {
   font-size: 0.8rem;

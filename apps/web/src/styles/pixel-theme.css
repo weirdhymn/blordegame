@@ -137,8 +137,8 @@ input {
 }
 .error {
   background: #f3e1e1;
-  border: var(--bd) solid #7c1d1d;
-  color: #7c1d1d;
+  border: var(--bd) solid var(--alert);
+  color: var(--alert);
 }
 
 /* ── Hero panels get the double-line frame (sparingly — the data centrepiece, menus, modals) ── */

@@ -20,6 +20,7 @@
   --gold: #8a6014; /* Cubes / cost (5.1:1) */
   --berry: #9c4410; /* full-cap / warm alert (5.9:1) */
   --leaf: #2c5a1d; /* positive / note */
+  --alert: #7c1d1d; /* error text/borders (8.6:1) — was a repeated literal (audit P2) */
 
   /* — stepped gradients: HARD stops only (banded, never smooth) — */
   --band-sage: repeating-linear-gradient(180deg, #eef2e1 0 4px, #e7ecd7 4px 8px, #dde4cb 8px 12px);

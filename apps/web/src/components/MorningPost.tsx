@@ -1,4 +1,4 @@
-import { useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { resolve } from '@blorse/genetics';
 import { Link } from 'react-router-dom';
 import { buildRenderSpec } from '@blorse/render-core';
@@ -38,9 +38,28 @@ export function MorningPost(props: {
   const beats = daily.journal.slice(0, MAX_BEATS);
   const moreBeats = daily.journal.length - beats.length;
 
+  // Dialog manners (audit P2 a11y): take focus on open, close on Escape.
+  const modalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    modalRef.current?.focus();
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal morning-post" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal morning-post"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="The Morning Post"
+        tabIndex={-1}
+        ref={modalRef}
+      >
         <h2 className="post-masthead">📯 The Morning Post</h2>
         <p className="post-dateline">
           Day {daily.day} in the Pasture

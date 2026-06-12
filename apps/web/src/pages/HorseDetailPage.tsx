@@ -49,6 +49,7 @@ export function HorseDetailPage(): ReactElement {
   const [jobStructures, setJobStructures] = useState<Buildable[]>([]);
   const [pick, setPick] = useState('');
   const [jobBusy, setJobBusy] = useState(false);
+  const [jobErr, setJobErr] = useState<string | null>(null);
   const { herd, refresh } = useSession();
   const [quote, setQuote] = useState<UploadQuote | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -127,12 +128,14 @@ export function HorseDetailPage(): ReactElement {
   async function assign(): Promise<void> {
     if (!id || !pick) return;
     setJobBusy(true);
+    setJobErr(null);
     try {
       await assignJob(id, pick);
       setPick('');
       loadJob();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      // A rejected assignment must say so — silent no-ops read as broken buttons (audit P2).
+      setJobErr(e instanceof ApiError ? e.message : 'Could not post the horse to that job.');
     } finally {
       setJobBusy(false);
     }
@@ -141,11 +144,12 @@ export function HorseDetailPage(): ReactElement {
   async function unassign(): Promise<void> {
     if (!id) return;
     setJobBusy(true);
+    setJobErr(null);
     try {
       await unassignJob(id);
       loadJob();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setJobErr(e instanceof ApiError ? e.message : 'Could not take the horse off the job.');
     } finally {
       setJobBusy(false);
     }
@@ -261,7 +265,11 @@ export function HorseDetailPage(): ReactElement {
                 <p className="muted">Build a Workshop structure with a job first.</p>
               ) : (
                 <div className="row-actions">
-                  <select value={pick} onChange={(e) => setPick(e.target.value)}>
+                  <select
+                    value={pick}
+                    onChange={(e) => setPick(e.target.value)}
+                    aria-label="Structure to assign this horse to"
+                  >
                     <option value="">— assign to a structure —</option>
                     {jobStructures.map((s) => (
                       <option key={s.type} value={s.type}>
@@ -276,6 +284,11 @@ export function HorseDetailPage(): ReactElement {
                   >
                     Assign
                   </button>
+                </div>
+              )}
+              {jobErr && (
+                <div className="error" role="alert">
+                  {jobErr}
                 </div>
               )}
             </>
@@ -363,7 +376,18 @@ export function HorseDetailPage(): ReactElement {
 
       {quote && (
         <div className="modal-backdrop" onClick={() => !uploading && setQuote(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Send ${quote.horse.name ?? 'this horse'} off?`}
+            tabIndex={-1}
+            ref={(el) => el?.focus()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !uploading) setQuote(null);
+            }}
+          >
             <h2 className="section-h">Send {quote.horse.name} off?</h2>
             {quote.onAdventure ? (
               <>

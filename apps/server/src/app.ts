@@ -75,6 +75,13 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
   // Consistent JSON error envelopes (§11) so the client never sees a raw stack — but the
   // stack always reaches the log (a swallowed 500 is undiagnosable in prod; audit P1).
   app.setErrorHandler((err: FastifyError, req, reply) => {
+    // A malformed uuid in a path param reaches Postgres as 22P02 (invalid text representation).
+    // That's the CALLER's mistake — answer 400, not 500 (audit P2), in one place for every route.
+    const pgCode =
+      (err as { code?: string }).code ?? (err.cause as { code?: string } | undefined)?.code;
+    if (pgCode === '22P02' || err.message?.includes('invalid input syntax for type uuid')) {
+      return reply.code(400).send({ error: 'malformed id', code: 'bad_request' });
+    }
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
     if (status >= 500) req.log.error({ err, url: req.url }, 'unhandled route error');
     const message = status >= 500 ? 'internal server error' : (err.message ?? 'error');

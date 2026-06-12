@@ -38,6 +38,7 @@ import {
   type HorseRow,
 } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
+import { logAudit } from './audit.js';
 import { getMealBuff } from './care-hub.js';
 import { getHorse } from './horse.js';
 import { consumeItems, grantItems, itemQty, type ItemStack } from './inventory.js';
@@ -570,12 +571,14 @@ async function grantReward(
     const r = totalReward(enemyIds);
     if (r.items.length) await grantItems(db, herdId, r.items);
     if (r.cubes > 0) await creditCubes(db, herdId, r.cubes);
+    await logAudit(db, herdId, 'battle_reward', { outcome, enemyIds, cubes: r.cubes });
     return r;
   }
   if (outcome === 'retreated') {
     const full = totalReward(enemyIds);
     const cubes = Math.floor(full.cubes * REWARD_RETREAT_FRACTION);
     if (cubes > 0) await creditCubes(db, herdId, cubes);
+    await logAudit(db, herdId, 'battle_reward', { outcome, enemyIds, cubes });
     return { cubes, items: [] };
   }
   return null; // fled: cozy, you simply left — no battle reward

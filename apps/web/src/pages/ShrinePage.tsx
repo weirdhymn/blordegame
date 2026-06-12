@@ -57,17 +57,20 @@ export function ShrinePage(): ReactElement {
   const [pickedId, setPickedId] = useState<string | null>(null);
   const picked = adults.find((h) => h.id === pickedId) ?? adults[0];
   const [note, setNote] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function act(fn: () => Promise<string>): Promise<void> {
     setBusy(true);
     setNote(null);
+    setActError(null);
     try {
       setNote(await fn());
       await refresh();
       load.reload();
     } catch (e) {
-      setNote(e instanceof ApiError ? e.message : 'The shrine hums, unmoved.');
+      // Failures wear the error coat, not the success-green note (audit P2 a11y).
+      setActError(e instanceof ApiError ? e.message : 'The shrine hums, unmoved.');
     } finally {
       setBusy(false);
     }
@@ -110,9 +113,9 @@ export function ShrinePage(): ReactElement {
         shrine&apos;s choosing. Glitches never pass to foals; filing a <strong>bug report</strong>{' '}
         (50 ⬡) closes the ticket. You have <strong>{dust} 🧚</strong>.
       </p>
-      {load.error && (
+      {(actError ?? load.error) && (
         <div className="error" role="alert">
-          {load.error}
+          {actError ?? load.error}
         </div>
       )}
       {note && <div className="note">{note}</div>}

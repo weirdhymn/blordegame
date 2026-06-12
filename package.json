@@ -6,7 +6,7 @@
   "description": "blorsegame (BLORSE) — a cozy async multiplayer life-sim of pixel horses. Monorepo root.",
   "packageManager": "pnpm@11.5.2",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.18.0"
   },
   "scripts": {
     "typecheck": "pnpm -r typecheck",

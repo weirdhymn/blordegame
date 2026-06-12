@@ -47,18 +47,21 @@ export function GardenPage(): ReactElement {
   const [pickCrop, setPickCrop] = useState<Record<number, string>>({});
   const [pickFert, setPickFert] = useState<Record<number, string>>({});
   const [note, setNote] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function act(fn: () => Promise<unknown>, msg: string): Promise<void> {
     setBusy(true);
     setNote(null);
+    setActError(null);
     try {
       await fn();
       setNote(msg);
       await refresh();
       garden.reload();
     } catch (e) {
-      setNote(e instanceof ApiError ? e.message : 'The garden declined, politely.');
+      // Failures wear the error coat, not the success-green note (audit P2 a11y).
+      setActError(e instanceof ApiError ? e.message : 'The garden declined, politely.');
     } finally {
       setBusy(false);
     }
@@ -119,6 +122,7 @@ export function GardenPage(): ReactElement {
               <select
                 value={pickCrop[p.slot] ?? ''}
                 onChange={(e) => setPickCrop((m) => ({ ...m, [p.slot]: e.target.value }))}
+                aria-label={`Plant a crop in plot ${p.slot}`}
               >
                 <option value="">— plant a crop —</option>
                 {(view?.crops ?? []).map((c) => (
@@ -139,6 +143,7 @@ export function GardenPage(): ReactElement {
                   <select
                     value={pickFert[p.slot] ?? ''}
                     onChange={(e) => setPickFert((m) => ({ ...m, [p.slot]: e.target.value }))}
+                    aria-label={`Fertilizer for plot ${p.slot} (optional)`}
                   >
                     <option value="">— fertilizer (optional) —</option>
                     {FERTILIZERS.map((f) => (
@@ -190,9 +195,9 @@ export function GardenPage(): ReactElement {
         Optional enrichment, never a chore: plant the crop itself (no seeds), come back in hours or
         days, harvest more than you planted. A neglected plant just gives the crop back.
       </p>
-      {garden.error && (
+      {(actError ?? garden.error) && (
         <div className="error" role="alert">
-          {garden.error}
+          {actError ?? garden.error}
         </div>
       )}
       {note && <div className="note">{note}</div>}

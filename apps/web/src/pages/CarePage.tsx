@@ -31,6 +31,7 @@ export function CarePage(): ReactElement {
   const [rares, setRares] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
 
   const picked = Object.values(pick).reduce((a, b) => a + b, 0) + rares;
   const slots = care?.slots ?? 0;
@@ -42,6 +43,7 @@ export function CarePage(): ReactElement {
   async function doCook(): Promise<void> {
     setBusy(true);
     setMsg(null);
+    setActError(null);
     try {
       const r = await cookMeal(pick, rares);
       setMsg(
@@ -52,7 +54,7 @@ export function CarePage(): ReactElement {
       await refresh();
       careLoad.reload();
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : 'The pot tipped over.');
+      setActError(e instanceof ApiError ? e.message : 'The pot tipped over.');
     } finally {
       setBusy(false);
     }
@@ -61,6 +63,7 @@ export function CarePage(): ReactElement {
   async function doGroom(): Promise<void> {
     setBusy(true);
     setMsg(null);
+    setActError(null);
     try {
       const r = await groomHerd();
       setMsg(
@@ -69,7 +72,7 @@ export function CarePage(): ReactElement {
       await refresh();
       careLoad.reload();
     } catch {
-      setMsg('Could not groom just now.');
+      setActError('Could not groom just now.');
     } finally {
       setBusy(false);
     }
@@ -99,6 +102,11 @@ export function CarePage(): ReactElement {
         the day goes a little better.
       </p>
 
+      {actError && (
+        <div className="error" role="alert">
+          {actError}
+        </div>
+      )}
       {msg && <div className="note">{msg}</div>}
 
       {/* Two bookend rituals, side-by-side on desktop; stacks to one column on narrow. */}
@@ -134,6 +142,7 @@ export function CarePage(): ReactElement {
                   <button
                     disabled={busy || (pick[g.id] ?? 0) <= 0}
                     onClick={() => bump(g.id, -1, g.qty)}
+                    aria-label={`Remove one ${pretty(g.id.replace('grain-', ''))} from the pot`}
                   >
                     −
                   </button>
@@ -141,6 +150,7 @@ export function CarePage(): ReactElement {
                   <button
                     disabled={busy || (pick[g.id] ?? 0) >= g.qty || room <= 0}
                     onClick={() => bump(g.id, +1, g.qty)}
+                    aria-label={`Add one ${pretty(g.id.replace('grain-', ''))} to the pot`}
                   >
                     +
                   </button>
@@ -157,6 +167,7 @@ export function CarePage(): ReactElement {
                 <button
                   disabled={busy || rares <= 0}
                   onClick={() => setRares((r) => Math.max(0, r - 1))}
+                  aria-label="Remove one Saffron Bloom from the pot"
                 >
                   −
                 </button>
@@ -164,6 +175,7 @@ export function CarePage(): ReactElement {
                 <button
                   disabled={busy || rares >= care.rares || room <= 0}
                   onClick={() => setRares((r) => r + 1)}
+                  aria-label="Add one Saffron Bloom to the pot"
                 >
                   +
                 </button>

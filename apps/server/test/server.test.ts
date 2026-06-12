@@ -575,6 +575,12 @@ async function main(): Promise<void> {
     payload: { username: 'pepper', password: 'hunter2horse' },
   });
   const herd2Id = reg2.json<{ herd: { id: string } }>().herd.id;
+  // Pin the cursor to the SAME clock sample the advance uses — register's own Date.now()
+  // could land across a midnight-EST rollover and make "exactly 3" read 2 (audit P2 flake).
+  await db
+    .update(herds)
+    .set({ lastSimTick: gameDay(baseNow) })
+    .where(drizzleEq(herds.id, herd2Id));
   const adv = await advanceHerd(db, herd2Id, baseNow + 3 * DAY_MS);
   eq('login-catchup advances 3 days', adv.daysAdvanced, 3);
   eq('catch-up grants 3x the daily Cubes', adv.cubesGained, 150);
@@ -1621,14 +1627,17 @@ async function main(): Promise<void> {
     'a fixed seed draws the same script every time',
     pickA.ok && pickB.ok && pickA.scene.id === pickB.scene.id,
   );
+  // Structural, not content-coupled (audit P2): derive the expected start scenes from the
+  // pool itself, so adding/reordering scripts can't silently break this check.
+  const poolStarts = new Set((ADVENTURE_POOLS.get('green-grass') ?? []).map((s) => s.start));
   const startsSeen = new Set<string>();
-  for (let s = 1; s <= 40; s++) {
+  for (let s = 1; s <= 40 && startsSeen.size < poolStarts.size; s++) {
     const r = await startRun(db, herdId, 'green-grass', [id], { seed: s });
     if (r.ok) startsSeen.add(r.scene.id);
   }
   check(
-    'both scripts in the pool are reachable across seeds',
-    startsSeen.has('meadow-edge') && startsSeen.has('herb-meadow'),
+    `every pooled script is reachable across seeds (saw ${startsSeen.size}/${poolStarts.size})`,
+    poolStarts.size >= 2 && [...poolStarts].every((sc) => startsSeen.has(sc)),
   );
   const forced = await startRun(db, herdId, 'green-grass', [id], {
     seed: 1,
@@ -3678,6 +3687,12 @@ async function main(): Promise<void> {
 
     // ── Fertilizer from care: fed yesterday → fertilizer this morning; not fed → simply none ──
     const realNow = Date.now();
+    // Same straddle pin as the pepper herd: the fed-day rule matches mealDay to a tick day,
+    // so the cursor must derive from realNow, not the register-time clock (audit P2 flake).
+    await db
+      .update(herds)
+      .set({ lastSimTick: gameDay(realNow) })
+      .where(drizzleEq(herds.id, gid));
     await grantItems(db, gid, [{ id: 'grain-corn', qty: 1 }]);
     const fedCook = await cook(db, gid, { 'grain-corn': 1 }, 0, realNow + 86_400_000);
     check('the herd is fed (the communal cook)', fedCook.ok);
@@ -4163,6 +4178,34 @@ async function main(): Promise<void> {
       'logout invalidates the session (the old cookie reads as anonymous)',
       out.statusCode === 200 && meAfter.statusCode === 401,
     );
+
+    // A malformed uuid in a path is the caller's mistake — 400, never a 500 (audit P2).
+    const mangled = await inject({ method: 'GET', url: '/horses/not-a-uuid' });
+    check(
+      'a malformed id answers 400 bad_request (was a PG 22P02 → 500)',
+      mangled.statusCode === 400 && mangled.json<{ code: string }>().code === 'bad_request',
+    );
+
+    // Usernames fold to lowercase: one handle, one account, any capitalization at login.
+    const reg1 = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'CaseFold', password: 'casefoldhorse1' },
+    });
+    const reg2 = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'casefold', password: 'casefoldhorse2' },
+    });
+    const shoutyLogin = await inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'CASEFOLD', password: 'casefoldhorse1' },
+    });
+    check(
+      'usernames are case-insensitive: duplicate 409, any-case login 200',
+      reg1.statusCode === 201 && reg2.statusCode === 409 && shoutyLogin.statusCode === 200,
+    );
   }
 
   // ── Prod serving mode (§11): static SPA + fallback, exercised like a browser would ──
@@ -4170,8 +4213,28 @@ async function main(): Promise<void> {
   {
     const webDir = mkdtempSync(join(tmpdir(), 'blorse-web-'));
     writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>BLORSE</title>');
-    const prodApp = buildApp(db, { webDir, rateLimitMax: 100_000 });
+    const prodApp = buildApp(db, {
+      webDir,
+      rateLimitMax: 100_000,
+      authRateLimitMax: 100_000,
+      secureCookie: true, // assert the prod cookie posture below
+    });
     await prodApp.ready();
+
+    // Cookie security flags were never asserted (audit P2) — pin the whole posture here.
+    const prodReg = await prodApp.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'cookiecheck', password: 'cookiehorse1' },
+    });
+    const setCookie = prodReg.headers['set-cookie']?.toString() ?? '';
+    check(
+      'the session cookie ships HttpOnly + SameSite=Lax + Secure (prod posture)',
+      prodReg.statusCode === 201 &&
+        /httponly/i.test(setCookie) &&
+        /samesite=lax/i.test(setCookie) &&
+        /secure/i.test(setCookie),
+    );
     const root = await prodApp.inject({
       method: 'GET',
       url: '/',
@@ -4197,6 +4260,49 @@ async function main(): Promise<void> {
         apiMiss.json<{ code: string }>().code === 'not_found',
     );
     await prodApp.close();
+  }
+
+  // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──
+  section('Living-Herd determinism (§8)');
+  {
+    const mkTwin = async (n: string): Promise<string> => {
+      const r = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: n, password: `${n}horse1` },
+      });
+      const hid = r.json<{ herd: { id: string } }>().herd.id;
+      await db
+        .update(herds)
+        .set({ simSeed: 424242, lastSimTick: gameDay(Date.now()) })
+        .where(drizzleEq(herds.id, hid));
+      // Two horses with pinned temperaments — the only autonomy inputs besides the seed.
+      for (const p of [
+        { o: 70, c: 40, e: 80, a: 75, n: 20 },
+        { o: 60, c: 50, e: 75, a: 80, n: 25 },
+      ]) {
+        await mintHorse(db, {
+          herdId: hid,
+          genotype: { E: 'ee' },
+          origin: 'wild',
+          lifeStage: 'adult',
+          glitch: null,
+          personality: p,
+        });
+      }
+      return hid;
+    };
+    const t1 = await mkTwin('twinone');
+    const t2 = await mkTwin('twintwo');
+    const now2 = Date.now();
+    const b1 = await advanceHerd(db, t1, now2 + 3 * 86_400_000);
+    const b2 = await advanceHerd(db, t2, now2 + 3 * 86_400_000);
+    const kinds = (r: { journal: { glyph: string | null }[] }): string =>
+      JSON.stringify(r.journal.map((e) => e.glyph ?? '·').sort());
+    check(
+      'twin herds (same simSeed, same temperaments) write identical beat kinds',
+      b1.journal.length > 0 && kinds(b1) === kinds(b2),
+    );
   }
 
   await app.close();

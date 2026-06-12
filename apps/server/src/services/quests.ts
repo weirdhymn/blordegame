@@ -8,6 +8,7 @@ import {
 } from '../content/quests.js';
 import type { DB } from '../db/client.js';
 import { herds, questProgress } from '../db/schema.js';
+import { logAudit } from './audit.js';
 import { grantItems } from './inventory.js';
 
 export type GameEvent =
@@ -97,6 +98,12 @@ async function grantReward(db: DB, herdId: string, def: QuestDef): Promise<void>
       .where(eq(herds.id, herdId));
   }
   if (def.reward.items?.length) await grantItems(db, herdId, def.reward.items);
+  // Every faucet leaves a trail (audit P2): quest rewards join the AuditLog stream.
+  await logAudit(db, herdId, 'quest_reward', {
+    questId: def.id,
+    cubes: def.reward.cubes ?? 0,
+    items: def.reward.items ?? [],
+  });
 }
 
 /**

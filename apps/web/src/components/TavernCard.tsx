@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
-import { getHorse, type Horse } from '../api/horses.js';
 import type { TavernHorse } from '../api/tavern.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 
@@ -16,38 +15,22 @@ export function TavernCard({
   busy: boolean;
   onRecruit: (id: string) => void;
 }): ReactElement {
-  const [horse, setHorse] = useState<Horse | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    getHorse(entry.id)
-      .then((h) => {
-        if (!cancelled) setHorse(h);
-      })
-      .catch(() => {
-        /* ignore */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.id]);
-
+  // Render fields ride the listing now (audit P2) — no per-card fetch, no stranded "…".
   const spec = useMemo(
     () =>
-      horse
-        ? buildRenderSpec(resolve(horse.genotype), {
-            seed: horse.seed,
-            glitch: horse.glitch,
-            lifeStage: horse.lifeStage,
-          })
-        : null,
-    [horse],
+      buildRenderSpec(resolve(entry.genotype), {
+        seed: entry.seed,
+        glitch: entry.glitch,
+        lifeStage: 'adult', // Tavern strays are always adults
+      }),
+    [entry.genotype, entry.seed, entry.glitch],
   );
 
   return (
     <div className="horse-card tavern-card">
-      {spec ? <HorseCanvas spec={spec} scale={2} /> : <div className="canvas-ph" />}
+      <HorseCanvas spec={spec} scale={2} />
       <div className="horse-name">{entry.name}</div>
-      <div className="horse-coat">{spec ? spec.displayName : '…'}</div>
+      <div className="horse-coat">{spec.displayName}</div>
       <div className="fee">{entry.fee} ⬡</div>
       <button className="primary" disabled={!canAfford || busy} onClick={() => onRecruit(entry.id)}>
         {busy ? '…' : canAfford ? 'Recruit' : 'Too dear'}

@@ -1,5 +1,5 @@
 import { buildApp } from './app.js';
-import { createDb } from './db/client.js';
+import { closeDbPools, createDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 
 const db = createDb();
@@ -23,11 +23,14 @@ const app = buildApp(db, {
 });
 const port = Number(process.env.PORT ?? 3001);
 
-// Graceful shutdown (audit P2): drain in-flight requests on a deploy's SIGTERM/SIGINT
-// instead of hard-dropping them.
+// Graceful shutdown (audit P2): drain in-flight requests, then the pg pool, on a deploy's
+// SIGTERM/SIGINT instead of hard-dropping them.
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
-    void app.close().then(() => process.exit(0));
+    void app
+      .close()
+      .then(() => closeDbPools())
+      .then(() => process.exit(0));
   });
 }
 

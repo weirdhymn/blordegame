@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { BASE_FEE, FEE_MULT, RARITY_SCORE, SKILL_KEYS, STAT_KEYS } from '@blorse/balance';
 import { resolve, type Genotype } from '@blorse/genetics';
+import type { GlitchKind } from '@blorse/render-core';
 import type { DB } from '../db/client.js';
 import { herds, horses, type HorseRow } from '../db/schema.js';
 import { logAudit } from './audit.js';
@@ -40,6 +41,11 @@ export interface TavernHorseView {
   name: string;
   fee: number;
   firstEncounteredBy: string | null;
+  /** Render fields ride the listing (audit P2: the client fetched every horse separately just
+   *  to draw its sprite). Tavern strays are always adults — nothing to redact (§4.2). */
+  genotype: Genotype;
+  seed: number;
+  glitch: GlitchKind | null;
 }
 
 export async function listTavern(db: DB): Promise<TavernHorseView[]> {
@@ -52,6 +58,9 @@ export async function listTavern(db: DB): Promise<TavernHorseView[]> {
     name: resolve(h.genotype).displayName,
     fee: h.tavernFee ?? 0,
     firstEncounteredBy: h.firstEncounteredBy,
+    genotype: h.genotype,
+    seed: h.seed,
+    glitch: h.glitch,
   }));
 }
 

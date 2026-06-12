@@ -36,10 +36,22 @@ export function createPgliteDb(dataDir?: string): PgliteDatabase<typeof schema> 
   return drizzlePglite(client, { schema });
 }
 
+// Pools created by this module, so a graceful shutdown can drain them (audit P2).
+const livePools: pg.Pool[] = [];
+
+/** Drain every node-postgres pool (no-op on PGlite). index.ts calls this on SIGTERM. */
+export async function closeDbPools(): Promise<void> {
+  await Promise.all(livePools.splice(0).map((p) => p.end().catch(() => undefined)));
+}
+
 /** Managed Postgres via node-postgres. The Pool connects lazily — the first query/migration
- *  surfaces any bad credentials, not construction. */
+ *  surfaces any bad credentials, not construction. TLS: many managed providers require it but
+ *  present platform-internal certs, so DATABASE_SSL=true opts into `rejectUnauthorized: false`
+ *  (the usual `?sslmode=require` posture); leave it unset for plaintext/local. */
 export function createNodePgDb(connectionString: string): NodePgDatabase<typeof schema> {
-  const pool = new pg.Pool({ connectionString });
+  const ssl = process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined;
+  const pool = new pg.Pool({ connectionString, ssl });
+  livePools.push(pool);
   return drizzleNodePg(pool, { schema });
 }
 

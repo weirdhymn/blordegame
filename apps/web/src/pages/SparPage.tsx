@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { setHorseClass, startBattle, type BattleView, type HorseClass } from '../api/combat.js';
-import { listHerdHorses, type Horse } from '../api/horses.js';
+import { listHerdHorses } from '../api/horses.js';
 import { BattleArena } from '../components/BattleArena.js';
+import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 
 // A standalone "sparring ring" to practise the class/approach puzzle. The boss handoff (§9.4c) is the
@@ -51,21 +52,28 @@ const CLASS_META: Record<HorseClass, { label: string; icon: string; stat: string
 
 export function SparPage(): ReactElement {
   const { herd } = useSession();
-  const [horses, setHorses] = useState<Horse[]>([]);
+  // Ticket-guarded load with real loading/error states (audit P2: a failed fetch used to
+  // render the misleading "you need an adult horse" empty-state).
+  const herdLoad = useLoad(
+    useCallback(
+      async () =>
+        herd ? (await listHerdHorses(herd.id)).filter((h) => h.lifeStage === 'adult') : [],
+      [herd],
+    ),
+  );
+  const [classOverride, setClassOverride] = useState<Record<string, HorseClass | null>>({});
+  const horses = useMemo(
+    () =>
+      (herdLoad.data ?? []).map((h) =>
+        h.id in classOverride ? { ...h, class: classOverride[h.id] } : h,
+      ),
+    [herdLoad.data, classOverride],
+  );
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [foeKey, setFoeKey] = useState(FOES[0]!.key);
   const [battle, setBattle] = useState<BattleView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!herd) return;
-    listHerdHorses(herd.id)
-      .then((hs) => setHorses(hs.filter((h) => h.lifeStage === 'adult')))
-      .catch(() => {
-        /* ignore */
-      });
-  }, [herd]);
 
   const toggle = (id: string): void =>
     setPartyIds((p) =>
@@ -73,11 +81,13 @@ export function SparPage(): ReactElement {
     );
 
   async function changeClass(horseId: string, cls: HorseClass | null): Promise<void> {
+    setError(null);
     try {
       await setHorseClass(horseId, cls);
-      setHorses((hs) => hs.map((h) => (h.id === horseId ? { ...h, class: cls } : h)));
-    } catch {
-      /* ignore */
+      setClassOverride((m) => ({ ...m, [horseId]: cls }));
+    } catch (e) {
+      // A rejected class change must say so — a silent no-op reads as a broken control.
+      setError(e instanceof ApiError ? e.message : 'Could not change the class just now.');
     }
   }
 
@@ -125,7 +135,13 @@ export function SparPage(): ReactElement {
       )}
 
       <h2 className="section-h">Your party</h2>
-      {horses.length === 0 ? (
+      {herdLoad.loading && <div className="loading">Loading…</div>}
+      {herdLoad.error && (
+        <div className="error" role="alert">
+          {herdLoad.error}
+        </div>
+      )}
+      {herdLoad.data && horses.length === 0 ? (
         <p className="muted">You need an adult horse to spar.</p>
       ) : (
         <div className="spar-party">
@@ -168,6 +184,7 @@ export function SparPage(): ReactElement {
                     onChange={(e) =>
                       void changeClass(id, (e.target.value || null) as HorseClass | null)
                     }
+                    aria-label={`Class for ${h.name ?? 'this horse'}`}
                   >
                     <option value="">— unclassed —</option>
                     {CLASS_LIST.map((c) => (

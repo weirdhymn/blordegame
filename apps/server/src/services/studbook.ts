@@ -1,5 +1,5 @@
 import { STUDBOOK_TIER_CUBES } from '@blorse/balance';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { resolve } from '@blorse/genetics';
 import { STUDBOOK_GOALS } from '../content/studbook.js';
 import type { DB } from '../db/client.js';
@@ -97,9 +97,13 @@ export async function getStudbook(db: DB, herdId: string): Promise<StudbookView>
   const byGoal = new Map(entries.map((e) => [e.goalId, e]));
   const horseIds = entries.map((e) => e.horseId).filter((h): h is string => h !== null);
   const named = new Map<string, string | null>();
-  for (const hid of horseIds) {
-    const row = await db.query.horses.findFirst({ where: eq(horses.id, hid) });
-    if (row) named.set(hid, row.name);
+  if (horseIds.length > 0) {
+    // One query for every stamp's horse (was a findFirst per entry — the audit's N+1).
+    const rows = await db
+      .select({ id: horses.id, name: horses.name })
+      .from(horses)
+      .where(inArray(horses.id, horseIds));
+    for (const row of rows) named.set(row.id, row.name);
   }
   const goals: StudbookGoalView[] = STUDBOOK_GOALS.map((g) => {
     const e = byGoal.get(g.id);

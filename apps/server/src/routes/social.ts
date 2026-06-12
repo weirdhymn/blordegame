@@ -38,19 +38,27 @@ export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
     return reply.send(profile);
   });
 
-  // Async messaging (§10).
-  app.post('/messages', bodySchema({ toHerd: id, body: shortText(500) }), async (req, reply) => {
-    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
-    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-    const body = (req.body ?? {}) as { toHerd?: string; body?: string };
-    const result = await sendMessage(db, herd.id, body.toHerd ?? '', body.body ?? '');
-    if (!result.ok) {
-      return reply
-        .code(result.code === 'no_recipient' ? 404 : 400)
-        .send({ error: result.message, code: result.code });
-    }
-    return reply.code(201).send(result);
-  });
+  // Async messaging (§10) — tightly rate-limited (audit P2): DMs were bounded only by the
+  // generous global ceiling, leaving room to flood another herd's inbox.
+  app.post(
+    '/messages',
+    {
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+      ...bodySchema({ toHerd: id, body: shortText(500) }),
+    },
+    async (req, reply) => {
+      const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+      if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+      const body = (req.body ?? {}) as { toHerd?: string; body?: string };
+      const result = await sendMessage(db, herd.id, body.toHerd ?? '', body.body ?? '');
+      if (!result.ok) {
+        return reply
+          .code(result.code === 'no_recipient' ? 404 : 400)
+          .send({ error: result.message, code: result.code });
+      }
+      return reply.code(201).send(result);
+    },
+  );
 
   app.get('/messages', async (req, reply) => {
     const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);

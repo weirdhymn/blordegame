@@ -136,7 +136,12 @@ export const horses = pgTable(
       onDelete: 'set null',
     }),
   },
-  (t) => [index('horses_herd_idx').on(t.herdId)],
+  (t) => [
+    index('horses_herd_idx').on(t.herdId),
+    // Upload's child-link nulling scans by parent (audit P2).
+    index('horses_parent_a_idx').on(t.parentA),
+    index('horses_parent_b_idx').on(t.parentB),
+  ],
 );
 
 /**
@@ -427,25 +432,34 @@ export const marketListings = pgTable(
     status: listingStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('market_status_idx').on(t.status)],
+  (t) => [
+    index('market_status_idx').on(t.status),
+    // listHorse's already-listed check scans by horse (audit P2).
+    index('market_horse_idx').on(t.horseId),
+  ],
 );
 
 /** Direct offer/accept trades — both sides escrowed, atomic settlement (§10). */
-export const trades = pgTable('trades', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  fromHerd: uuid('from_herd')
-    .notNull()
-    .references(() => herds.id, { onDelete: 'cascade' }),
-  toHerd: uuid('to_herd')
-    .notNull()
-    .references(() => herds.id, { onDelete: 'cascade' }),
-  offerHorses: jsonb('offer_horses').$type<string[]>().notNull().default([]),
-  offerCubes: integer('offer_cubes').notNull().default(0),
-  requestHorses: jsonb('request_horses').$type<string[]>().notNull().default([]),
-  requestCubes: integer('request_cubes').notNull().default(0),
-  status: tradeStatus('status').notNull().default('pending'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const trades = pgTable(
+  'trades',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    fromHerd: uuid('from_herd')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    toHerd: uuid('to_herd')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    offerHorses: jsonb('offer_horses').$type<string[]>().notNull().default([]),
+    offerCubes: integer('offer_cubes').notNull().default(0),
+    requestHorses: jsonb('request_horses').$type<string[]>().notNull().default([]),
+    requestCubes: integer('request_cubes').notNull().default(0),
+    status: tradeStatus('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // listTrades scans both directions for a herd (audit P2).
+  (t) => [index('trades_from_idx').on(t.fromHerd), index('trades_to_idx').on(t.toHerd)],
+);
 
 /** Simple async direct messages (§10). */
 export const messages = pgTable(

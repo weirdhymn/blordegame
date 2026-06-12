@@ -10,6 +10,7 @@ import {
   sendMessage,
   type HerdProfile,
 } from '../api/social.js';
+import { listHerdHorses } from '../api/horses.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
@@ -18,19 +19,22 @@ export function HerdPage(): ReactElement {
   const { herd } = useSession();
   const social = useLoad(
     useCallback(async () => {
-      const [journal, clubs, rels, inbox] = await Promise.all([
+      const [journal, clubs, rels, inbox, horses] = await Promise.all([
         getJournal(),
         getClubs(),
         getRelationships(),
         getInbox(),
+        herd ? listHerdHorses(herd.id) : Promise.resolve([]),
       ]);
-      return { journal, clubs, rels, inbox };
-    }, []),
+      return { journal, clubs, rels, inbox, horses };
+    }, [herd]),
   );
   const journal = social.data?.journal ?? [];
   const clubs = social.data?.clubs ?? [];
   const rels = social.data?.rels ?? [];
   const inbox = social.data?.inbox ?? [];
+  const nameOf = (id: string): string =>
+    social.data?.horses.find((h) => h.id === id)?.name ?? 'a horse since departed';
   const [visitId, setVisitId] = useState('');
   const [profile, setProfile] = useState<HerdProfile | null>(null);
   const [msgTo, setMsgTo] = useState('');
@@ -120,7 +124,11 @@ export function HerdPage(): ReactElement {
           <ul className="list">
             {rels.map((r) => (
               <li key={r.id}>
-                <span>{r.type ?? 'acquainted'}</span>
+                <span>
+                  {r.type === 'bonded' ? '💞' : r.type === 'rival' ? '⚡' : '🤝'}{' '}
+                  <strong>{nameOf(r.horseA)}</strong> &amp; <strong>{nameOf(r.horseB)}</strong>{' '}
+                  <span className="muted">— {r.type ?? 'acquainted'}</span>
+                </span>
                 <span className="muted">affinity {r.affinity}</span>
               </li>
             ))}

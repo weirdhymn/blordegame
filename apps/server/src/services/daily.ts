@@ -11,6 +11,7 @@ import type { DB } from '../db/client.js';
 import { herds, horses } from '../db/schema.js';
 import { gameDay, nextRollover } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
+import { logAudit } from './audit.js';
 import { resolveAutonomyForDay } from './autonomy.js';
 import { recordDiscovery } from './fieldguide.js';
 import { grantItems } from './inventory.js';
@@ -174,6 +175,15 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
   const groomCubes = daysAdvanced > 0 && herd.groomBonusPending ? GROOM_CUBES : 0;
   const cubesGained = daysAdvanced * DAILY_CUBES + groomCubes;
   if (cubesGained > 0) await creditCubes(db, herdId, cubesGained);
+  // Every faucet leaves a trail (audit P2): one entry per claimed catch-up, jobs included.
+  if (daysAdvanced > 0) {
+    await logAudit(db, herdId, 'daily', {
+      days: daysAdvanced,
+      stipend: daysAdvanced * DAILY_CUBES,
+      groom: groomCubes,
+      jobs: jobCubes,
+    });
+  }
 
   // A real rollover greets the sunrise — the last beat of the first-day rhythm quest (§7i).
   // Quest rewards are granted inside recordEvent; the Post gets titles to celebrate with.

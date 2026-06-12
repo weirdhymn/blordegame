@@ -12,17 +12,19 @@ export function HerdTier(): ReactElement {
   const prog = progLoad.data;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
 
   async function upgrade(): Promise<void> {
     setBusy(true);
     setMsg(null);
+    setActError(null);
     try {
       const r = await upgradeProgression();
       setMsg(`🎉 Upgraded to Tier ${r.tier} — ${r.tierName}!`);
       await refresh();
       progLoad.reload();
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : 'Upgrade failed.');
+      setActError(e instanceof ApiError ? e.message : 'Upgrade failed.');
     } finally {
       setBusy(false);
     }
@@ -94,6 +96,11 @@ export function HerdTier(): ReactElement {
         <p className="note">
           🎉 Your herd is a Dynasty — the top tier. Nowhere to climb but legend.
         </p>
+      )}
+      {actError && (
+        <div className="error" role="alert">
+          {actError}
+        </div>
       )}
       {msg && <div className="note">{msg}</div>}
     </section>

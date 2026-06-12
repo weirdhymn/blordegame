@@ -28,6 +28,7 @@ import type { DB } from '../db/client.js';
 import { adventureRuns, horses, type HorseRow } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
+import { logAudit } from './audit.js';
 import { getRelationships } from './autonomy.js';
 import { getMealBuff } from './care-hub.js';
 import { startBattle, type BattleView } from './combat.js';
@@ -649,6 +650,11 @@ async function bankRewards(
   const loot: ItemStack[] = Object.entries(run.loot).map(([id, qty]) => ({ id, qty }));
   if (loot.length) await grantItems(db, run.herdId, loot);
   if (run.cubes > 0) await creditCubes(db, run.herdId, run.cubes);
+  await logAudit(db, run.herdId, 'expedition_bank', {
+    regionId: run.regionId,
+    cubes: run.cubes,
+    loot,
+  });
   // A completed expedition advances the first-day rhythm quest (§7i) — any ending counts.
   await recordEvent(db, run.herdId, { type: 'expedition', regionId: run.regionId });
   return { loot, cubes: run.cubes, fatigue: run.fatigue, befriended: run.befriended };

@@ -141,6 +141,13 @@
       "when": 1781204849395,
       "tag": "0019_minor_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781233295493,
+      "tag": "0020_narrow_mister_fear",
+      "breakpoints": true
     }
   ]
 }

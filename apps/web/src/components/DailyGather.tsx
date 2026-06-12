@@ -59,7 +59,12 @@ export function DailyGather(): ReactElement {
         gathers more. (Grindable expeditions live under <strong>Adventure</strong>.)
       </p>
       <div className="row-actions">
-        <select value={regionId} onChange={(e) => setRegionId(e.target.value)} disabled={busy}>
+        <select
+          value={regionId}
+          onChange={(e) => setRegionId(e.target.value)}
+          disabled={busy}
+          aria-label="Region to forage in"
+        >
           {unlocked.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}
@@ -75,7 +80,11 @@ export function DailyGather(): ReactElement {
           🌦 {gatherHint.name} — {gatherHint.hint}
         </p>
       )}
-      {(error ?? gatherLoad.error) && <div className="note">{error ?? gatherLoad.error}</div>}
+      {(error ?? gatherLoad.error) && (
+        <div className="error" role="alert">
+          {error ?? gatherLoad.error}
+        </div>
+      )}
       {res && (
         <div className="note">
           <strong>

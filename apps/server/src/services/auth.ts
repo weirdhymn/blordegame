@@ -24,18 +24,36 @@ export class UsernameTakenError extends Error {
   }
 }
 
-/** Create a User + its 1:1 Herd atomically (BLORSE_PLAN.md §6). */
+/** Postgres unique-violation (23505), as surfaced by either driver (pg nests it in `cause`). */
+function isUniqueViolation(e: unknown): boolean {
+  const code = (e as { code?: string })?.code ?? (e as { cause?: { code?: string } })?.cause?.code;
+  return code === '23505' || (e instanceof Error && e.message.includes('duplicate key'));
+}
+
+/** Create a User + its 1:1 Herd atomically (BLORSE_PLAN.md §6). Usernames are folded to
+ *  lowercase — "Alice" and "alice" are one account, not two confusable ones (audit P2). */
 export async function registerUser(
   db: DB,
-  username: string,
+  rawUsername: string,
   password: string,
 ): Promise<AuthedHerd> {
+  const username = rawUsername.toLowerCase();
   const existing = await db.query.users.findFirst({ where: eq(users.username, username) });
   if (existing) throw new UsernameTakenError();
 
   const passwordHash = hashPassword(password);
   const authed = await db.transaction(async (tx) => {
-    const [user] = await tx.insert(users).values({ username, passwordHash }).returning();
+    // The unique index is the real duplicate guard — the pre-check above only makes the
+    // common case friendly. A concurrent duplicate surfaces as the DB unique violation,
+    // mapped to the same 409 (was a raw 500 — audit P2).
+    const [user] = await tx
+      .insert(users)
+      .values({ username, passwordHash })
+      .returning()
+      .catch((e: unknown) => {
+        if (isUniqueViolation(e)) throw new UsernameTakenError();
+        throw e;
+      });
     if (!user) throw new Error('failed to create user');
     const name = `${HERD_NAMES[randomInt(HERD_NAMES.length)] ?? 'Wandering'} Herd`;
     const [herd] = await tx
@@ -81,7 +99,10 @@ export async function login(
   username: string,
   password: string,
 ): Promise<AuthedHerd | null> {
-  const user = await db.query.users.findFirst({ where: eq(users.username, username) });
+  // Same fold as registration — login is case-insensitive on the handle.
+  const user = await db.query.users.findFirst({
+    where: eq(users.username, username.toLowerCase()),
+  });
   if (!user || !verifyPassword(password, user.passwordHash)) return null;
   const herd = await db.query.herds.findFirst({ where: eq(herds.userId, user.id) });
   return herd ? { user, herd } : null;

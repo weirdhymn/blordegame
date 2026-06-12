@@ -14,6 +14,7 @@ import type { DB } from '../db/client.js';
 import { horses } from '../db/schema.js';
 import { dayToMs, gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
+import { logAudit } from './audit.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { omenFor } from './omens.js';
 import { isQuestCompleted, recordEvent, type QuestCompletion } from './quests.js';
@@ -190,6 +191,7 @@ export async function roam(
   }
   const found: ItemStack[] = [...tally.entries()].map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, found);
+  await logAudit(db, herdId, 'gather', { regionId, horses: claimed.length, found });
   const questCompletions = await recordEvent(db, herdId, { type: 'roam', regionId });
 
   return {

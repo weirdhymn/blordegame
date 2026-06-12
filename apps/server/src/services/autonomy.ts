@@ -86,6 +86,13 @@ export async function resolveAutonomyForDay(
   const events: NewJournalEvent[] = [];
   let evaluated = 0;
 
+  // One read for the whole graph (was a SELECT per pair × up to MAX_AUTONOMY_PAIRS × up to 30
+  // catch-up days on a long absence — the audit's worst N+1). Rows are keyed a|b (a < b, the
+  // same canonical order the loop uses).
+  const graph = new Map(
+    (await getRelationships(db, herdId)).map((r) => [`${r.horseA}|${r.horseB}`, r]),
+  );
+
   for (let i = 0; i < herdHorses.length && evaluated < MAX_AUTONOMY_PAIRS; i++) {
     for (let j = i + 1; j < herdHorses.length && evaluated < MAX_AUTONOMY_PAIRS; j++) {
       evaluated++;
@@ -95,17 +102,7 @@ export async function resolveAutonomyForDay(
       const [a, b] = hi.id < hj.id ? [hi, hj] : [hj, hi];
 
       const delta = compatibility(a.personality as Personality, b.personality as Personality);
-      const existing = await db
-        .select()
-        .from(relationships)
-        .where(
-          and(
-            eq(relationships.herdId, herdId),
-            eq(relationships.horseA, a.id),
-            eq(relationships.horseB, b.id),
-          ),
-        );
-      const prev = existing[0];
+      const prev = graph.get(`${a.id}|${b.id}`);
       const affinity = Math.max(
         AFFINITY_MIN,
         Math.min(AFFINITY_MAX, (prev?.affinity ?? 0) + delta),

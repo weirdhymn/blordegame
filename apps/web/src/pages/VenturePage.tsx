@@ -47,26 +47,29 @@ export function VenturePage(): ReactElement {
   const [keeper, setKeeper] = useState<KeeperChallenge | null>(null);
   const [bossBattle, setBossBattle] = useState<BattleView | null>(null);
 
+  // Load failures are SAID, not swallowed (audit P2): a dead regions fetch used to render a
+  // silent blank picker, and a dead horses fetch the misleading "no adult horse" empty-state.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [coreLoading, setCoreLoading] = useState(true);
+
   const loadHorses = useCallback(() => {
     if (!herd) return;
     listHerdHorses(herd.id)
       .then((hs) => setHorses(hs.filter((h) => h.lifeStage === 'adult')))
-      .catch(() => {
-        /* ignore */
-      });
+      .catch(() => setLoadError('Could not load your horses — give it a moment and reload.'));
   }, [herd]);
 
   useEffect(() => {
     if (!herd) return;
+    setCoreLoading(true);
     getRegions()
       .then((rs) => {
         setRegions(rs);
         const open = rs.find((r) => r.unlocked);
         if (open) setRegionId(open.id);
       })
-      .catch(() => {
-        /* ignore */
-      });
+      .catch(() => setLoadError('Could not load the regions — give it a moment and reload.'))
+      .finally(() => setCoreLoading(false));
     loadHorses();
   }, [herd, loadHorses]);
 
@@ -188,6 +191,12 @@ export function VenturePage(): ReactElement {
         bosses, with stakes and rewards. Grind these as much as you like; the daily gather (your raw
         materials) lives back on the Pasture.
       </p>
+      {loadError && (
+        <div className="error" role="alert">
+          {loadError}
+        </div>
+      )}
+      {coreLoading && regions.length === 0 && <div className="loading">Loading…</div>}
       <label className="field">
         <span>Region</span>
         <select

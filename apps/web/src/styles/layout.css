@@ -18,6 +18,13 @@
 .page > .pasture {
   max-width: none; /* break out of the readable-column cap to use the full desktop width */
 }
+/* The Town street and the Garden are wide layouts too (audit P2: they were stuck in the
+   760px column — 7 façades wrapping two-up, plots capped at two per row). */
+.page > .town,
+.page > .garden,
+.page > .studbook {
+  max-width: 1100px;
+}
 .pasture-grid {
   display: grid;
   grid-template-columns: 1fr; /* base (narrow): one stacked column */

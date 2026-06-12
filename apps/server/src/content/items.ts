@@ -31,7 +31,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'brick', name: 'Brick', kind: 'material' }, // fired clay — building material
   { id: 'paper', name: 'Paper', kind: 'material' }, // pressed fiber pulp
   { id: 'ingot', name: 'Ingot', kind: 'material' }, // smelted ore
-  // crafted products — feed jobs/clubs in Phases 8–9 (no consuming sink yet, see BLORSE_PLAN §7)
+  // crafted products — CONSUMED by the Living Herd's night life (§7o): a seeded horse reads
+  // a Book each night (reading XP); the Meeting Hall hosts game nights (affinity; games
+  // occasionally wear out). Tools still await their sink.
   { id: 'book', name: 'Book', kind: 'book' },
   { id: 'board-game', name: 'Board Game', kind: 'game' },
   { id: 'tool', name: 'Tool', kind: 'tool' },

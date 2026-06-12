@@ -20,6 +20,7 @@ import {
   FIELD_GUIDE_MILESTONES,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
+  GAME_NIGHT_AFFINITY,
   GATHER_PER_HORSE_PER_DAY,
   GROOM_CUBES,
   HERD_TIERS,
@@ -27,6 +28,7 @@ import {
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
   KEEPER_UNLOCK_EXPEDITIONS,
+  NIGHT_READ_XP,
   OMEN_GATHER_BONUS_QTY,
   POTION_HEAL_HP,
   REWARD_RETREAT_FRACTION,
@@ -41,7 +43,7 @@ import {
 } from '@blorse/balance';
 import { breedFoal, resolve as resolveCoat, type Genotype } from '@blorse/genetics';
 import { GLITCH_KINDS, type GlitchKind } from '@blorse/render-core';
-import { eq as drizzleEq } from 'drizzle-orm';
+import { and, eq as drizzleEq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { PgliteDatabase } from 'drizzle-orm/pglite';
 import type { InjectOptions } from 'fastify';
@@ -58,6 +60,7 @@ import {
   journalEvents,
   marketListings,
   relationships,
+  structures,
   trades,
   users,
 } from '../src/db/schema.js';
@@ -85,6 +88,7 @@ import {
   startRun,
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
+import { getClubs, resolveAutonomyForDay } from '../src/services/autonomy.js';
 import { bondedBreedBonus, breedHorses, breedingOdds } from '../src/services/breeding.js';
 import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
 import {
@@ -4051,6 +4055,110 @@ async function main(): Promise<void> {
       bragBeats.some(
         (e) => e.kind === 'accomplishment' && e.day === 12_345 && /Skilled Reading/.test(e.text),
       ),
+    );
+  }
+
+  // ── Night Reading (§7o): crafted products finally feed the Living Herd ──
+  section('Night Reading (§7o): books are read, games are played, the Hall has a job');
+  {
+    const seq = (vals: number[]): (() => number) => {
+      let i = 0;
+      return () => vals[i++] ?? 0.5;
+    };
+    const nightH = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'nightowl', password: 'nightowlhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    // Strip to ONE adult (the lone-reader path): release the starters, mint a reader.
+    await db.update(horses).set({ herdId: null }).where(drizzleEq(horses.herdId, nightH));
+    const reader = await mintHorse(db, {
+      herdId: nightH,
+      genotype: { E: 'ee' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+      skills: { reading: { level: 0, xp: 0 } },
+    });
+
+    // No books → no beat (and zero rng draws — determinism for item-less herds).
+    const dark = await resolveAutonomyForDay(db, nightH, seq([]));
+    check(
+      'no books, no hall → the night passes quietly',
+      !dark.some((e) => e.kind === 'reading' || e.kind === 'game'),
+    );
+
+    await grantItems(db, nightH, [{ id: 'book', qty: 2 }]);
+    const night1 = await resolveAutonomyForDay(db, nightH, seq([0.0]));
+    const readerNow = (await getHorse(db, reader.id))!;
+    check(
+      'night reading consumes ONE book and grants real reading XP',
+      night1.some((e) => e.kind === 'reading') &&
+        (await itemQty(db, nightH, 'book')) === 1 &&
+        ((readerNow.skills as Record<string, { xp: number }>).reading?.xp ?? 0) >= NIGHT_READ_XP,
+    );
+
+    // A milestone read brags: prime the reader to the cusp of Skilled Reading.
+    await db
+      .update(horses)
+      .set({ skills: { reading: { level: 4, xp: 999_999 } } })
+      .where(drizzleEq(horses.id, reader.id));
+    const refreshed = await resolveAutonomyForDay(db, nightH, seq([0.0]));
+    check(
+      'a level-up earned by night reading writes the 🏅 brag beat',
+      refreshed.some((e) => e.kind === 'accomplishment' && /Skilled Reading/.test(e.text)) &&
+        (await itemQty(db, nightH, 'book')) === 0,
+    );
+
+    // Game night: requires the Meeting Hall — without it, a game on the shelf stays shelved.
+    const partner = await mintHorse(db, {
+      herdId: nightH,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    await grantItems(db, nightH, [{ id: 'board-game', qty: 1 }]);
+    const noHall = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.99]));
+    check(
+      'no Meeting Hall → no game night (the shelf gathers dust)',
+      !noHall.some((e) => e.kind === 'game'),
+    );
+
+    await db.insert(structures).values({ herdId: nightH, type: 'meeting-hall' });
+    const gameNight = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.99]));
+    const [aId, bId] = [reader.id, partner.id].sort();
+    const pairRow = (
+      await db
+        .select()
+        .from(relationships)
+        .where(
+          and(
+            drizzleEq(relationships.herdId, nightH),
+            drizzleEq(relationships.horseA, aId!),
+            drizzleEq(relationships.horseB, bId!),
+          ),
+        )
+    )[0];
+    check(
+      'game night at the Hall nudges the pair and spares the game (high wear roll)',
+      gameNight.some((e) => e.kind === 'game') &&
+        (await itemQty(db, nightH, 'board-game')) === 1 &&
+        (pairRow?.affinity ?? -999) >= GAME_NIGHT_AFFINITY,
+    );
+    check(
+      'the game club founds itself at the Hall (sign-up sheet unsigned, fully attended)',
+      gameNight.some((e) => e.kind === 'club' && /game club/.test(e.text)) &&
+        (await getClubs(db, nightH)).some((c) => c.type === 'game-club'),
+    );
+
+    const wornOut = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.0]));
+    check(
+      'a low wear roll retires the game to the floorboards (consumed, with a beat)',
+      wornOut.some((e) => /floorboards/.test(e.text)) &&
+        (await itemQty(db, nightH, 'board-game')) === 0,
     );
   }
 

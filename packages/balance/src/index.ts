@@ -49,6 +49,17 @@ export const FIELD_GUIDE_MILESTONES: { coats: number; cubes: number }[] = [
   { coats: 71, cubes: 1_500 },
 ];
 
+// ── §7o Night Reading — crafted products feed the Living Herd (the craft→autonomy loop) ──
+/** Reading XP one seeded horse gains from a nighttime Book (consumed). A solid bite — just
+ *  over half a successful job day — so books matter without dethroning jobs as the trainer. */
+export const NIGHT_READ_XP = 12;
+/** Affinity nudge for the seeded pair at a Meeting-Hall game night (board games make friends).
+ *  Gentle vs the daily compatibility drift — ~10 game nights ≈ a friendship from scratch. */
+export const GAME_NIGHT_AFFINITY = 3;
+/** Chance per game night that the board game wears out (consumed) — gentle re-demand for the
+ *  Workshop, deadpan, never punishing (the night still happened). */
+export const GAME_WEAR_CHANCE = 0.15;
+
 // ── §14.2 Heritability (at birth; clamp to scale) ───────────────────────────
 export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight

@@ -5034,6 +5034,14 @@ async function main(): Promise<void> {
       if (out.genotype.My === 'mymy') landed = true;
     }
     check('two carriers can breed a mushroom (engine inheritance, facade naming)', landed);
+
+    // The dial is turned up exactly where the fiction says: the Woods, and only the Woods.
+    check(
+      'mushroom grows only in the Weird Woods (the §7u dial)',
+      (REGION_BY_ID.get('weird-woods')?.freqOverride.My?.my ?? 0) > 0 &&
+        (REGION_BY_ID.get('green-grass')?.freqOverride.My?.my ?? 0) === 0 &&
+        (REGION_BY_ID.get('dusty-dunes')?.freqOverride.My?.my ?? 0) === 0,
+    );
   }
 
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──

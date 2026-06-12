@@ -87,6 +87,10 @@ export const REGIONS: Region[] = [
       Sty: { Sty: 0.2, n: 0.8 },
       Rn: { Rn: 0.1, rn: 0.9 },
       C: { prl: 0.06, Cr: 0.1, C: 0.84 },
+      // §7u gene drop, the dial turned up: mushroom grows here and only here. ~5% allele
+      // frequency ⇒ expressed mymy chestnuts are genuinely rare in the wild; breeding
+      // carriers is the deliberate path (the Studbook's 'Something New' goal).
+      My: { my: 0.05, My: 0.95 },
     },
     loot: [
       { item: 'timber', weight: 6 },

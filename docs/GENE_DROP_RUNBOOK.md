@@ -40,6 +40,36 @@ new PNGs to ship. Keep White/Gray the rarest.
 > iterates over; author it as a reviewed data change and re-run the full ~340-test engine
 > suite. A **glitch never touches the engine** — it's render-core + balance only.
 
+> **Field notes from the first real drop (Mushroom, §7u, 2026-06).** What this runbook's
+> premise got right and what it under-specified:
+>
+> 1. **Inheritance/punnett/written-genotype ARE data-driven** — `LOCI` + `displayOrder` +
+>    `rollFrequencies` entries in `data.js` make a new locus breed, roll, and print with
+>    zero logic changes. ✓ as promised.
+> 2. **But the locus's EFFECT (name + look) is NOT data.** The engine's resolver applies
+>    effects in hand-written per-locus branches. Do NOT add a branch — put the drop's
+>    naming + procedural swatch in the **`@blorse/genetics` facade** (`mushroomize` is the
+>    template): every consumer already imports `resolve`/`breedFoal` from there, and the
+>    swatch flows to the renderer through `varySwatch` with zero render-core changes.
+> 3. **One engine-side line IS required:** the static `OFF` baseline table in `genetics.js`
+>    must gain the locus's absent row (`My: 'MyMy'`) — this table is the backward-compat
+>    contract this runbook's §0 promise rests on; without it, legacy genotypes crash in
+>    `breedFoal`/`formatGenotype`. A one-row table addition, flagged in the commit; never
+>    logic.
+> 4. **Two vendored-test content pins will move** with any locus: the reverse-lookup
+>    genotype-space count (× the new locus's genotype count) and the canonical OFF string.
+>    Updating those pins is part of the drop; the ~338 differential/ratio guards must pass
+>    untouched.
+> 5. **The catalog ripple:** append the Field Guide entry facade-side (`enumerateColors`),
+>    move the top `FIELD_GUIDE_MILESTONES` rung to the new catalog size, and consider a
+>    Studbook goal — the §7n content-integrity test (top rung = catalog size) enforces the
+>    first two.
+> 6. **Ship dark = `rollFrequencies` at 0 in `data.js`** (the global gate); the dial is the
+>    REGION `freqOverride` (content/regions.ts), not `@blorse/balance` as §2.2 loosely says.
+> 7. **Known v1 limit:** punnett's factored key list is engine-internal, so breed-odds
+>    distributions don't enumerate a dropped locus (carriers still breed true). Accept, or
+>    revisit when a drop demands odds visibility.
+
 ---
 
 ## 2. Pre-flight (on a branch, against staging)

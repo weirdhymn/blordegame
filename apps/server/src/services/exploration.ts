@@ -6,13 +6,13 @@ import {
   ROAM_DROPS_MAX,
   ROAM_DROPS_MIN,
 } from '@blorse/balance';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 import { ADVENTURE_POOLS } from '../content/adventures.js';
 import { ITEM_BY_ID } from '../content/items.js';
 import { REGION_BY_ID, REGIONS, type Region } from '../content/regions.js';
 import type { DB } from '../db/client.js';
 import { horses } from '../db/schema.js';
-import { gameDay } from '../util/clock.js';
+import { dayToMs, gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { grantItems, type ItemStack } from './inventory.js';
 import { omenFor } from './omens.js';
@@ -143,15 +143,40 @@ export async function roam(
     };
   }
 
-  // Each eligible horse forages once (seeded; a bigger stable simply rolls more times) and brings home
-  // one random cooking grain (§7) — so grain supply scales with herd size, feeding the morning cook.
-  // A gather omen (world weather) features one item today: each forager brings a little extra.
-  // Read AFTER the seeded rolls each loop so the omen never shifts the RNG stream (same seed, same
-  // base haul, omen day or not).
+  // Claim the day stamps FIRST (§11 hardening): the per-horse cap is enforced by a conditional
+  // UPDATE (only rows still under today's cap take the stamp), so concurrent roams can't both
+  // harvest from the same horses — only the claimed rows roll loot below.
+  const dayStart = new Date(dayToMs(gameDay(nowMs)));
+  const claimed = await db
+    .update(horses)
+    .set({ lastGatheredAt: new Date(nowMs) })
+    .where(
+      and(
+        inArray(
+          horses.id,
+          eligible.map((h) => h.id),
+        ),
+        or(isNull(horses.lastGatheredAt), lt(horses.lastGatheredAt, dayStart)),
+      ),
+    )
+    .returning({ id: horses.id });
+  if (claimed.length === 0) {
+    return {
+      ok: false,
+      code: 'already_gathered',
+      message: 'Your herd has already foraged today — back at the next sunrise.',
+    };
+  }
+
+  // Each claimed horse forages once (seeded; a bigger stable simply rolls more times) and brings
+  // home one random cooking grain (§7) — so grain supply scales with herd size, feeding the
+  // morning cook. A gather omen (world weather) features one item today: each forager brings a
+  // little extra. Read AFTER the seeded rolls each loop so the omen never shifts the RNG stream
+  // (same seed, same base haul, omen day or not).
   const omen = omenFor(regionId, gameDay(nowMs));
   const rng = mulberry32(seed ?? randomInt(1, 2 ** 31));
   const tally = new Map<string, number>();
-  for (let h = 0; h < eligible.length; h++) {
+  for (let h = 0; h < claimed.length; h++) {
     const drops = ROAM_DROPS_MIN + Math.floor(rng() * (ROAM_DROPS_MAX - ROAM_DROPS_MIN + 1));
     for (let i = 0; i < drops; i++) {
       const item = rollLoot(region, rng);
@@ -165,22 +190,13 @@ export async function roam(
   }
   const found: ItemStack[] = [...tally.entries()].map(([id, qty]) => ({ id, qty }));
   await grantItems(db, herdId, found);
-  await db
-    .update(horses)
-    .set({ lastGatheredAt: new Date(nowMs) })
-    .where(
-      inArray(
-        horses.id,
-        eligible.map((h) => h.id),
-      ),
-    );
   const questCompletions = await recordEvent(db, herdId, { type: 'roam', regionId });
 
   return {
     ok: true,
     regionId,
     found,
-    horsesGathered: eligible.length,
+    horsesGathered: claimed.length,
     herdSize: stable.length,
     questCompletions,
   };

@@ -18,8 +18,18 @@ const app = buildApp(db, {
     .filter(Boolean),
   allowMint: process.env.ALLOW_MINT === 'true', // default false ⇒ admin-only
   allowDebug: !isProd, // admin debug toolkit (POST /api/debug/*) — local only, never in production
+  // Pino request/error logging in prod (platform log drains read JSON); quiet in dev/tests.
+  logger: isProd ? { level: process.env.LOG_LEVEL ?? 'info' } : false,
 });
 const port = Number(process.env.PORT ?? 3001);
+
+// Graceful shutdown (audit P2): drain in-flight requests on a deploy's SIGTERM/SIGINT
+// instead of hard-dropping them.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    void app.close().then(() => process.exit(0));
+  });
+}
 
 app
   .listen({ port, host: '0.0.0.0' })

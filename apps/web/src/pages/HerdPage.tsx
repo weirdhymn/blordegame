@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import {
   getClubs,
@@ -68,6 +69,7 @@ export function HerdPage(): ReactElement {
       <h1>Your Herd</h1>
       <p className="muted">
         Your herd id: <code>{herd?.id}</code> — share it so others can visit, trade, or message you.
+        The herd&apos;s full history lives in <Link to="/journal">📜 the Journal</Link>.
       </p>
       {note && <div className="note">{note}</div>}
       {(error ?? social.error) && (

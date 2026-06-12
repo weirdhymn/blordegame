@@ -11,12 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Enable Corepack (provisions pnpm from package.json#packageManager)
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24 # matches .nvmrc + the server Dockerfile (node:24-slim)
-
-      - name: Enable Corepack (provisions pnpm from package.json#packageManager)
-        run: corepack enable
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -30,8 +31,50 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      # Migration-drift gate (§11 hardening): a schema.ts edit without `db:generate` must fail
+      # here, not at deploy. Generating on a clean tree must be a no-op.
+      - name: Migrations match schema
+        run: |
+          pnpm --filter @blorse/server db:generate
+          git diff --exit-code apps/server/drizzle
+
       - name: Test
         run: pnpm test
+
+  postgres:
+    name: Server suite on real Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: blorse
+          POSTGRES_PASSWORD: blorse
+          POSTGRES_DB: blorse_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blorse" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The same ~457-check suite, but with migrations + every query running against a real
+      # PostgreSQL — the node-postgres driver path PGlite cannot exercise (DEPLOY.md §9).
+      - name: Server suite (DATABASE_URL=postgres://…)
+        env:
+          DATABASE_URL: postgres://blorse:blorse@localhost:5432/blorse_test
+        run: pnpm --filter @blorse/server test
 
   docker:
     name: Server image builds

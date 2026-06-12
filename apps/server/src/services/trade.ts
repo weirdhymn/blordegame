@@ -1,8 +1,12 @@
-import { and, eq, or, sql } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { herds, horses, trades } from '../db/schema.js';
 import { logAudit } from './audit.js';
 import { getHorse } from './horse.js';
+import { creditCubes, spendCubes } from './wallet.js';
+
+// Sentinel: a side's conditional debit found the balance short → roll the accept back.
+class SideShort extends Error {}
 
 export interface TradeOffer {
   toHerd: string;
@@ -83,48 +87,59 @@ export async function acceptTrade(
   if (t.toHerd !== accepterHerd)
     return { ok: false, code: 'not_recipient', message: 'This trade is not for you.' };
 
-  const result = await db.transaction(async (tx): Promise<AcceptResult> => {
-    const ownedBy = async (ids: string[], herdId: string): Promise<boolean> => {
-      for (const id of ids) {
-        const h = await tx.query.horses.findFirst({ where: eq(horses.id, id) });
-        if (!h || h.herdId !== herdId) return false;
+  let result: AcceptResult;
+  try {
+    result = await db.transaction(async (tx): Promise<AcceptResult> => {
+      const ownedBy = async (ids: string[], herdId: string): Promise<boolean> => {
+        for (const id of ids) {
+          const h = await tx.query.horses.findFirst({ where: eq(horses.id, id) });
+          if (!h || h.herdId !== herdId) return false;
+        }
+        return true;
+      };
+      if (
+        !(await ownedBy(t.offerHorses, t.fromHerd)) ||
+        !(await ownedBy(t.requestHorses, t.toHerd))
+      ) {
+        return { ok: false, code: 'invalid', message: 'A horse in this trade changed hands.' };
       }
-      return true;
-    };
-    if (
-      !(await ownedBy(t.offerHorses, t.fromHerd)) ||
-      !(await ownedBy(t.requestHorses, t.toHerd))
-    ) {
-      return { ok: false, code: 'invalid', message: 'A horse in this trade changed hands.' };
-    }
-    const from = await tx.query.herds.findFirst({ where: eq(herds.id, t.fromHerd) });
-    const to = await tx.query.herds.findFirst({ where: eq(herds.id, t.toHerd) });
-    if (!from || !to || from.cubes < t.offerCubes || to.cubes < t.requestCubes) {
+      const from = await tx.query.herds.findFirst({ where: eq(herds.id, t.fromHerd) });
+      const to = await tx.query.herds.findFirst({ where: eq(herds.id, t.toHerd) });
+      if (!from || !to || from.cubes < t.offerCubes || to.cubes < t.requestCubes) {
+        return { ok: false, code: 'cant_afford', message: 'Not enough Cubes on one side.' };
+      }
+
+      const claimed = await tx
+        .update(trades)
+        .set({ status: 'accepted' })
+        .where(and(eq(trades.id, tradeId), eq(trades.status, 'pending')))
+        .returning({ id: trades.id });
+      if (claimed.length === 0)
+        return { ok: false, code: 'gone', message: 'Trade already resolved.' };
+
+      for (const id of t.offerHorses)
+        await tx.update(horses).set({ herdId: t.toHerd }).where(eq(horses.id, id));
+      for (const id of t.requestHorses)
+        await tx.update(horses).set({ herdId: t.fromHerd }).where(eq(horses.id, id));
+      // Cubes through the kernel (audit P0): each side SPENDS what it gives (conditional —
+      // a concurrent spend elsewhere can no longer drive a balance negative) and is then
+      // credited what it receives. Either shortfall rolls the whole accept back.
+      if (t.offerCubes > 0 && (await spendCubes(tx, t.fromHerd, t.offerCubes)) === null) {
+        throw new SideShort();
+      }
+      if (t.requestCubes > 0 && (await spendCubes(tx, t.toHerd, t.requestCubes)) === null) {
+        throw new SideShort();
+      }
+      if (t.requestCubes > 0) await creditCubes(tx, t.fromHerd, t.requestCubes);
+      if (t.offerCubes > 0) await creditCubes(tx, t.toHerd, t.offerCubes);
+      return { ok: true };
+    });
+  } catch (e) {
+    if (e instanceof SideShort) {
       return { ok: false, code: 'cant_afford', message: 'Not enough Cubes on one side.' };
     }
-
-    const claimed = await tx
-      .update(trades)
-      .set({ status: 'accepted' })
-      .where(and(eq(trades.id, tradeId), eq(trades.status, 'pending')))
-      .returning({ id: trades.id });
-    if (claimed.length === 0)
-      return { ok: false, code: 'gone', message: 'Trade already resolved.' };
-
-    for (const id of t.offerHorses)
-      await tx.update(horses).set({ herdId: t.toHerd }).where(eq(horses.id, id));
-    for (const id of t.requestHorses)
-      await tx.update(horses).set({ herdId: t.fromHerd }).where(eq(horses.id, id));
-    await tx
-      .update(herds)
-      .set({ cubes: sql`${herds.cubes} - ${t.offerCubes} + ${t.requestCubes}` })
-      .where(eq(herds.id, t.fromHerd));
-    await tx
-      .update(herds)
-      .set({ cubes: sql`${herds.cubes} - ${t.requestCubes} + ${t.offerCubes}` })
-      .where(eq(herds.id, t.toHerd));
-    return { ok: true };
-  });
+    throw e;
+  }
 
   if (result.ok) await logAudit(db, accepterHerd, 'trade_accept', { tradeId, from: t.fromHerd });
   return result;

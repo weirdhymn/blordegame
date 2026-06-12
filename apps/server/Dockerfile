@@ -30,9 +30,15 @@ ENV TRUST_PROXY=true
 VOLUME ["/data"]
 EXPOSE 8080
 
+# Drop root (§11 hardening): the bundled `node` user owns the app and the data volume mount.
+RUN mkdir -p /data && chown -R node:node /data /app
+USER node
+
 # Liveness: the unauthenticated /health route (kept at the root, no /api prefix).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
   CMD node -e "fetch('http://localhost:'+(process.env.PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# `start` runs: node --import ./scripts/register.mjs src/index.ts (applies migrations, listens).
-CMD ["pnpm", "--filter", "@blorse/server", "start"]
+# node runs as PID 1 directly (not via pnpm), so the platform's SIGTERM reaches the graceful
+# shutdown handler in index.ts instead of dying inside a package-manager wrapper.
+WORKDIR /app/apps/server
+CMD ["node", "--import", "./scripts/register.mjs", "src/index.ts"]

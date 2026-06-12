@@ -14,7 +14,7 @@ import {
   type SkillKey,
   type StatKey,
 } from '@blorse/balance';
-import { randomGenotype, resolve } from '@blorse/genetics';
+import { randomGenotype, resolve, type Genotype } from '@blorse/genetics';
 import {
   ADVENTURE_BY_ID,
   ADVENTURE_POOLS,
@@ -25,7 +25,7 @@ import {
 } from '../content/adventures.js';
 import { REGION_BY_ID } from '../content/regions.js';
 import type { DB } from '../db/client.js';
-import { adventureRuns, herds, horses, type HorseRow } from '../db/schema.js';
+import { adventureRuns, horses, type HorseRow } from '../db/schema.js';
 import { gameDay } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { getRelationships } from './autonomy.js';
@@ -36,6 +36,7 @@ import { grantItems, type ItemStack } from './inventory.js';
 import { omenFor } from './omens.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
 import { isQuestCompleted, recordEvent } from './quests.js';
+import { creditCubes } from './wallet.js';
 import {
   accomplishmentsForLevel,
   grantSkillXp,
@@ -492,25 +493,60 @@ export async function chooseInRun(
   const fatigue = run.fatigue + (outcome.fatigue ?? 0);
   let befriendedName = run.befriended;
 
-  // Befriend a wild stranger → it joins the herd now (the narrative recruit, no fee).
-  let befriended: { id: string; name: string } | null = null;
+  // A wild stranger is GENERATED now (pure, seeded) but minted only after the step claim
+  // below — a double-submitted choice must never mint two horses (§11 hardening).
+  let wildGen: { genotype: Genotype; personality: Record<string, number>; name: string } | null =
+    null;
   if (outcome.wild) {
-    // A befriended stray is a rare narrative gift — it joins even at the roster cap (a cozy exception;
-    // the deliberate add-points, breeding + Tavern recruiting, are where the §7 cap bites).
     const region = REGION_BY_ID.get(run.regionId);
     const wrng = stepRng(run.seed, run.step, 0x85ebca6b);
     const genotype = randomGenotype(region?.freqOverride);
-    const personality = rollWildPersonality(wrng);
-    const name = resolve(genotype).displayName;
+    wildGen = {
+      genotype,
+      personality: rollWildPersonality(wrng),
+      name: resolve(genotype).displayName,
+    };
+    befriendedName = wildGen.name;
+  }
+
+  const step = run.step + 1;
+  const nextScene = outcome.next === 'end' ? undefined : script.scenes[outcome.next];
+
+  // The step claim (§11 hardening): ONE conditional UPDATE owns this transition. Concurrent
+  // submissions of the same choice both read step N, but only one advances N→N+1 (or ends the
+  // run); the loser changes nothing and banks nothing — the audit's double-bank race.
+  const claimed = await db
+    .update(adventureRuns)
+    .set(
+      nextScene
+        ? { step, sceneId: nextScene.id, loot, cubes, fatigue, befriended: befriendedName }
+        : { status: 'ended', step, loot, cubes, fatigue, befriended: befriendedName },
+    )
+    .where(
+      and(
+        eq(adventureRuns.id, run.id),
+        eq(adventureRuns.status, 'active'),
+        eq(adventureRuns.step, run.step),
+      ),
+    )
+    .returning({ id: adventureRuns.id });
+  if (claimed.length === 0) {
+    return { ok: false, code: 'not_found', message: 'No such run.' };
+  }
+
+  // Befriend a wild stranger → it joins the herd now (the narrative recruit, no fee).
+  // A befriended stray is a rare narrative gift — it joins even at the roster cap (a cozy
+  // exception; the deliberate add-points, breeding + Tavern recruiting, are where the §7 cap bites).
+  let befriended: { id: string; name: string } | null = null;
+  if (wildGen) {
     const minted = await mintHorse(db, {
       herdId,
-      genotype,
+      genotype: wildGen.genotype,
       origin: 'wild',
       lifeStage: 'adult',
-      personality,
+      personality: wildGen.personality,
     });
-    befriended = { id: minted.id, name };
-    befriendedName = name;
+    befriended = { id: minted.id, name: wildGen.name };
   }
 
   // Adventures train horses (§9.3): the horse that stepped up practices the *specific* skill it
@@ -540,17 +576,13 @@ export async function chooseInRun(
     }
   }
 
-  const step = run.step + 1;
   const narration = outcome.text;
-  const nextScene = outcome.next === 'end' ? undefined : script.scenes[outcome.next];
 
   if (!nextScene) {
-    // `end`, or a dangling `next` → bank everything and close the run (never trap the player).
-    const summary = await bankAndEnd(db, {
-      id: run.id,
+    // `end`, or a dangling `next` → bank everything (the claim above already closed the run).
+    const summary = await bankRewards(db, {
       herdId,
       regionId: run.regionId,
-      step,
       loot,
       cubes,
       fatigue,
@@ -582,10 +614,7 @@ export async function chooseInRun(
     };
   }
 
-  await db
-    .update(adventureRuns)
-    .set({ step, sceneId: nextScene.id, loot, cubes, fatigue, befriended: befriendedName })
-    .where(eq(adventureRuns.id, run.id));
+  // The step claim above already persisted the advance.
   return {
     ok: true,
     ended: false,
@@ -603,40 +632,23 @@ export async function chooseInRun(
 }
 
 interface RunEndState {
-  id: string;
   herdId: string;
   regionId: string;
-  step: number;
   loot: Record<string, number>;
   cubes: number;
   fatigue: number;
   befriended: string | null;
 }
 
-async function bankAndEnd(
+/** Grant the banked haul. The caller has ALREADY claimed the run's end (conditional status
+ *  write) — this runs once per run by construction; Cubes ride the kernel. */
+async function bankRewards(
   db: DB,
   run: RunEndState,
 ): Promise<{ loot: ItemStack[]; cubes: number; fatigue: number; befriended: string | null }> {
   const loot: ItemStack[] = Object.entries(run.loot).map(([id, qty]) => ({ id, qty }));
   if (loot.length) await grantItems(db, run.herdId, loot);
-  if (run.cubes > 0) {
-    await db
-      .update(herds)
-      .set({ cubes: sql`${herds.cubes} + ${run.cubes}` })
-      .where(eq(herds.id, run.herdId));
-  }
-  // Keep the row as `ended` (history) with the final accrued state persisted.
-  await db
-    .update(adventureRuns)
-    .set({
-      status: 'ended',
-      step: run.step,
-      loot: run.loot,
-      cubes: run.cubes,
-      fatigue: run.fatigue,
-      befriended: run.befriended,
-    })
-    .where(eq(adventureRuns.id, run.id));
+  if (run.cubes > 0) await creditCubes(db, run.herdId, run.cubes);
   // A completed expedition advances the first-day rhythm quest (§7i) — any ending counts.
   await recordEvent(db, run.herdId, { type: 'expedition', regionId: run.regionId });
   return { loot, cubes: run.cubes, fatigue: run.fatigue, befriended: run.befriended };

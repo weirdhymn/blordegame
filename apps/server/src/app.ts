@@ -47,6 +47,9 @@ export interface AppOptions {
    *  false; index.ts enables it outside production. Even when on, every debug route additionally
    *  requires role 'admin' — so a non-admin gets 403 and a prod build 404 (routes unmounted). */
   allowDebug?: boolean;
+  /** Fastify logger config (default false — tests stay quiet). index.ts turns on pino in prod
+   *  so 500s are diagnosable from platform logs (audit P1: prod previously ran blind). */
+  logger?: boolean | object;
 }
 
 /** Build a Fastify instance bound to a DB. Pure factory — tests drive it via inject(). */
@@ -63,15 +66,17 @@ export function buildApp(db: DB, opts: AppOptions = {}): FastifyInstance {
     allowDebug: opts.allowDebug ?? false,
   };
 
-  const app = Fastify({ logger: false, trustProxy: cfg.trustProxy });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: cfg.trustProxy });
   app.register(cookie);
   // Anti-abuse rate limiting (§11). Generous global ceiling; sensitive routes set a tighter
   // per-route `config.rateLimit`. Keyed by client IP (real IP when trustProxy is on).
   app.register(rateLimit, { global: true, max: cfg.rateLimitMax, timeWindow: '1 minute' });
 
-  // Consistent JSON error envelopes (§11) so the client never sees a raw stack.
-  app.setErrorHandler((err: FastifyError, _req, reply) => {
+  // Consistent JSON error envelopes (§11) so the client never sees a raw stack — but the
+  // stack always reaches the log (a swallowed 500 is undiagnosable in prod; audit P1).
+  app.setErrorHandler((err: FastifyError, req, reply) => {
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
+    if (status >= 500) req.log.error({ err, url: req.url }, 'unhandled route error');
     const message = status >= 500 ? 'internal server error' : (err.message ?? 'error');
     // Schema-validation failures (routes/schemas.ts) read as a plain bad_request, not FST_ERR_*.
     const code = err.code === 'FST_ERR_VALIDATION' ? 'bad_request' : err.code;

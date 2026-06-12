@@ -3,6 +3,9 @@
  * with PGlite's lazy WASM init). Run: node --import ./scripts/register.mjs test/server.test.ts
  * Exercises the real Fastify + Drizzle + Postgres(PGlite) stack end to end.
  */
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   ADVENTURE_HARMONY_MAX,
   ADVENTURE_MARK_THRESHOLD,
@@ -42,7 +45,7 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { PgliteDatabase } from 'drizzle-orm/pglite';
 import type { InjectOptions } from 'fastify';
 import { buildApp } from '../src/app.js';
-import { createDb, createPgliteDb } from '../src/db/client.js';
+import { createDb, createPgliteDb, type DB } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import {
   adventureRuns,
@@ -53,6 +56,7 @@ import {
   jobAssignments,
   marketListings,
   relationships,
+  trades,
   users,
 } from '../src/db/schema.js';
 import {
@@ -109,6 +113,7 @@ import {
 } from '../src/services/horse.js';
 import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
+import { buyListing, listHorse } from '../src/services/market.js';
 import { omenFor } from '../src/services/omens.js';
 import { compatibility } from '../src/services/personality.js';
 import {
@@ -121,6 +126,7 @@ import { getQuestState } from '../src/services/quests.js';
 import { induceGlitch, patchGlitch, SHRINE_OFFERING_ID } from '../src/services/shrine.js';
 import { skillCheck } from '../src/services/stats.js';
 import { checkStudbookOnMature, getStudbook } from '../src/services/studbook.js';
+import { acceptTrade, createTrade } from '../src/services/trade.js';
 import {
   coatRarityScore,
   computeUploadReward,
@@ -133,8 +139,12 @@ import { mulberry32 } from '../src/util/rng.js';
 import { check, cookieOf, eq, section, summarize } from './harness.js';
 
 async function main(): Promise<void> {
-  const db = createPgliteDb();
-  await runMigrations(db);
+  // Default: in-memory PGlite. With DATABASE_URL=postgres://… (the CI postgres job), the SAME
+  // suite runs against real PostgreSQL — the node-postgres path PGlite can't exercise. The
+  // suite registers fixed usernames, so it expects a FRESH database each run.
+  const driverDb = process.env.DATABASE_URL?.startsWith('postgres') ? createDb() : createPgliteDb();
+  await runMigrations(driverDb); // needs the concrete driver union (instanceof narrowing)
+  const db: DB = driverDb; // …the suite uses the driver-agnostic base (clean builder overloads)
   // High caps so the fast inject() burst below isn't throttled; the tight per-route limits
   // (/report 5/min, auth 8/min) are exercised on their own. allowMint:true keeps the founder
   // faucet open for the suite (prod locks it to admins — see the gate tests below).
@@ -163,9 +173,13 @@ async function main(): Promise<void> {
   section('cold-start grant (§6, §14): a fresh account is immediately playable');
   const startHerd = reg.json<{ herd: { id: string; cubes: number } }>().herd;
   eq('new herd starts with the Cubes purse', startHerd.cubes, STARTING_CUBES);
-  const starters = (await inject({ method: 'GET', url: `/herds/${startHerd.id}/horses` })).json<
-    { id: string; lifeStage: string }[]
-  >();
+  const starters = (
+    await inject({
+      method: 'GET',
+      url: `/herds/${startHerd.id}/horses`,
+      headers: { cookie: cookieOf(reg) }, // rosters require a session (§11 hardening)
+    })
+  ).json<{ id: string; lifeStage: string }[]>();
   eq('new herd is granted two starter horses', starters.length, 2);
   eq('both starters are adults', starters.filter((h) => h.lifeStage === 'adult').length, 2);
   const [s0, s1] = starters;
@@ -2679,6 +2693,164 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── Conditional claims (§11 hardening): every value flow has exactly one winner ──
+  section('Conditional claims (§11): one winner per value flow');
+  {
+    // A fresh herd for clean ledgers.
+    const ccHerd = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'clerk', password: 'clerkhorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const cubesOf = async (h: string): Promise<number> =>
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, h) }))!.cubes;
+
+    // Daily catch-up pays exactly once: the second check-in at the same instant claims nothing.
+    const ccNow = Date.now();
+    await db
+      .update(herds)
+      .set({ lastSimTick: gameDay(ccNow) - 2, groomBonusPending: true })
+      .where(drizzleEq(herds.id, ccHerd));
+    const cubesBefore = await cubesOf(ccHerd);
+    const first = await advanceHerd(db, ccHerd, ccNow);
+    const afterFirst = await cubesOf(ccHerd);
+    const second = await advanceHerd(db, ccHerd, ccNow);
+    check(
+      'advanceHerd: the claim pays the stipend + pending groom exactly once',
+      first.daysAdvanced === 2 &&
+        first.groomCubes === GROOM_CUBES &&
+        afterFirst >= cubesBefore + first.cubesGained &&
+        second.daysAdvanced === 0 &&
+        second.cubesGained === 0 &&
+        (await cubesOf(ccHerd)) === afterFirst,
+    );
+
+    // An ended run refuses a re-submitted ending choice (the step claim).
+    const ccHorse = await mintHorse(db, {
+      herdId: ccHerd,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+      stats: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14 },
+    });
+    const ccRun = await startRun(db, ccHerd, 'green-grass', [ccHorse.id], { seed: 11 });
+    if (!ccRun.ok) throw new Error('run failed to start');
+    let lastChoice = '';
+    let guard = 0;
+    let ended = false;
+    while (!ended && guard++ < 40) {
+      const view = await db.query.adventureRuns.findFirst({
+        where: drizzleEq(adventureRuns.id, ccRun.runId),
+      });
+      if (!view || view.status !== 'active') break;
+      const script = ADVENTURE_BY_ID.get(view.scriptId)!;
+      const scene = script.scenes[view.sceneId]!;
+      const choice = scene.choices[0]!;
+      lastChoice = choice.id;
+      const r = await chooseInRun(db, ccHerd, ccRun.runId, choice.id);
+      ended = r.ok && r.ended;
+    }
+    const resubmit = await chooseInRun(db, ccHerd, ccRun.runId, lastChoice);
+    check(
+      'chooseInRun: re-submitting the ending choice banks nothing (claim already spent)',
+      ended && !resubmit.ok && resubmit.code === 'not_found',
+    );
+
+    // Market: a broke buyer is refused and the listing stays purchasable.
+    const seller = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'fence', password: 'fencehorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const wares = await mintHorse(db, {
+      herdId: seller,
+      genotype: { E: 'ee' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const buyerCubes = await cubesOf(ccHerd);
+    const listed = await listHorse(db, seller, wares.id, buyerCubes + 5_000);
+    if (!listed.ok) throw new Error('listing failed');
+    const broke = await buyListing(db, ccHerd, listed.listingId);
+    const stillActive = await db.query.marketListings.findFirst({
+      where: drizzleEq(marketListings.id, listed.listingId),
+    });
+    check(
+      'market buy: a short balance is refused through the kernel; the listing survives',
+      !broke.ok &&
+        broke.code === 'cant_afford' &&
+        stillActive?.status === 'active' &&
+        (await cubesOf(ccHerd)) === buyerCubes,
+    );
+
+    // Trade: an accept where a side cannot cover its Cubes is refused and stays pending.
+    const greedy = await createTrade(db, seller, {
+      toHerd: ccHerd,
+      offerHorses: [wares.id],
+      requestCubes: buyerCubes + 9_000, // more than the recipient holds
+    });
+    if (!greedy.ok) throw new Error('trade failed to create');
+    const refuse = await acceptTrade(db, ccHerd, greedy.tradeId);
+    const pendingStill = await db.query.trades.findFirst({
+      where: drizzleEq(trades.id, greedy.tradeId),
+    });
+    check(
+      'trade accept: a side short on Cubes is refused; the trade stays pending, balances intact',
+      !refuse.ok &&
+        refuse.code === 'cant_afford' &&
+        pendingStill?.status === 'pending' &&
+        (await cubesOf(ccHerd)) === buyerCubes,
+    );
+
+    // The Keeper gate: bosses answer only the deep road (run handoff), never POST /battle.
+    const shouted = await startBattle(db, ccHerd, ['gg-hollow-keeper'], [ccHorse.id]);
+    check(
+      'a Keeper refuses a standalone battle — the tier gate cannot be skipped',
+      !shouted.ok && shouted.code === 'bad_enemy',
+    );
+
+    // Foal-white redaction (§4.2): the API never hands out a foal's genotype/seed.
+    const ccCookie = cookieOf(
+      await inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'clerk', password: 'clerkhorse1' },
+      }),
+    );
+    const secretFoal = await mintHorse(db, {
+      herdId: ccHerd,
+      genotype: { E: 'Ee', A: 'Aa', C: 'CrCr' }, // a coat worth keeping secret
+      origin: 'bred',
+      lifeStage: 'foal',
+      glitch: null,
+    });
+    const foalRes = await inject({ method: 'GET', url: `/horses/${secretFoal.id}` });
+    const foalBody = foalRes.json<{ genotype: Record<string, string>; seed: number }>();
+    const adultRes = await inject({ method: 'GET', url: `/horses/${ccHorse.id}` });
+    check(
+      'a foal travels the API white: empty genotype, zero seed (adults stay fully readable)',
+      Object.keys(foalBody.genotype).length === 0 &&
+        foalBody.seed === 0 &&
+        Object.keys(adultRes.json<{ genotype: Record<string, string> }>().genotype).length > 0,
+    );
+    const anonRoster = await inject({ method: 'GET', url: `/herds/${ccHerd}/horses` });
+    const authedRoster = await inject({
+      method: 'GET',
+      url: `/herds/${ccHerd}/horses`,
+      headers: { cookie: ccCookie },
+    });
+    check(
+      'rosters require a session (401 anonymous, 200 authed)',
+      anonRoster.statusCode === 401 && authedRoster.statusCode === 200,
+    );
+  }
+
   // ───────────────────────── Phase 11 — beta hardening ─────────────────────────
   section('Phase 11 — beta hardening');
 
@@ -3893,6 +4065,138 @@ async function main(): Promise<void> {
       'GET /regions carries the day’s omen',
       regs.length > 0 && regs.every((r) => r.omen !== null && r.omen.name.length > 0),
     );
+  }
+
+  // ── HTTP skins (§11): every newer feature's auth guard + error mapping, smoked ──
+  section('HTTP skins (§11): auth guards + error mapping on the newer routes');
+  {
+    const smoke = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'smoketester', password: 'smokehorse1' },
+    });
+    const sCookie = cookieOf(smoke);
+    const authed = (opts: InjectOptions) =>
+      inject({ ...opts, headers: { ...(opts.headers ?? {}), cookie: sCookie } });
+    const ghost = '00000000-0000-4000-8000-000000000000'; // a syntactically valid id that exists nowhere
+
+    // Anonymous requests bounce at the door, uniformly.
+    const anonChecks: Array<[string, InjectOptions]> = [
+      [
+        'POST /shrine/glitch',
+        { method: 'POST', url: '/shrine/glitch', payload: { horseId: ghost } },
+      ],
+      ['POST /shrine/patch', { method: 'POST', url: '/shrine/patch', payload: { horseId: ghost } }],
+      ['GET /studbook', { method: 'GET', url: '/studbook' }],
+      ['GET /garden', { method: 'GET', url: '/garden' }],
+      [
+        'POST /garden/plant',
+        { method: 'POST', url: '/garden/plant', payload: { slot: 1, crop: 'radish' } },
+      ],
+      ['GET /care', { method: 'GET', url: '/care' }],
+      ['POST /care/groom', { method: 'POST', url: '/care/groom' }],
+      ['GET /progression', { method: 'GET', url: '/progression' }],
+      [
+        'POST /inventory/sell',
+        { method: 'POST', url: '/inventory/sell', payload: { itemId: 'timber', qty: 1 } },
+      ],
+      [
+        'POST /battle/start',
+        {
+          method: 'POST',
+          url: '/battle/start',
+          payload: { enemyIds: ['bramble-tangle'], party: [ghost] },
+        },
+      ],
+    ];
+    let allAnon401 = true;
+    for (const [label, opts] of anonChecks) {
+      const res = await inject(opts);
+      if (res.statusCode !== 401) {
+        allAnon401 = false;
+        console.error(`    anonymous ${label} → ${res.statusCode} (expected 401)`);
+      }
+    }
+    check('every newer mutating/read surface requires a session (uniform 401)', allAnon401);
+
+    // Happy reads return the right shapes.
+    const sbRes = await authed({ method: 'GET', url: '/studbook' });
+    const careRes = await authed({ method: 'GET', url: '/care' });
+    const progRes = await authed({ method: 'GET', url: '/progression' });
+    check(
+      'authed reads: studbook (13 goals), care, progression all 200 with bodies',
+      sbRes.statusCode === 200 &&
+        sbRes.json<{ goals: unknown[] }>().goals.length === 13 &&
+        careRes.statusCode === 200 &&
+        progRes.statusCode === 200,
+    );
+
+    // Service errors map to clean statuses (no raw 500s).
+    const ghostShrine = await authed({
+      method: 'POST',
+      url: '/shrine/glitch',
+      payload: { horseId: ghost },
+    });
+    const brokePlant = await authed({
+      method: 'POST',
+      url: '/garden/plant',
+      payload: { slot: 1, crop: 'walnut' }, // a fresh herd holds none
+    });
+    const emptyCook = await authed({ method: 'POST', url: '/care/cook', payload: {} }); // service rule
+    const wrongCook = await authed({
+      method: 'POST',
+      url: '/care/cook',
+      payload: { grains: 'oats' }, // wrong shape → transport schema
+    });
+    check(
+      'service errors map cleanly: shrine ghost 404, broke plant 402, empty pot 409, bad shape 400',
+      ghostShrine.statusCode === 404 &&
+        brokePlant.statusCode === 402 &&
+        emptyCook.statusCode === 409 &&
+        wrongCook.statusCode === 400,
+    );
+
+    // Logout actually ends the session.
+    const out = await authed({ method: 'POST', url: '/auth/logout' });
+    const meAfter = await authed({ method: 'GET', url: '/me' });
+    check(
+      'logout invalidates the session (the old cookie reads as anonymous)',
+      out.statusCode === 200 && meAfter.statusCode === 401,
+    );
+  }
+
+  // ── Prod serving mode (§11): static SPA + fallback, exercised like a browser would ──
+  section('Prod serving (§11): static web + SPA fallback');
+  {
+    const webDir = mkdtempSync(join(tmpdir(), 'blorse-web-'));
+    writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>BLORSE</title>');
+    const prodApp = buildApp(db, { webDir, rateLimitMax: 100_000 });
+    await prodApp.ready();
+    const root = await prodApp.inject({
+      method: 'GET',
+      url: '/',
+      headers: { accept: 'text/html' },
+    });
+    const deep = await prodApp.inject({
+      method: 'GET',
+      url: '/town/studbook', // a client route — must fall back to the SPA shell
+      headers: { accept: 'text/html' },
+    });
+    const apiMiss = await prodApp.inject({
+      method: 'GET',
+      url: '/api/definitely-not-a-route',
+      headers: { accept: 'application/json' },
+    });
+    check(
+      'webDir serves the shell at /, deep links fall back to it, API misses stay JSON 404',
+      root.statusCode === 200 &&
+        root.body.includes('BLORSE') &&
+        deep.statusCode === 200 &&
+        deep.body.includes('BLORSE') &&
+        apiMiss.statusCode === 404 &&
+        apiMiss.json<{ code: string }>().code === 'not_found',
+    );
+    await prodApp.close();
   }
 
   await app.close();

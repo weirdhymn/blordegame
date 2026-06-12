@@ -230,7 +230,10 @@ a {
 
 .horse-canvas {
   /* Size comes from the element's inline width/height (an integer multiple of 150×126); do NOT set
-     width:100% — that would rescale the bitmap to the container and blur it. Nearest-neighbour only. */
+     width:100% — that would rescale the bitmap to the container and blur it. Nearest-neighbour only.
+     flex-shrink guards the same rule GLOBALLY: a flex parent must never squeeze a sprite to a
+     fractional scale (this bit the Morning Post, the shrine court, and the detail hero in turn). */
+  flex-shrink: 0;
   image-rendering: pixelated;
   display: block;
   background: var(--sage);
@@ -975,10 +978,7 @@ button.ghost {
   gap: 12px;
   margin-bottom: 8px;
 }
-.post-reveal .horse-canvas {
-  /* never flex-squeeze the sprite — fractional scaling blurs pixel art (the integer-scale rule) */
-  flex-shrink: 0;
-}
+/* (.horse-canvas carries flex-shrink: 0 globally — the integer-scale rule.) */
 .post-reveal p {
   margin: 0;
 }
@@ -1187,9 +1187,6 @@ a.bldg:hover {
   border: var(--bd) solid var(--sage-deep);
   background: var(--band-paper);
   text-align: center;
-}
-.shrine-look .horse-canvas {
-  flex-shrink: 0; /* integer-scale rule: never let flex squeeze a sprite */
 }
 .shrine-look.active {
   border-color: var(--ink);

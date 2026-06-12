@@ -33,13 +33,23 @@ export function BreedPage(): ReactElement {
 
   useEffect(() => {
     setResult(null);
+    // Stale-response guard (audit P1): only the CURRENT pair's odds may land — a slower
+    // earlier response must not overwrite them (it gates the Breed button via `related`).
+    let live = true;
     if (a && b && a !== b) {
       getBreedOdds(a, b)
-        .then(setOdds)
-        .catch(() => setOdds(null));
+        .then((o) => {
+          if (live) setOdds(o);
+        })
+        .catch(() => {
+          if (live) setOdds(null);
+        });
     } else {
       setOdds(null);
     }
+    return () => {
+      live = false;
+    };
   }, [a, b]);
 
   async function onBreed(): Promise<void> {

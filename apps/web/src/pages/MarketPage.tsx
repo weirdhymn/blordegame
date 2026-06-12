@@ -177,7 +177,13 @@ export function MarketPage(): ReactElement {
                         <button
                           className="primary"
                           disabled={busy}
-                          onClick={() => void act(() => acceptTrade(t.id), 'Trade accepted.')}
+                          onClick={() =>
+                            confirmAct(
+                              'Accept this trade? Horses change hands for good.',
+                              () => acceptTrade(t.id),
+                              'Trade accepted.',
+                            )
+                          }
                         >
                           Accept
                         </button>

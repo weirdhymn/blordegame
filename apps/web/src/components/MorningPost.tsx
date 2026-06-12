@@ -1,5 +1,6 @@
 import { useMemo, type ReactElement } from 'react';
 import { resolve } from '@blorse/genetics';
+import { Link } from 'react-router-dom';
 import { buildRenderSpec } from '@blorse/render-core';
 import type { DailyResult } from '../api/daily.js';
 import type { Horse } from '../api/horses.js';
@@ -143,7 +144,11 @@ export function MorningPost(props: {
                 </li>
               ))}
             </ul>
-            {moreBeats > 0 && <p className="muted">…and {moreBeats} more in the Journal.</p>}
+            {moreBeats > 0 && (
+              <p className="muted">
+                …and {moreBeats} more in <Link to="/journal">the Journal</Link>.
+              </p>
+            )}
           </section>
         )}
 

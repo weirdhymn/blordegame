@@ -35,6 +35,9 @@ export interface EnemyDef {
   tell: string;
   moves: EnemyMove[];
   reward: { cubes?: number; items?: { id: string; qty: number }[] };
+  /** Region Keepers (§9.4c) answer only the deep road: startBattle refuses them without a run
+   *  handoff, so the tier ladder's hasBeatenBoss gate cannot be skipped via POST /battle. */
+  keeper?: true;
 }
 
 export const ENEMIES: EnemyDef[] = [
@@ -132,6 +135,7 @@ export const ENEMIES: EnemyDef[] = [
     // The Green Grass region boss (§9.4c) — the climax of a deep adventure. Weak to a Cleric's
     // Soothe, resists a Knight's Confront: the reading-the-foe puzzle, debuting at boss scale.
     id: 'gg-hollow-keeper',
+    keeper: true,
     name: 'the Hollow-Keeper',
     maxHp: 92,
     power: 14,
@@ -170,6 +174,7 @@ export const ENEMIES: EnemyDef[] = [
     // The Dusty Dunes region boss (§9.4c) — weak to a Knight's Confront (it is cracked rock you can
     // shatter), resists a Cleric's Soothe (no heart in a landslide). The Knight's boss.
     id: 'dd-sandstone-sentinel',
+    keeper: true,
     name: 'the Sandstone Sentinel',
     maxHp: 100,
     power: 15,
@@ -208,6 +213,7 @@ export const ENEMIES: EnemyDef[] = [
     // The Weird Woods region boss (§9.4c) — weak to a Wizard's Outwit (its tricks have a logic),
     // resists a Knight's Confront (you only ever hit afterimage). The Wizard's boss.
     id: 'ww-mistwood-mimic',
+    keeper: true,
     name: 'the Mistwood Mimic',
     maxHp: 88,
     power: 14,

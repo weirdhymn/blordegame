@@ -12,12 +12,17 @@ import { uploadHorse, uploadQuote } from '../services/upload.js';
 import { bodySchema, id } from './schemas.js';
 
 export function publicHorse(h: HorseRow) {
+  // Foal-white canon (§4.2): a foal's coat is a surprise until it matures, so its genotype and
+  // seed never leave the server while it's white — the client computed the pre-reveal coat
+  // otherwise (audit P1). The empty genotype renders pixel-identically (foal-white ignores
+  // palette), and the reveal/Studbook moment stays a moment.
+  const revealed = h.lifeStage === 'adult';
   return {
     id: h.id,
     herdId: h.herdId,
-    genotype: h.genotype,
-    seed: h.seed,
-    glitch: h.glitch,
+    genotype: revealed ? h.genotype : {},
+    seed: revealed ? h.seed : 0,
+    glitch: revealed ? h.glitch : null,
     lifeStage: h.lifeStage,
     name: h.name,
     origin: h.origin,
@@ -88,10 +93,18 @@ export function registerHorseRoutes(
     const { id } = req.params as { id: string };
     const horse = await getHorse(db, id);
     if (!horse) return reply.code(404).send({ error: 'not found' });
-    return reply.send(horseRenderSpec(horse));
+    // A foal's spec is built from the redaction placeholder — the spec's computed palette
+    // would otherwise hand out the adult colors early (foal-white ignores them anyway).
+    const safe =
+      horse.lifeStage === 'adult' ? horse : { ...horse, genotype: {}, seed: 0, glitch: null };
+    return reply.send(horseRenderSpec(safe));
   });
 
+  // Rosters are for players, not anonymous scrapers (audit P1) — any session may read
+  // (cross-herd reads stay open: visiting is a feature, §10).
   app.get('/herds/:id/horses', async (req, reply) => {
+    const user = await resolveSessionUser(db, req.cookies[SESSION_COOKIE]);
+    if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };
     const list = await listHerdHorses(db, id);
     return reply.send(list.map(publicHorse));

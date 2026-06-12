@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   abilityMod,
   type Approach,
@@ -32,7 +32,6 @@ import { ENEMY_BY_ID, type EnemyDef } from '../content/enemies.js';
 import type { DB } from '../db/client.js';
 import {
   battles,
-  herds,
   horses,
   type BattleSnapshot,
   type Combatant,
@@ -43,6 +42,7 @@ import { getMealBuff } from './care-hub.js';
 import { getHorse } from './horse.js';
 import { consumeItems, grantItems, itemQty, type ItemStack } from './inventory.js';
 import { skillCheck } from './stats.js';
+import { creditCubes } from './wallet.js';
 
 // ── Combat engine (§9.4) ─────────────────────────────────────────────────────
 // Server-authoritative, seeded, persisted like an adventure run: the whole fight lives in
@@ -558,6 +558,8 @@ async function markRetreatMood(
   }
 }
 
+/** Pay the battle's prize. The caller has ALREADY claimed the terminal status (conditional
+ *  write) — this runs once per battle by construction; Cubes ride the kernel. */
 async function grantReward(
   db: DB,
   herdId: string,
@@ -567,23 +569,13 @@ async function grantReward(
   if (outcome === 'won') {
     const r = totalReward(enemyIds);
     if (r.items.length) await grantItems(db, herdId, r.items);
-    if (r.cubes > 0) {
-      await db
-        .update(herds)
-        .set({ cubes: sql`${herds.cubes} + ${r.cubes}` })
-        .where(eq(herds.id, herdId));
-    }
+    if (r.cubes > 0) await creditCubes(db, herdId, r.cubes);
     return r;
   }
   if (outcome === 'retreated') {
     const full = totalReward(enemyIds);
     const cubes = Math.floor(full.cubes * REWARD_RETREAT_FRACTION);
-    if (cubes > 0) {
-      await db
-        .update(herds)
-        .set({ cubes: sql`${herds.cubes} + ${cubes}` })
-        .where(eq(herds.id, herdId));
-    }
+    if (cubes > 0) await creditCubes(db, herdId, cubes);
     return { cubes, items: [] };
   }
   return null; // fled: cozy, you simply left — no battle reward
@@ -623,6 +615,16 @@ export async function startBattle(
   }
   if (enemyIds.length < 1 || enemyIds.length > 4 || enemyIds.some((id) => !ENEMY_BY_ID.has(id))) {
     return { ok: false, code: 'bad_enemy', message: 'No such foe.' };
+  }
+  // Region Keepers answer only the deep road (§9.4c): without a run handoff, the standalone
+  // battle path refuses them — otherwise POST /battle could skip the earned Keeper-challenge
+  // flow and still satisfy the tier ladder's hasBeatenBoss gate (audit P1).
+  if (!opts.runId && enemyIds.some((id) => ENEMY_BY_ID.get(id)?.keeper)) {
+    return {
+      ok: false,
+      code: 'bad_enemy',
+      message: 'A Keeper does not answer challenges shouted from town. Earn the deep road.',
+    };
   }
   const party = await loadParty(db, herdId, partyIds);
   if (!party)
@@ -703,11 +705,22 @@ export async function actInBattle(
     const code = error === 'not_your_turn' || error === 'bad_target' ? error : 'bad_action';
     return { ok: false, code, message: 'That move did not land.' };
   }
+
+  // Claim the turn FIRST (§11 hardening): the state/status write is conditional on the battle
+  // still being active, so a concurrent killing blow can't double-bank the reward — only the
+  // submission that lands the write consumes the potion, pays the prize, and marks moods.
+  const claimed = await db
+    .update(battles)
+    .set({ state: snap, status: outcome })
+    .where(and(eq(battles.id, row.id), eq(battles.status, 'active')))
+    .returning({ id: battles.id });
+  if (claimed.length === 0) {
+    return { ok: false, code: 'not_found', message: 'No such battle.' };
+  }
   if (spendPotion) await consumeItems(db, herdId, [{ id: POTION_ID, qty: 1 }]);
 
   const reward = outcome === 'active' ? null : await grantReward(db, herdId, outcome, row.enemies);
   await markRetreatMood(db, snap, outcome);
-  await db.update(battles).set({ state: snap, status: outcome }).where(eq(battles.id, row.id));
   const potions = await itemQty(db, herdId, POTION_ID);
   return { ok: true, view: battleView(row.id, snap, outcome, potions, reward) };
 }

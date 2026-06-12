@@ -1,4 +1,4 @@
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import {
   DAILY_CUBES,
   FERTILIZER_PER_HORSE_PER_DAY,
@@ -18,6 +18,7 @@ import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
 import { recordEvent } from './quests.js';
 import { checkStudbookOnMature, type StudbookBeat } from './studbook.js';
+import { creditCubes } from './wallet.js';
 
 /** Cap on per-day job resolution during catch-up so a long absence stays cheap (§8.2). */
 const MAX_JOB_CATCHUP_DAYS = 30;
@@ -81,7 +82,14 @@ async function matureFoals(
   const studbook: StudbookBeat[] = [];
   for (const f of foals) {
     if (f.bornAt.getTime() + FOAL_TO_ADULT_MS <= nowMs) {
-      await db.update(horses).set({ lifeStage: 'adult' }).where(eq(horses.id, f.id));
+      // Conditional claim (§11 hardening): only the check-in that actually flips
+      // foal→adult announces the reveal — a concurrent check-in skips it cleanly.
+      const claimed = await db
+        .update(horses)
+        .set({ lifeStage: 'adult' })
+        .where(and(eq(horses.id, f.id), eq(horses.lifeStage, 'foal')))
+        .returning({ id: horses.id });
+      if (claimed.length === 0) continue;
       await recordDiscovery(db, herdId, f); // the reveal enters the Field Guide
       matured.push({ id: f.id, name: f.name, coat: resolve(f.genotype).displayName });
       studbook.push(...(await checkStudbookOnMature(db, herdId, f))); // §7m — bred foals only
@@ -116,7 +124,20 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
   }
 
   const { matured, studbook } = await matureFoals(db, herdId, nowMs);
-  const daysAdvanced = Math.max(0, day - herd.lastSimTick);
+  let daysAdvanced = Math.max(0, day - herd.lastSimTick);
+
+  // Claim the whole catch-up range FIRST (§11 hardening): a single conditional UPDATE on the
+  // lastSimTick we read. Concurrent check-ins at a rollover all read the same old tick, but
+  // only one claim lands — the others replay nothing and credit nothing (the audit's
+  // stipend-multiplication race). The pending groom bonus is consumed by the same claim.
+  if (daysAdvanced > 0) {
+    const won = await db
+      .update(herds)
+      .set({ lastSimTick: day, groomBonusPending: false })
+      .where(and(eq(herds.id, herdId), eq(herds.lastSimTick, herd.lastSimTick)))
+      .returning({ id: herds.id });
+    if (won.length === 0) daysAdvanced = 0; // another request owns this catch-up
+  }
 
   // Resolve jobs deterministically for each missed day (bounded for cheap catch-up).
   let jobCubes = 0;
@@ -148,19 +169,11 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     for (const e of events) journal.push({ day: tickDay, text: e.text, glyph: e.glyph ?? null });
   }
 
-  // "Wake to a reward": a pending groom from last night pays its small flat bonus at this rollover.
+  // "Wake to a reward": a pending groom from last night pays its small flat bonus at this
+  // rollover. The claim above already consumed the pending flag; we hold its pre-claim value.
   const groomCubes = daysAdvanced > 0 && herd.groomBonusPending ? GROOM_CUBES : 0;
   const cubesGained = daysAdvanced * DAILY_CUBES + groomCubes;
-  if (daysAdvanced > 0) {
-    await db
-      .update(herds)
-      .set({
-        cubes: sql`${herds.cubes} + ${cubesGained}`,
-        lastSimTick: day,
-        groomBonusPending: false,
-      })
-      .where(eq(herds.id, herdId));
-  }
+  if (cubesGained > 0) await creditCubes(db, herdId, cubesGained);
 
   // A real rollover greets the sunrise — the last beat of the first-day rhythm quest (§7i).
   // Quest rewards are granted inside recordEvent; the Post gets titles to celebrate with.

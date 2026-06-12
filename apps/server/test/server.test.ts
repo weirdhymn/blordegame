@@ -90,6 +90,7 @@ import {
   startRun,
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
+import { registerUser } from '../src/services/auth.js';
 import { getClubs, resolveAutonomyForDay } from '../src/services/autonomy.js';
 import { bondedBreedBonus, breedHorses, breedingOdds } from '../src/services/breeding.js';
 import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
@@ -4466,6 +4467,19 @@ async function main(): Promise<void> {
     check(
       'a malformed id answers 400 bad_request (was a PG 22P02 → 500)',
       mangled.statusCode === 400 && mangled.json<{ code: string }>().code === 'bad_request',
+    );
+
+    // The dev tester account's lifeline: a SERVICE-seeded account whose password is below
+    // the registration policy must still log in — /auth/login validates shape, not policy.
+    await registerUser(db, 'shortpass', 'tiny1');
+    const shortLogin = await inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'shortpass', password: 'tiny1' },
+    });
+    check(
+      'login accepts a seeded short password (policy lives at registration only)',
+      shortLogin.statusCode === 200,
     );
 
     // Usernames fold to lowercase: one handle, one account, any capitalization at login.

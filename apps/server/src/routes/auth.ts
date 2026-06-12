@@ -81,9 +81,16 @@ export function registerAuthRoutes(app: FastifyInstance, db: DB, cfg: AuthConfig
   });
 
   app.post('/auth/login', authLimit, async (req, reply) => {
-    const creds = validateCreds(req.body);
-    if (!creds) return reply.code(400).send({ error: 'invalid credentials' });
-    const res = await login(db, creds.username, creds.password);
+    // Login validates SHAPE only (non-empty, bounded) — the password POLICY (≥8 chars etc.)
+    // is registration's job. Enforcing it here would lock out seeded/legacy accounts whose
+    // passwords predate or sidestep the policy (e.g. the dev tester account).
+    const body = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!username || username.length > 64 || !password || password.length > 200) {
+      return reply.code(400).send({ error: 'invalid credentials' });
+    }
+    const res = await login(db, username, password);
     if (!res) return reply.code(401).send({ error: 'invalid credentials' });
     setSessionCookie(reply, await createSession(db, res.user.id), cfg.secureCookie);
     const daily = await advanceHerd(db, res.herd.id, Date.now()); // catch up on login (§8.2)

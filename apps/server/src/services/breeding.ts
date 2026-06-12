@@ -176,6 +176,14 @@ export interface BondPreview {
   statBonus: number;
 }
 
+/** A hidden allele the foal might receive (§7n "the Registrar squints") — the engine's
+ *  carrier summary, previously computed and thrown away. */
+export interface CarrierWhisper {
+  id: string;
+  label: string;
+  pLive: number;
+}
+
 export interface BreedingOdds {
   ok: true;
   related: boolean;
@@ -183,7 +191,12 @@ export interface BreedingOdds {
   lethalFraction: number;
   method: string;
   bond: BondPreview | null;
+  carriers: CarrierWhisper[];
 }
+
+/** The quietest whispers aren't worth the ink; cap what the Registrar mentions. */
+const CARRIER_MIN_P = 0.1;
+const CARRIER_MAX = 4;
 
 /** Foal-color odds preview (`punnett`) for the breeding UI (BLORSE_PLAN.md §5.3, Phase 4). */
 export async function breedingOdds(
@@ -205,6 +218,11 @@ export async function breedingOdds(
     lethalFraction: dist.lethalFraction,
     method: dist.method,
     bond: statBonus > 0 && rel ? { affinity: rel.affinity, type: rel.type, statBonus } : null,
+    carriers: dist.carriers
+      .filter((c) => c.pLive >= CARRIER_MIN_P)
+      .sort((x, y) => y.pLive - x.pLive)
+      .slice(0, CARRIER_MAX)
+      .map((c) => ({ id: c.id, label: c.label, pLive: c.pLive })),
   };
 }
 

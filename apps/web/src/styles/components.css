@@ -1251,3 +1251,29 @@ a.bldg:hover {
 .registry-table th {
   background: var(--sage);
 }
+
+/* ── The polish bundle (§7n) ── */
+/* Brag Lines: accomplishment chips on the horse sheet. */
+.brag-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+.brag-chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px var(--sp-2);
+  border: var(--bd) solid var(--gold);
+  color: var(--gold);
+  background: var(--paper);
+}
+/* The Registrar's carrier whisper on the odds card. */
+.carrier-whisper {
+  font-style: italic;
+}
+/* The Naturalist's ladder on the Field Guide. */
+.guide-ladder .rung.claimed {
+  color: var(--leaf);
+  font-weight: 700;
+}

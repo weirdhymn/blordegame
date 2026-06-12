@@ -108,6 +108,12 @@ export function MorningPost(props: {
                 overnight. Astonishingly local.
               </li>
             )}
+            {daily.guide.map((g) => (
+              <li key={g.coats}>
+                📖 The Field Guide reached <strong>{g.coats} coats</strong> — the Naturalists sent{' '}
+                <strong>+{g.cubes} ⬡</strong> and a very formal letter.
+              </li>
+            ))}
             {stipend <= 0 && daily.jobCubes <= 0 && daily.groomCubes <= 0 && (
               <li className="muted">Nothing in the till — the day is young.</li>
             )}

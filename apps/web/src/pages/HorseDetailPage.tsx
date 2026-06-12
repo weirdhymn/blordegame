@@ -238,6 +238,16 @@ export function HorseDetailPage(): ReactElement {
                   {horse.adventures} adventure{(horse.adventures ?? 0) === 1 ? '' : 's'} completed
                 </p>
               )}
+              {/* Brag Lines (§7n): the trophies were always stored — now they're worn. */}
+              {horse.accomplishments.length > 0 && (
+                <div className="brag-lines">
+                  {horse.accomplishments.map((acc) => (
+                    <span className="brag-chip" key={acc} title="Earned at a skill milestone">
+                      🏅 {pretty(acc)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

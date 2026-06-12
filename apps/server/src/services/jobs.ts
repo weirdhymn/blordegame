@@ -12,6 +12,7 @@ import { STRUCTURE_BY_ID } from '../content/structures.js';
 import type { DB } from '../db/client.js';
 import { herds, horses, jobAssignments, structures } from '../db/schema.js';
 import { getHorse } from './horse.js';
+import { addJournalEvents } from './journal.js';
 import { checkJobSlots } from './progression.js';
 import {
   accomplishmentsForLevel,
@@ -95,6 +96,14 @@ export async function getJob(db: DB, horseId: string) {
   );
 }
 
+/** 'skilled-reading' → 'Skilled Reading' — the accomplishment id, worn proudly (§7n). */
+export function accLabel(acc: string): string {
+  return acc
+    .split('-')
+    .map((w) => (w[0]?.toUpperCase() ?? '') + w.slice(1))
+    .join(' ');
+}
+
 /**
  * Resolve every job in a herd for ONE game day with a seeded RNG (called per missed
  * day on the daily rollover, §9.2). Cozy: a poor roll just yields less, never a loss.
@@ -106,6 +115,8 @@ export async function resolveJobsForDay(
   rng: () => number,
   /** The meal buff cooked FOR this resolved day (per-stat DC reduction), if any (§7). */
   mealBuff: Record<string, number> = {},
+  /** Journal day for new-accomplishment beats (§7n "Brag Lines"); omitted → no beat. */
+  tickDay?: number,
 ): Promise<number> {
   const jobs = await db.select().from(jobAssignments).where(eq(jobAssignments.herdId, herdId));
   let cubes = 0;
@@ -136,13 +147,30 @@ export async function resolveJobsForDay(
 
     const ups = grantSkillXp(skills, stats, skill, xp);
     const accomplishments = new Set(h.accomplishments);
+    const fresh: string[] = [];
     for (const up of ups) {
-      for (const acc of accomplishmentsForLevel(up.skill, up.newLevel)) accomplishments.add(acc);
+      for (const acc of accomplishmentsForLevel(up.skill, up.newLevel)) {
+        if (!accomplishments.has(acc)) fresh.push(acc);
+        accomplishments.add(acc);
+      }
     }
     await db
       .update(horses)
       .set({ skills, stats, accomplishments: [...accomplishments] })
       .where(eq(horses.id, h.id));
+    // Brag Lines (§7n): a NEW accomplishment is herd news, not a silent column write.
+    if (fresh.length > 0 && tickDay !== undefined) {
+      await addJournalEvents(
+        db,
+        herdId,
+        tickDay,
+        fresh.map((acc) => ({
+          kind: 'accomplishment',
+          glyph: '🏅',
+          text: `${h.name ?? 'A horse'} is now ${accLabel(acc)}. It has been practising its modest face.`,
+        })),
+      );
+    }
   }
 
   if (cubes > 0) {

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@blorse/balance": "workspace:*",
     "@blorse/genetics": "workspace:*",
     "@blorse/render-core": "workspace:*",
     "react": "^18.3.1",

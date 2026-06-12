@@ -16,6 +16,8 @@ export interface Horse {
   parentB: string | null;
   stats: Record<string, number>;
   skills: Record<string, { level: number; xp: number }>;
+  /** Earned at skill milestones (§9.1) — worn as 🏅 chips on the horse sheet (§7n). */
+  accomplishments: string[];
   personality: Record<string, number>;
   /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3). */
   adventures?: number;

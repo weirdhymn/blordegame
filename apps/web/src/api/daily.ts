@@ -40,6 +40,8 @@ export interface DailyResult {
   questCompletions: DigestQuest[];
   /** Studbook goals fulfilled by this check-in's reveals (§7m). */
   studbook: StudbookBeat[];
+  /** Field Guide milestones crossed by this check-in's reveals (§7n, purses already paid). */
+  guide: { coats: number; cubes: number }[];
   /** Basic fertilizer the horses produced overnight (only for fed days — §7j). */
   fertilizer: number;
   day: number;

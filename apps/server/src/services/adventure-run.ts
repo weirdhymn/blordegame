@@ -34,6 +34,8 @@ import { getMealBuff } from './care-hub.js';
 import { startBattle, type BattleView } from './combat.js';
 import { getHorse, mintHorse } from './horse.js';
 import { grantItems, type ItemStack } from './inventory.js';
+import { accLabel } from './jobs.js';
+import { addJournalEvents } from './journal.js';
 import { omenFor } from './omens.js';
 import { compatibility, rollWildPersonality, type Personality } from './personality.js';
 import { isQuestCompleted, recordEvent } from './quests.js';
@@ -561,12 +563,29 @@ export async function chooseInRun(
       const stats = learner.stats as StatBlock;
       const ups = grantSkillXp(skills, stats, trained.skill, xp);
       const accomplishments = new Set(learner.accomplishments);
+      const fresh: string[] = [];
       for (const up of ups)
-        for (const acc of accomplishmentsForLevel(up.skill, up.newLevel)) accomplishments.add(acc);
+        for (const acc of accomplishmentsForLevel(up.skill, up.newLevel)) {
+          if (!accomplishments.has(acc)) fresh.push(acc);
+          accomplishments.add(acc);
+        }
       await db
         .update(horses)
         .set({ skills, stats, accomplishments: [...accomplishments] })
         .where(eq(horses.id, learner.id));
+      // Brag Lines (§7n): adventures mint accomplishments too — the Journal hears of it.
+      if (fresh.length > 0) {
+        await addJournalEvents(
+          db,
+          herdId,
+          gameDay(Date.now()),
+          fresh.map((acc) => ({
+            kind: 'accomplishment',
+            glyph: '🏅',
+            text: `${learner.name ?? 'A horse'} is now ${accLabel(acc)} — it learned that one on the road.`,
+          })),
+        );
+      }
       const lastUp = ups[ups.length - 1];
       trainedView = {
         horseName: learner.name ?? resolve(learner.genotype).displayName,

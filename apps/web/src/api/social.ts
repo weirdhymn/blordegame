@@ -13,6 +13,8 @@ export interface FieldGuide {
   discovered: { slug: string; name: string }[];
   discoveredCount: number;
   catalogSize: number;
+  /** The Naturalist's Purse ladder (§7n) — thresholds with claimed flags. */
+  milestones: { coats: number; cubes: number; claimed: boolean }[];
 }
 
 export const getJournal = (): Promise<JournalEvent[]> => api.get<JournalEvent[]>('/journal');

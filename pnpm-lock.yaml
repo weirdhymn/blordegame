@@ -78,6 +78,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@blorse/balance':
+        specifier: workspace:*
+        version: link:../../packages/balance
       '@blorse/genetics':
         specifier: workspace:*
         version: link:../../packages/genetics

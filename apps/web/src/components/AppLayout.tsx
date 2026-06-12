@@ -1,6 +1,7 @@
 import { type ReactElement } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSession } from '../session.js';
+import { formatCubes } from '../util/format.js';
 
 export function AppLayout(): ReactElement {
   const { user, herd, signOut } = useSession();
@@ -9,7 +10,10 @@ export function AppLayout(): ReactElement {
       <header className="topbar">
         <div className="brand">
           <strong>{herd?.name ?? 'Herd'}</strong>
-          <span className="cubes-badge">{herd?.cubes ?? 0} ⬡</span>
+          {/* Proper Change (§7n): the purse wears its three metals; hover for the exact count. */}
+          <span className="cubes-badge" title={`${(herd?.cubes ?? 0).toLocaleString()} ⬡ (copper)`}>
+            {formatCubes(herd?.cubes ?? 0)} ⬡
+          </span>
         </div>
         <nav className="topnav">
           <NavLink to="/" end>

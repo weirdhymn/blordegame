@@ -511,6 +511,21 @@ export const studbookEntries = pgTable(
   (t) => [uniqueIndex('studbook_once_idx').on(t.herdId, t.goalId)],
 );
 
+/** The Naturalist's Purse (§7n): one row per claimed Field Guide milestone — the unique
+ *  (herd, coats) index is the once-only payout guard (same shape as studbook_entries). */
+export const guideMilestones = pgTable(
+  'guide_milestones',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    herdId: uuid('herd_id')
+      .notNull()
+      .references(() => herds.id, { onDelete: 'cascade' }),
+    coats: integer('coats').notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('guide_milestone_once_idx').on(t.herdId, t.coats)],
+);
+
 /** Player reports for moderation review (§11). */
 export const reports = pgTable('reports', {
   id: uuid('id').defaultRandom().primaryKey(),

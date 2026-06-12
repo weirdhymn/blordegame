@@ -13,7 +13,7 @@ import { gameDay, nextRollover } from '../util/clock.js';
 import { mulberry32 } from '../util/rng.js';
 import { logAudit } from './audit.js';
 import { resolveAutonomyForDay } from './autonomy.js';
-import { recordDiscovery } from './fieldguide.js';
+import { recordDiscovery, type GuideBeat } from './fieldguide.js';
 import { grantItems } from './inventory.js';
 import { addJournalEvents } from './journal.js';
 import { resolveJobsForDay } from './jobs.js';
@@ -61,6 +61,8 @@ export interface DailyResult {
   questCompletions: DigestQuest[];
   /** Studbook goals fulfilled by this check-in's reveals (§7m, rewards already granted). */
   studbook: StudbookBeat[];
+  /** Field Guide milestones crossed by this check-in's reveals (§7n, purses already paid). */
+  guide: GuideBeat[];
   /** Basic fertilizer the horses produced overnight (§7j) — only for days the herd was FED (the
    *  communal cook). A bonus for care, never a penalty for skipping. */
   fertilizer: number;
@@ -74,13 +76,14 @@ async function matureFoals(
   db: DB,
   herdId: string,
   nowMs: number,
-): Promise<{ matured: MaturedFoal[]; studbook: StudbookBeat[] }> {
+): Promise<{ matured: MaturedFoal[]; studbook: StudbookBeat[]; guide: GuideBeat[] }> {
   const foals = await db
     .select()
     .from(horses)
     .where(and(eq(horses.herdId, herdId), eq(horses.lifeStage, 'foal')));
   const matured: MaturedFoal[] = [];
   const studbook: StudbookBeat[] = [];
+  const guide: GuideBeat[] = [];
   for (const f of foals) {
     if (f.bornAt.getTime() + FOAL_TO_ADULT_MS <= nowMs) {
       // Conditional claim (§11 hardening): only the check-in that actually flips
@@ -91,12 +94,13 @@ async function matureFoals(
         .where(and(eq(horses.id, f.id), eq(horses.lifeStage, 'foal')))
         .returning({ id: horses.id });
       if (claimed.length === 0) continue;
-      await recordDiscovery(db, herdId, f); // the reveal enters the Field Guide
+      // The reveal enters the Field Guide — and may cross a Naturalist's milestone (§7n).
+      guide.push(...(await recordDiscovery(db, herdId, f, gameDay(nowMs))));
       matured.push({ id: f.id, name: f.name, coat: resolve(f.genotype).displayName });
       studbook.push(...(await checkStudbookOnMature(db, herdId, f))); // §7m — bred foals only
     }
   }
-  return { matured, studbook };
+  return { matured, studbook, guide };
 }
 
 /**
@@ -118,13 +122,14 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       journal: [],
       questCompletions: [],
       studbook: [],
+      guide: [],
       fertilizer: 0,
       day,
       nextRolloverMs: nextRollover(nowMs),
     };
   }
 
-  const { matured, studbook } = await matureFoals(db, herdId, nowMs);
+  const { matured, studbook, guide } = await matureFoals(db, herdId, nowMs);
   let daysAdvanced = Math.max(0, day - herd.lastSimTick);
 
   // Claim the whole catch-up range FIRST (§11 hardening): a single conditional UPDATE on the
@@ -157,6 +162,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
       herdId,
       mulberry32((herd.simSeed ^ tickDay) >>> 0),
       dayMeal,
+      tickDay, // journal day for any new-accomplishment beat (§7n)
     );
     // The Living Herd (§8): relationships + clubs evolve, producing journal beats. They land in
     // the Journal as before — AND ride along in the result, so the Morning Post can read them
@@ -212,6 +218,7 @@ export async function advanceHerd(db: DB, herdId: string, nowMs: number): Promis
     journal,
     questCompletions,
     studbook,
+    guide,
     fertilizer,
     day,
     nextRolloverMs: nextRollover(nowMs),

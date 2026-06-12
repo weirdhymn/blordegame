@@ -17,6 +17,8 @@ export interface BreedOdds {
   method: string;
   /** Present (non-null) when these two are close enough to start their foal stronger. */
   bond: { affinity: number; type: string | null; statBonus: number } | null;
+  /** Hidden alleles the foal might receive — the Registrar's whisper (§7n). */
+  carriers: { id: string; label: string; pLive: number }[];
 }
 
 /** A successful breed (2xx). Gate rejections (cooldown/related/…) throw an ApiError instead. */

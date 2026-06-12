@@ -37,6 +37,18 @@ export const SHRINE_PATCH_FEE = 50;
  *  Lifetime total across all 13 goals ≈ 4,050 ⬡ — meaningful beside the tier ladder, not silly. */
 export const STUDBOOK_TIER_CUBES: Record<number, number> = { 1: 100, 2: 250, 3: 600 };
 
+// ── §7n The Naturalist's Purse — Field Guide milestones (one-time, automatic) ──
+/** Coats-discovered thresholds → one-time Cube purses. The top threshold IS the full catalog
+ *  (71 at beta — a content-integrity test pins this; a gene drop that grows the catalog should
+ *  extend the ladder in the same change). Lifetime total 3,200 ⬡. */
+export const FIELD_GUIDE_MILESTONES: { coats: number; cubes: number }[] = [
+  { coats: 10, cubes: 150 },
+  { coats: 25, cubes: 300 },
+  { coats: 40, cubes: 500 },
+  { coats: 55, cubes: 750 },
+  { coats: 71, cubes: 1_500 },
+];
+
 // ── §14.2 Heritability (at birth; clamp to scale) ───────────────────────────
 export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight

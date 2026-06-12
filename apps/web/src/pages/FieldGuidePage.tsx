@@ -44,6 +44,17 @@ export function FieldGuidePage(): ReactElement {
             {fg.discoveredCount} of {fg.catalogSize} coats discovered — a living record of what your
             breeding and adventuring have turned up.
           </p>
+          {/* The Naturalist's Purse (§7n): the ladder pays itself — this is just the brochure. */}
+          <p className="muted guide-ladder">
+            🦋 The Naturalists pay for thoroughness:{' '}
+            {fg.milestones.map((m, i) => (
+              <span key={m.coats} className={m.claimed ? 'rung claimed' : 'rung'}>
+                {i > 0 && ' · '}
+                {m.claimed ? '✓' : ''}
+                {m.coats} coats — {m.cubes} ⬡
+              </span>
+            ))}
+          </p>
           {fg.discovered.length === 0 ? (
             <p className="sub">No coats yet — breed and adventure to reveal them.</p>
           ) : (

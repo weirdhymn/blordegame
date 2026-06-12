@@ -17,6 +17,7 @@ import {
   COMBAT_RESIST_MULT,
   COMBAT_WEAKNESS_MULT,
   cookMeal,
+  FIELD_GUIDE_MILESTONES,
   FOAL_TO_ADULT_MS,
   FRIEND_THRESHOLD,
   GATHER_PER_HORSE_PER_DAY,
@@ -54,6 +55,7 @@ import {
   horseAncestors,
   horses,
   jobAssignments,
+  journalEvents,
   marketListings,
   relationships,
   trades,
@@ -83,7 +85,7 @@ import {
   startRun,
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
-import { bondedBreedBonus, breedHorses } from '../src/services/breeding.js';
+import { bondedBreedBonus, breedHorses, breedingOdds } from '../src/services/breeding.js';
 import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
 import {
   actInBattle,
@@ -96,6 +98,7 @@ import {
 } from '../src/services/combat.js';
 import { advanceHerd } from '../src/services/daily.js';
 import { roam } from '../src/services/exploration.js';
+import { getFieldGuide, recordDiscovery } from '../src/services/fieldguide.js';
 import {
   buySprinkler,
   fertilizePlot,
@@ -3927,6 +3930,127 @@ async function main(): Promise<void> {
       'founded lines: every coat bred to adulthood, its first author on record',
       book.registry.length >= 1 &&
         book.registry.some((l) => l.firstId === bredBay.id && l.count >= 1),
+    );
+  }
+
+  // ── The polish bundle (§7n): Naturalist's Purse, Brag Lines, the Registrar squints ──
+  section('Polish bundle (§7n): guide milestones, brag beats, carrier whispers');
+  {
+    // Content integrity: the ladder's top rung IS the catalog — a gene drop that grows the
+    // catalog must extend the ladder in the same change.
+    const natH = (
+      await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: 'naturalist', password: 'naturalisthorse1' },
+      })
+    ).json<{ herd: { id: string } }>().herd.id;
+    const guide0 = await getFieldGuide(db, natH);
+    const ladder = FIELD_GUIDE_MILESTONES;
+    check(
+      'the milestone ladder tops out exactly at the catalog size',
+      ladder[ladder.length - 1]?.coats === guide0.catalogSize,
+    );
+
+    // Walk the herd to the first milestone with distinct coats (starters granted 2 already).
+    const natCubes = async () =>
+      (await db.query.herds.findFirst({ where: drizzleEq(herds.id, natH) }))!.cubes;
+    const pin = await mintHorse(db, {
+      herdId: natH,
+      genotype: { E: 'ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const coats: Genotype[] = [
+      { E: 'Ee', A: 'aa' }, // black
+      { E: 'ee', C: 'CCr' }, // palomino
+      { E: 'Ee', A: 'Aa', C: 'CCr' }, // buckskin
+      { E: 'ee', C: 'CrCr' }, // cremello
+      { E: 'Ee', A: 'Aa', D: 'DD' }, // dun bay
+      { E: 'ee', D: 'DD' }, // red dun
+      { E: 'Ee', A: 'aa', D: 'DD' }, // grullo
+      { E: 'ee', Ch: 'ChCh' }, // champagne chestnut
+      { E: 'Ee', A: 'Aa', Ch: 'ChCh' }, // champagne bay
+      { E: 'Ee', A: 'aa', C: 'CCr' }, // smoky black
+      { E: 'ee', C: 'CCr', D: 'DD' }, // dunalino
+    ];
+    let purse = 0;
+    const before10 = await natCubes();
+    for (const g of coats) {
+      const beats = await recordDiscovery(db, natH, { id: pin.id, genotype: g });
+      purse += beats.reduce((s, b) => s + b.cubes, 0);
+      if ((await getFieldGuide(db, natH)).discoveredCount >= 10) break;
+    }
+    const reward10 = ladder.find((m) => m.coats === 10)?.cubes ?? 0;
+    check(
+      'crossing 10 coats pays the first purse exactly once',
+      purse === reward10 && (await natCubes()) === before10 + reward10,
+    );
+    const again = await recordDiscovery(db, natH, { id: pin.id, genotype: { E: 'ee' } }); // re-discovery
+    check('a re-discovered coat moves no needle and pays nothing', again.length === 0);
+    const guideNow = await getFieldGuide(db, natH);
+    check(
+      'the guide view flags the claimed rung (and only that one)',
+      guideNow.milestones.find((m) => m.coats === 10)?.claimed === true &&
+        guideNow.milestones.filter((m) => m.claimed).length === 1,
+    );
+    const purseBeat = await db
+      .select()
+      .from(journalEvents)
+      .where(drizzleEq(journalEvents.herdId, natH));
+    check(
+      'the purse writes a journal beat (the mid-day announcement path)',
+      purseBeat.some((e) => e.kind === 'guide' && e.text.includes('10 coats')),
+    );
+
+    // The Registrar squints: two pearl CARRIERS look plain but whisper loudly.
+    const ca = await mintHorse(db, {
+      herdId: natH,
+      genotype: { E: 'ee', C: 'Cprl' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const cb = await mintHorse(db, {
+      herdId: natH,
+      genotype: { E: 'ee', C: 'Cprl' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const odds = await breedingOdds(db, ca.id, cb.id);
+    check(
+      'breeding odds surface the hidden pearl carrier',
+      odds.ok && odds.carriers.some((c) => /prl|pearl/i.test(c.id) || /pearl/i.test(c.label)),
+    );
+
+    // Brag Lines: a level-up that mints an accomplishment writes a 🏅 journal beat.
+    const brag = await mintHorse(db, {
+      herdId: natH,
+      genotype: { E: 'Ee' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+      skills: { reading: { level: 4, xp: 999_999 } }, // any grant levels it through 5 (and 10)
+    });
+    await db.insert(jobAssignments).values({
+      horseId: brag.id,
+      herdId: natH,
+      structureType: 'library',
+      skill: 'reading',
+      stat: 'int',
+    });
+    await resolveJobsForDay(db, natH, mulberry32(5), {}, 12_345);
+    const bragBeats = await db
+      .select()
+      .from(journalEvents)
+      .where(drizzleEq(journalEvents.herdId, natH));
+    check(
+      'a fresh accomplishment writes a 🏅 brag line to the Journal',
+      bragBeats.some(
+        (e) => e.kind === 'accomplishment' && e.day === 12_345 && /Skilled Reading/.test(e.text),
+      ),
     );
   }
 

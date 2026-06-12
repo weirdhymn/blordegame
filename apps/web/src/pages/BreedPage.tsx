@@ -158,6 +158,15 @@ export function BreedPage(): ReactElement {
                   {Math.round(odds.lethalFraction * 100)}% of crosses don&apos;t take.
                 </p>
               )}
+              {odds.carriers.length > 0 && (
+                <p className="muted carrier-whisper">
+                  🧐 The Registrar squints: carried quietly —{' '}
+                  {odds.carriers
+                    .map((c) => `${c.label} (${Math.round(c.pLive * 100)}%)`)
+                    .join(' · ')}
+                  . What hides in the parents may surface in the foal.
+                </p>
+              )}
               {odds.bond && (
                 <p className="wild">
                   💞 These two are {odds.bond.type === 'bonded' ? 'inseparable' : 'close'} — their

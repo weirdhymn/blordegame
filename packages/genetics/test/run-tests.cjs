@@ -179,7 +179,8 @@ ok('PATN1 hidden without Lp', nm({ E: 'ee', PATN1: 'PATN1PATN1' }) === 'Chestnut
   eq('bay reverse: W constraint', constraintLabel(info, 'W'), 'ww');
   eq('bay reverse: G constraint', constraintLabel(info, 'G'), 'gg');
   eq('bay reverse: F is free', constraintLabel(info, 'F'), 'any');
-  eq('bay reverse: distinct genotype count', info.count, 324);
+  // 324 × 3 since the §7u Mushroom drop (one more free 3-genotype locus in the space).
+  eq('bay reverse: distinct genotype count', info.count, 972);
   function constraintLabel(info, key) {
     var c = info.constraints.filter(function (x) { return x.key === key; })[0];
     return c ? c.label : null;
@@ -227,8 +228,9 @@ eq('E- aa nCh CCr -> Classic Cream Champagne', nm({ E: 'Ee', A: 'aa', Ch: 'nCh',
 
 /* ---- GENOTYPE STRING: format + tolerant parse + lossless round-trip ---- */
 (function () {
+  // 'MyMy' joined after silver with the §7u Mushroom drop.
   eq('canonical OFF string', GG.formatGenotype(OFF),
-    'ww/gg/ee/aa/CC/nn/dd/nn/FF/nn/nn/rnrn/nn/nn/nn/nn/nn/lplp/patn1patn1/patn2patn2');
+    'ww/gg/ee/aa/CC/nn/dd/nn/MyMy/FF/nn/nn/rnrn/nn/nn/nn/nn/nn/lplp/patn1patn1/patn2patn2');
   var samples = [
     OFF, GG.defaultGenotype(),
     g({ E: 'Ee', A: 'Aa', C: 'CCr', Z: 'nZ', F: 'Ff', G: 'Gg' }),

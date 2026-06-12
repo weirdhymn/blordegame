@@ -110,6 +110,20 @@ window.HORSE_DATA = {
       genotypes: ["ZZ", "nZ", "nn"],
       affects: "Black pigment only (E_). Black→chocolate w/ silver dapples, mane/tail→flaxen-white. No visible effect on chestnut (carrier). Linked to eye defects.",
     },
+    /* BLORSE gene drop §7u (2026-06): Mushroom — data entry only; the look/naming live in
+       the @blorse/genetics facade (the engine's own resolver does not know this locus's
+       effect, by design — see GENE_DROP_RUNBOOK.md). Real equine genetics: rare recessive
+       dilution, sepia-taupe on red pigment, carried invisibly on black-based coats. */
+    {
+      key: "My", name: "Mushroom", group: "Dilutions", inheritance: "simple recessive",
+      introduced: "beta-2026-06", rarity: "rare",
+      alleles: [
+        { token: "My", label: "My", dominant: true, note: "no mushroom" },
+        { token: "my", label: "my", note: "mushroom — recessive sepia dilution" }
+      ],
+      genotypes: ["MyMy", "Mymy", "mymy"],
+      affects: "Chestnut only (ee): red pigment dulls to a soft sepia-taupe. Carried silently on black-based coats.",
+    },
 
     // ---- SHADING (visual flags, base name unchanged) ----------------
     {
@@ -441,7 +455,7 @@ window.HORSE_DATA = {
   /* GENOTYPE WRITE-ORDER (display). Loci that mask others come first;    */
   /* leopard genes grouped at the end.                                   */
   /* ------------------------------------------------------------------ */
-  displayOrder: ["W", "G", "E", "A", "C", "Ch", "D", "Z",
+  displayOrder: ["W", "G", "E", "A", "C", "Ch", "D", "Z", "My",
                  "F", "Pg", "Sty", "Rn", "Rb",
                  "T", "Sb", "O", "SW1", "Lp", "PATN1", "PATN2"],
 
@@ -586,6 +600,7 @@ window.HORSE_DATA.rollFrequencies = {
   Ch:    { Ch: 0.03,  n: 0.97 },
   D:     { D: 0.10,   d: 0.90 },
   Z:     { Z: 0.04,   n: 0.96 },
+  My:    { My: 1.0,   my: 0.0 },   /* gene drop §7u: shipped DARK — regions dial it up */
   F:     { F: 0.70,   f: 0.30 },
   Pg:    { Pg: 0.12,  n: 0.88 },
   Sty:   { Sty: 0.15, n: 0.85 },

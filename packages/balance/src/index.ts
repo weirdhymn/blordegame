@@ -46,7 +46,7 @@ export const FIELD_GUIDE_MILESTONES: { coats: number; cubes: number }[] = [
   { coats: 25, cubes: 300 },
   { coats: 40, cubes: 500 },
   { coats: 55, cubes: 750 },
-  { coats: 71, cubes: 1_500 },
+  { coats: 72, cubes: 1_500 }, // the full book — 71 + Mushroom (§7u, the first gene drop)
 ];
 
 // ── §7o Night Reading — crafted products feed the Living Herd (the craft→autonomy loop) ──

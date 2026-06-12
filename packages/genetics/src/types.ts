@@ -8,7 +8,8 @@
  * tightened as later phases use them.
  */
 
-/** The 20 loci, canonical display order (BLORSE_PLAN.md §5.2). */
+/** The loci, canonical display order (BLORSE_PLAN.md §5.2). `My` (Mushroom) is the first
+ *  live-service gene drop (§7u) — recessive sepia dilution, expressed on chestnut. */
 export type LocusKey =
   | 'W'
   | 'G'
@@ -18,6 +19,7 @@ export type LocusKey =
   | 'Ch'
   | 'D'
   | 'Z'
+  | 'My'
   | 'F'
   | 'Pg'
   | 'Sty'

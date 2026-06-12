@@ -4419,9 +4419,9 @@ async function main(): Promise<void> {
     const careRes = await authed({ method: 'GET', url: '/care' });
     const progRes = await authed({ method: 'GET', url: '/progression' });
     check(
-      'authed reads: studbook (13 goals), care, progression all 200 with bodies',
+      'authed reads: studbook (14 goals incl. §7u), care, progression all 200 with bodies',
       sbRes.statusCode === 200 &&
-        sbRes.json<{ goals: unknown[] }>().goals.length === 13 &&
+        sbRes.json<{ goals: unknown[] }>().goals.length === 14 &&
         careRes.statusCode === 200 &&
         progRes.statusCode === 200,
     );
@@ -4968,6 +4968,72 @@ async function main(): Promise<void> {
       'without a session the tree is stamp-free',
       anonTree.parents.every((p) => p.inStudbook === undefined),
     );
+  }
+
+  // ── Something New in the Woods (§7u): the first gene drop, end to end ──
+  section('The Mushroom drop (§7u)');
+  {
+    const reg = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'mycologist', password: 'mushroomhorse1' },
+    });
+    const myHerd = reg.json<{ herd: { id: string } }>().herd.id;
+
+    // The facade names it; the Field Guide records it; the catalog has its slot.
+    const shroom = await mintHorse(db, {
+      herdId: myHerd,
+      genotype: { E: 'ee', My: 'mymy' },
+      origin: 'bred',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    check(
+      'a mushroom resolves as Mushroom (the facade owns the name)',
+      resolveCoat(shroom.genotype).displayName === 'Mushroom',
+    );
+    const guide = await getFieldGuide(db, myHerd);
+    check(
+      'the reveal enters the Field Guide under its reserved slot, and the catalog holds 72',
+      guide.discovered.some((d) => d.slug === 'mushroom') && guide.catalogSize === 72,
+    );
+
+    // The Studbook: Something New fulfills; A Copper Penny is NOT fooled by sepia.
+    const beats = await checkStudbookOnMature(db, myHerd, shroom);
+    check(
+      "the Registrar's 'Something New' is fulfilled — and 'A Copper Penny' is not",
+      beats.some((b) => b.goalId === 'something-new') &&
+        !beats.some((b) => b.goalId === 'copper-penny'),
+    );
+
+    // Legacy parity: a stored genotype without the locus resolves exactly as before.
+    const legacyBay = resolveCoat({ E: 'Ee', A: 'Aa' });
+    check(
+      'legacy genotypes are untouched by the drop (name + base)',
+      legacyBay.displayName === 'Bay' && legacyBay.baseKey === 'bay',
+    );
+
+    // Carriers breed true through the real service: Mymy × Mymy can land mymy.
+    const ca = await mintHorse(db, {
+      herdId: myHerd,
+      genotype: { E: 'ee', My: 'Mymy' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const cb = await mintHorse(db, {
+      herdId: myHerd,
+      genotype: { E: 'ee', My: 'Mymy' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    let landed = false;
+    for (let s = 1; s <= 40 && !landed; s++) {
+      const out = breedFoal(ca.genotype, cb.genotype, mulberry32(s));
+      if (out.genotype.My === 'mymy') landed = true;
+    }
+    check('two carriers can breed a mushroom (engine inheritance, facade naming)', landed);
   }
 
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──

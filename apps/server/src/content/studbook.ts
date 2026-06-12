@@ -31,11 +31,19 @@ const dun = (p: Phenotype): number => chars(p.genotype.D, 'D');
 const champagne = (p: Phenotype): number => tokens(p.genotype.Ch, 'Ch');
 const sooty = (p: Phenotype): number => tokens(p.genotype.Sty, 'Sty');
 const gray = (p: Phenotype): boolean => p.flags.isGray || p.flags.isGraying;
-/** Undiluted: the base color showing as itself — no cream/pearl/dun/champagne, not graying.
- *  (Sooty/mealy still count: a smudged bay is still, to the Registrar, a bay.) The Novice
- *  page asks for the base itself, so a Dunalino is not "a chestnut". */
+/** The §7u drop: mushroom expressed = mymy on a chestnut base (the facade names it). */
+const mushroom = (p: Phenotype): boolean =>
+  (p.genotype.My ?? 'MyMy') === 'mymy' && p.baseKey === 'chestnut';
+/** Undiluted: the base color showing as itself — no cream/pearl/dun/champagne/mushroom,
+ *  not graying. (Sooty/mealy still count: a smudged bay is still, to the Registrar, a bay.)
+ *  The Novice page asks for the base itself, so a Dunalino is not "a chestnut". */
 const plain = (p: Phenotype): boolean =>
-  cream(p) === 0 && pearl(p) === 0 && dun(p) === 0 && champagne(p) === 0 && !gray(p);
+  cream(p) === 0 &&
+  pearl(p) === 0 &&
+  dun(p) === 0 &&
+  champagne(p) === 0 &&
+  !gray(p) &&
+  !mushroom(p);
 
 export const STUDBOOK_GOALS: StudbookGoal[] = [
   // ── Page one: Novice (the Registrar teaches the loop) ──
@@ -131,6 +139,13 @@ export const STUDBOOK_GOALS: StudbookGoal[] = [
     title: 'The Hidden Gem',
     flavor: "A pearl, expressed — the gene that hides until one day it doesn't.",
     test: (p) => pearl(p) === 2 || (pearl(p) === 1 && cream(p) >= 1),
+  },
+  {
+    id: 'something-new',
+    tier: 3,
+    title: 'Something New',
+    flavor: 'A mushroom coat — the Woods grew it first; now your line does.',
+    test: mushroom,
   },
 ];
 

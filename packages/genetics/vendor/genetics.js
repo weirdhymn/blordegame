@@ -103,7 +103,11 @@
     E: 'ee', A: 'aa', C: 'CC', Ch: 'nn', D: 'dd', Z: 'nn',
     F: 'FF', Pg: 'nn', Sty: 'nn', Rn: 'rnrn', Rb: 'nn',
     T: 'nn', Sb: 'nn', O: 'nn', SW1: 'nn', W: 'ww', G: 'gg',
-    Lp: 'lplp', PATN1: 'patn1patn1', PATN2: 'patn2patn2'
+    Lp: 'lplp', PATN1: 'patn1patn1', PATN2: 'patn2patn2',
+    /* BLORSE gene drop §7u: the absent baseline for the Mushroom locus. This table is the
+       backward-compat contract (every legacy genotype fills from here) — a new locus MUST
+       add its row. Data-table addition only; no engine logic touched (GENE_DROP_RUNBOOK). */
+    My: 'MyMy'
   };
 
   function clone(g) {

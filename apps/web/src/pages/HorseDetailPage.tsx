@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { resolve } from '@blorse/genetics';
 import { buildRenderSpec } from '@blorse/render-core';
@@ -24,15 +24,40 @@ const PERSONALITY_LABELS: Record<string, string> = {
   n: 'Neuroticism',
 };
 
-function PedigreeNode({ node }: { node: Pedigree }): ReactElement {
+/** One ancestor in the portrait tree (§7t). Adults arrive with render fields; foal nodes
+ *  carry neither genotype nor their real coat name — any stock genotype paints the same
+ *  white silhouette (the reveal stays a reveal, even via ancestry). */
+function PedigreePortrait({ node }: { node: Pedigree }): ReactElement {
+  const spec = useMemo(
+    () =>
+      buildRenderSpec(resolve(node.genotype ?? { E: 'ee' }), {
+        seed: node.seed ?? 1,
+        glitch: node.glitch ?? null,
+        lifeStage: node.lifeStage === 'foal' ? 'foal' : 'adult',
+      }),
+    [node.genotype, node.seed, node.glitch, node.lifeStage],
+  );
   return (
-    <li>
-      <span className="ped-name">{node.name ?? node.displayName}</span>{' '}
-      <span className="ped-coat">{node.lifeStage === 'foal' ? 'foal' : node.displayName}</span>
+    <li className="ped-node">
+      <Link to={`/horses/${node.id}`} className="ped-card">
+        <HorseCanvas spec={spec} scale={1} />
+        <span className="ped-caption">
+          <span className="ped-name">
+            {node.name ?? node.displayName}
+            {node.inStudbook && (
+              <span className="ped-stamp" title="In the Studbook — entered in good ink">
+                {' '}
+                ✒
+              </span>
+            )}
+          </span>
+          <span className="ped-coat">{node.lifeStage === 'foal' ? 'foal' : node.displayName}</span>
+        </span>
+      </Link>
       {node.parents.length > 0 && (
-        <ul>
+        <ul className="ped-kids">
           {node.parents.map((p) => (
-            <PedigreeNode key={p.id} node={p} />
+            <PedigreePortrait key={p.id} node={p} />
           ))}
         </ul>
       )}
@@ -360,9 +385,13 @@ export function HorseDetailPage(): ReactElement {
           {ped && ped.parents.length > 0 && (
             <>
               <h2 className="section-h">Pedigree</h2>
+              <p className="muted">
+                The line, in portraits — ✒ marks an ancestor entered in your Studbook. Two horses
+                may breed only if their trees share no name (§5.4a).
+              </p>
               <ul className="pedigree">
                 {ped.parents.map((p) => (
-                  <PedigreeNode key={p.id} node={p} />
+                  <PedigreePortrait key={p.id} node={p} />
                 ))}
               </ul>
             </>

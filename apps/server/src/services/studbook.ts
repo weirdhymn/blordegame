@@ -68,6 +68,21 @@ export async function checkStudbookOnMature(
   return beats;
 }
 
+/** Which of these horses are stamped in this herd's studbook (§7t pedigree tags) —
+ *  the ancestors whose reveal once fulfilled a goal, "entered in good ink". */
+export async function stampedHorseIds(
+  db: DB,
+  herdId: string,
+  horseIds: string[],
+): Promise<Set<string>> {
+  if (horseIds.length === 0) return new Set();
+  const rows = await db
+    .select({ horseId: studbookEntries.horseId })
+    .from(studbookEntries)
+    .where(and(eq(studbookEntries.herdId, herdId), inArray(studbookEntries.horseId, horseIds)));
+  return new Set(rows.map((r) => r.horseId).filter((h): h is string => h !== null));
+}
+
 // ── The book itself (GET /studbook) ─────────────────────────────────────────
 
 export interface StudbookGoalView {

@@ -369,18 +369,52 @@ a {
   text-align: right;
   font-weight: 700;
 }
+/* Lines in Good Ink (§7t): the pedigree as a portrait tree — each generation indents
+   behind a dashed spine, the line literally drawn. */
 .pedigree,
-.pedigree ul {
+.ped-kids {
   list-style: none;
-  padding-left: 1rem;
   margin: 0.25rem 0;
-}
-.pedigree {
   padding-left: 0;
   font-size: 0.82rem;
 }
+.ped-kids {
+  margin-left: var(--sp-4);
+  padding-left: var(--sp-3);
+  border-left: var(--bd) dashed var(--sage-deep);
+}
+.ped-node {
+  margin: var(--sp-2) 0;
+}
+.ped-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bd) solid var(--sage-deep);
+  background: var(--band-paper);
+  text-decoration: none;
+  color: inherit;
+}
+.ped-card:hover {
+  background: var(--sage);
+  border-color: var(--ink);
+}
+.ped-card .horse-canvas {
+  flex-shrink: 0; /* integer-scale rule */
+}
+.ped-caption {
+  display: flex;
+  flex-direction: column;
+}
+.ped-name {
+  font-weight: 700;
+}
 .ped-coat {
   color: var(--ink-soft);
+}
+.ped-stamp {
+  color: var(--leaf);
 }
 
 /* ── Breed ── */

@@ -8,7 +8,7 @@ import {
   STAT_MAX,
 } from '@blorse/balance';
 import { breedFoal, punnett, resolve } from '@blorse/genetics';
-import type { PunnettColor } from '@blorse/genetics';
+import type { Genotype, PunnettColor } from '@blorse/genetics';
 import type { DB } from '../db/client.js';
 import { horses, type HorseRow } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
@@ -231,6 +231,13 @@ export interface PedigreeNode {
   name: string | null;
   displayName: string;
   lifeStage: string;
+  /** Render fields for the portrait tree (§7t) — ADULTS ONLY: a foal node carries neither
+   *  genotype nor its real coat name (the §4.2 reveal stays a reveal, even via ancestry). */
+  genotype?: Genotype;
+  seed?: number;
+  glitch?: HorseRow['glitch'];
+  /** Set by the route when this ancestor is stamped in the VIEWER's studbook (§7m). */
+  inStudbook?: boolean;
   parents: PedigreeNode[];
 }
 
@@ -238,11 +245,14 @@ export interface PedigreeNode {
 export async function pedigree(db: DB, id: string, depth = 3): Promise<PedigreeNode | null> {
   const h = await getHorse(db, id);
   if (!h) return null;
+  const isFoal = h.lifeStage === 'foal';
   const node: PedigreeNode = {
     id: h.id,
     name: h.name,
-    displayName: resolve(h.genotype).displayName,
+    // Masking fix (§7t): this used to print a foal's REAL coat name into the tree.
+    displayName: isFoal ? 'Foal' : resolve(h.genotype).displayName,
     lifeStage: h.lifeStage,
+    ...(isFoal ? {} : { genotype: h.genotype, seed: h.seed, glitch: h.glitch }),
     parents: [],
   };
   if (depth > 0) {
@@ -254,6 +264,11 @@ export async function pedigree(db: DB, id: string, depth = 3): Promise<PedigreeN
     }
   }
   return node;
+}
+
+/** Every node id in a pedigree tree (the route uses this to stamp studbook tags). */
+export function pedigreeIds(node: PedigreeNode): string[] {
+  return [node.id, ...node.parents.flatMap(pedigreeIds)];
 }
 
 /** Herd-mates this horse can breed with (adult, unrelated). Powers the UI's grey-out. */

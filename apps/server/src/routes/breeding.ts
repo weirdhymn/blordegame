@@ -7,10 +7,14 @@ import {
   breedingOdds,
   eligibleMates,
   pedigree,
+  pedigreeIds,
   type BreedRejection,
+  type PedigreeNode,
 } from '../services/breeding.js';
+import { stampedHorseIds } from '../services/studbook.js';
 import { publicHorse } from './horses.js';
 import { bodySchema, id } from './schemas.js';
+import { herdFor } from './util.js';
 
 const REJECTION_STATUS: Record<BreedRejection, number> = {
   not_found: 404,
@@ -60,6 +64,19 @@ export function registerBreedingRoutes(app: FastifyInstance, db: DB): void {
     const { id } = req.params as { id: string };
     const ped = await pedigree(db, id, 3);
     if (!ped) return reply.code(404).send({ error: 'not found' });
+    // Lines in good ink (§7t): when a session rides along, stamp the ancestors that
+    // fulfilled a goal in the VIEWER's studbook. The tree itself stays public.
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (herd) {
+      const stamped = await stampedHorseIds(db, herd.id, pedigreeIds(ped));
+      if (stamped.size > 0) {
+        const stamp = (n: PedigreeNode): void => {
+          if (stamped.has(n.id)) n.inStudbook = true;
+          n.parents.forEach(stamp);
+        };
+        stamp(ped);
+      }
+    }
     return reply.send(ped);
   });
 

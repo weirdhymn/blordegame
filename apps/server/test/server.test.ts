@@ -4885,6 +4885,91 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── Lines in Good Ink (§7t): the pedigree gets portraits, keeps secrets, wears stamps ──
+  section('Lines in Good Ink (§7t)');
+  {
+    const reg = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'inkline', password: 'inklinehorse1' },
+    });
+    const inkHerd = reg.json<{ herd: { id: string } }>().herd.id;
+    const inkCookie = cookieOf(reg);
+
+    const sire = await mintHorse(db, {
+      herdId: inkHerd,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'bred',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    const dam = await mintHorse(db, {
+      herdId: inkHerd,
+      genotype: { E: 'ee' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    // The sire fulfills studbook goals at its (simulated) reveal — it is "in good ink".
+    await checkStudbookOnMature(db, inkHerd, sire);
+    const kid = await mintHorse(db, {
+      herdId: inkHerd,
+      genotype: { E: 'Ee' },
+      origin: 'bred',
+      lifeStage: 'foal',
+      glitch: null,
+      parentA: sire.id,
+      parentB: dam.id,
+    });
+
+    interface PedNode {
+      id: string;
+      displayName: string;
+      lifeStage: string;
+      genotype?: unknown;
+      seed?: number;
+      inStudbook?: boolean;
+      parents: PedNode[];
+    }
+    const tree = (
+      await inject({
+        method: 'GET',
+        url: `/horses/${kid.id}/pedigree`,
+        headers: { cookie: inkCookie },
+      })
+    ).json<PedNode>();
+
+    check(
+      'a foal subject keeps its secrets: name masked to "Foal", no genotype, no seed',
+      tree.lifeStage === 'foal' &&
+        tree.displayName === 'Foal' &&
+        tree.genotype === undefined &&
+        tree.seed === undefined,
+    );
+    check(
+      'adult ancestors carry portraits: real coat names + render fields',
+      tree.parents.length === 2 &&
+        tree.parents.every(
+          (p) => p.displayName !== 'Foal' && p.genotype !== undefined && typeof p.seed === 'number',
+        ),
+    );
+    const sireNode = tree.parents.find((p) => p.id === sire.id);
+    const damNode = tree.parents.find((p) => p.id === dam.id);
+    check(
+      'the studbook stamp marks exactly the ancestor in good ink',
+      sireNode?.inStudbook === true && damNode?.inStudbook === undefined,
+    );
+
+    // Anonymous viewers get the tree, never the viewer-specific stamps.
+    const anonTree = (
+      await inject({ method: 'GET', url: `/horses/${kid.id}/pedigree` })
+    ).json<PedNode>();
+    check(
+      'without a session the tree is stamp-free',
+      anonTree.parents.every((p) => p.inStudbook === undefined),
+    );
+  }
+
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──
   section('Living-Herd determinism (§8)');
   {

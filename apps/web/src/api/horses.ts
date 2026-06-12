@@ -33,12 +33,18 @@ export const listHerdHorses = (herdId: string): Promise<Horse[]> =>
 
 export const getHorse = (id: string): Promise<Horse> => api.get<Horse>(`/horses/${id}`);
 
-/** A node in the pedigree tree (GET /horses/:id/pedigree). */
+/** A node in the pedigree tree (GET /horses/:id/pedigree). Adults carry render fields for
+ *  the portrait tree (§7t); foals never do — their node renders the stock white silhouette. */
 export interface Pedigree {
   id: string;
   name: string | null;
   displayName: string;
   lifeStage: string;
+  genotype?: Genotype;
+  seed?: number;
+  glitch?: GlitchKind | null;
+  /** This ancestor is stamped in YOUR studbook — "entered in good ink" (§7m). */
+  inStudbook?: boolean;
   parents: Pedigree[];
 }
 

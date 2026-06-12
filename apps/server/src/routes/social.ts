@@ -1,3 +1,4 @@
+import { PARCEL_MAX_QTY, PARCEL_MAX_STACKS } from '@blorse/balance';
 import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
@@ -6,7 +7,7 @@ import { getCallingCards } from '../services/contacts.js';
 import { getJournal } from '../services/journal.js';
 import { getInbox, markAllRead, sendMessage } from '../services/messaging.js';
 import { getHerdProfile } from '../services/visit.js';
-import { bodySchema, id, shortText } from './schemas.js';
+import { bodySchema, id, shortText, stackArray } from './schemas.js';
 import { herdFor } from './util.js';
 
 export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
@@ -40,22 +41,37 @@ export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
   });
 
   // Async messaging (§10) — tightly rate-limited (audit P2): DMs were bounded only by the
-  // generous global ceiling, leaving room to flood another herd's inbox.
+  // generous global ceiling, leaving room to flood another herd's inbox. A letter may carry
+  // a parcel (§7s) — items move atomically with the send.
   app.post(
     '/messages',
     {
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
-      ...bodySchema({ toHerd: id, body: shortText(500) }),
+      ...bodySchema({
+        toHerd: id,
+        body: shortText(500),
+        parcel: stackArray(PARCEL_MAX_STACKS, PARCEL_MAX_QTY),
+      }),
     },
     async (req, reply) => {
       const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
       if (!herd) return reply.code(401).send({ error: 'unauthorized' });
-      const body = (req.body ?? {}) as { toHerd?: string; body?: string };
-      const result = await sendMessage(db, herd.id, body.toHerd ?? '', body.body ?? '');
+      const body = (req.body ?? {}) as {
+        toHerd?: string;
+        body?: string;
+        parcel?: { id: string; qty: number }[];
+      };
+      const result = await sendMessage(
+        db,
+        herd.id,
+        body.toHerd ?? '',
+        body.body ?? '',
+        body.parcel,
+      );
       if (!result.ok) {
-        return reply
-          .code(result.code === 'no_recipient' ? 404 : 400)
-          .send({ error: result.message, code: result.code });
+        const status =
+          result.code === 'no_recipient' ? 404 : result.code === 'parcel_short' ? 409 : 400;
+        return reply.code(status).send({ error: result.message, code: result.code });
       }
       return reply.code(201).send(result);
     },

@@ -1348,6 +1348,24 @@ a.bldg:hover {
   margin-top: var(--sp-1);
 }
 
+/* ── A Parcel, With String (§7s) ── */
+.parcel-pack {
+  border-top: 2px dashed var(--sage-deep);
+  padding-top: var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.parcel-qty {
+  width: 4.5rem;
+}
+.parcel-tag {
+  margin: var(--sp-1) 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--leaf);
+}
+
 /* ── The polish bundle (§7n) ── */
 /* Brag Lines: accomplishment chips on the horse sheet. */
 .brag-lines {

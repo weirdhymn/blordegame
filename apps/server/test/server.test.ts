@@ -4758,6 +4758,133 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── A Parcel, With String (§7s): gifts move atomically with the letter ──
+  section('A Parcel, With String (§7s)');
+  {
+    const mkP = async (n: string): Promise<{ id: string; cookie: string }> => {
+      const r = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: n, password: `${n}horse1` },
+      });
+      return { id: r.json<{ herd: { id: string } }>().herd.id, cookie: cookieOf(r) };
+    };
+    const giver = await mkP('parcelgiver');
+    const getter = await mkP('parcelgetter');
+    await grantItems(db, giver.id, [
+      { id: 'carrot', qty: 3 },
+      { id: 'book', qty: 1 },
+    ]);
+
+    const gift = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: giver.cookie },
+      payload: {
+        toHerd: getter.id,
+        body: 'For your pot. The greens are negotiable.',
+        parcel: [
+          { id: 'carrot', qty: 2 },
+          { id: 'book', qty: 1 },
+        ],
+      },
+    });
+    check(
+      'a parcel rides the letter: consumed from the giver, landed with the getter',
+      gift.statusCode === 201 &&
+        (await itemQty(db, giver.id, 'carrot')) === 1 &&
+        (await itemQty(db, giver.id, 'book')) === 0 &&
+        (await itemQty(db, getter.id, 'carrot')) === 2 &&
+        (await itemQty(db, getter.id, 'book')) === 1,
+    );
+
+    interface PLetter {
+      body: string;
+      parcel: { id: string; qty: number }[] | null;
+    }
+    const inboxP = (
+      await inject({ method: 'GET', url: '/messages', headers: { cookie: getter.cookie } })
+    ).json<PLetter[]>();
+    check(
+      'the gift tag shows on the letter',
+      inboxP.some(
+        (l) =>
+          l.parcel !== null &&
+          l.parcel.some((s) => s.id === 'carrot' && s.qty === 2) &&
+          l.parcel.some((s) => s.id === 'book'),
+      ),
+    );
+
+    // The string snaps: short stock → 409, NOTHING moves, NO letter sends.
+    const before = await itemQty(db, giver.id, 'carrot');
+    const inboxLenBefore = (
+      await inject({ method: 'GET', url: '/messages', headers: { cookie: getter.cookie } })
+    ).json<PLetter[]>().length;
+    const snap = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: giver.cookie },
+      payload: {
+        toHerd: getter.id,
+        body: 'Have five carrots I do not have.',
+        parcel: [{ id: 'carrot', qty: 5 }],
+      },
+    });
+    const inboxLenAfter = (
+      await inject({ method: 'GET', url: '/messages', headers: { cookie: getter.cookie } })
+    ).json<PLetter[]>().length;
+    check(
+      'short stock snaps the string: 409, nothing moves, no letter',
+      snap.statusCode === 409 &&
+        snap.json<{ code: string }>().code === 'parcel_short' &&
+        (await itemQty(db, giver.id, 'carrot')) === before &&
+        (await itemQty(db, getter.id, 'carrot')) === 2 &&
+        inboxLenAfter === inboxLenBefore,
+    );
+
+    // Bounds: a fictional item is refused; freight quantities die at the transport schema.
+    const bogus = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: giver.cookie },
+      payload: {
+        toHerd: getter.id,
+        body: 'A jar of moonlight.',
+        parcel: [{ id: 'jar-of-moonlight', qty: 1 }],
+      },
+    });
+    const tooMany = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: giver.cookie },
+      payload: {
+        toHerd: getter.id,
+        body: 'Bulk freight.',
+        parcel: [{ id: 'carrot', qty: 999 }],
+      },
+    });
+    check(
+      'fictional items 400, freight quantities 400',
+      bogus.statusCode === 400 && tooMany.statusCode === 400,
+    );
+
+    // Plain letters still travel light.
+    const plain = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: giver.cookie },
+      payload: { toHerd: getter.id, body: 'No parcel, just regards.' },
+    });
+    const lastInbox = (
+      await inject({ method: 'GET', url: '/messages', headers: { cookie: getter.cookie } })
+    ).json<PLetter[]>();
+    check(
+      'a parcel-less letter still sends (parcel null)',
+      plain.statusCode === 201 &&
+        lastInbox.some((l) => l.body.includes('just regards') && l.parcel === null),
+    );
+  }
+
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──
   section('Living-Herd determinism (§8)');
   {

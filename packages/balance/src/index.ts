@@ -60,6 +60,12 @@ export const GAME_NIGHT_AFFINITY = 3;
  *  Workshop, deadpan, never punishing (the night still happened). */
 export const GAME_WEAR_CHANCE = 0.15;
 
+// ── §7s A Parcel, With String — gifts ride letters (warmth-sized, never logistics) ──
+/** Distinct item stacks one parcel can hold. */
+export const PARCEL_MAX_STACKS = 5;
+/** Per-stack quantity ceiling. A gift, not a freight contract. */
+export const PARCEL_MAX_QTY = 20;
+
 // ── §14.2 Heritability (at birth; clamp to scale) ───────────────────────────
 export const PERSONALITY_INHERIT = 0.2; // small parental nudge
 export const STAT_INHERIT = 0.7; // dominant parental weight

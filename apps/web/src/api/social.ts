@@ -43,6 +43,8 @@ export interface InboxLetter {
   fromHerd: string | null;
   fromName: string | null;
   body: string;
+  /** Items that rode this letter (§7s) — already delivered; this is the gift tag. */
+  parcel: { id: string; qty: number }[] | null;
   read: boolean;
   createdAt: number;
 }
@@ -82,8 +84,16 @@ export const getClubs = (): Promise<Club[]> => api.get<Club[]>('/clubs');
 export const getRelationships = (): Promise<Relationship[]> =>
   api.get<Relationship[]>('/relationships');
 export const getInbox = (): Promise<InboxLetter[]> => api.get<InboxLetter[]>('/messages');
-export const sendMessage = (toHerd: string, body: string): Promise<{ ok: boolean }> =>
-  api.post<{ ok: boolean }>('/messages', { toHerd, body });
+export const sendMessage = (
+  toHerd: string,
+  body: string,
+  parcel?: { id: string; qty: number }[],
+): Promise<{ ok: boolean }> =>
+  api.post<{ ok: boolean }>('/messages', {
+    toHerd,
+    body,
+    ...(parcel && parcel.length > 0 ? { parcel } : {}),
+  });
 /** Opening the Post Office reads everything — one stamp (§7p). */
 export const readAllMail = (): Promise<{ ok: boolean }> =>
   api.post<{ ok: boolean }>('/messages/read-all');

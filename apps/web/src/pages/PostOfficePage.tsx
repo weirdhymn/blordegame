@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
+import { getInventory } from '../api/explore.js';
 import { fileReport } from '../api/moderation.js';
 import { getContacts, getInbox, readAllMail, sendMessage } from '../api/social.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
+import { pretty } from '../util/format.js';
 
 function postmark(ms: number): string {
   const d = new Date(ms);
@@ -18,12 +20,17 @@ export function PostOfficePage(): ReactElement {
   const { herd, refresh, unreadMail } = useSession();
   const inbox = useLoad(
     useCallback(async () => {
-      const [letters, contacts] = await Promise.all([getInbox(), getContacts()]);
-      return { letters, contacts };
+      const [letters, contacts, inv] = await Promise.all([
+        getInbox(),
+        getContacts(),
+        getInventory(),
+      ]);
+      return { letters, contacts, inv };
     }, []),
   );
   const letters = inbox.data?.letters ?? [];
   const contacts = inbox.data?.contacts ?? [];
+  const inv = inbox.data?.inv ?? [];
 
   // Walking in reads the mail: stamp once per visit (a ref survives StrictMode's
   // double-mount), then refresh the session so the Town tab's number clears.
@@ -36,18 +43,43 @@ export function PostOfficePage(): ReactElement {
 
   const [toHerd, setToHerd] = useState('');
   const [body, setBody] = useState('');
+  // The parcel under assembly (§7s) — up to 5 stacks ride the letter.
+  const [parcel, setParcel] = useState<{ id: string; qty: number }[]>([]);
+  const [packItem, setPackItem] = useState('');
+  const [packQty, setPackQty] = useState(1);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const heldQty = (itemId: string): number => inv.find((s) => s.id === itemId)?.qty ?? 0;
+  const packedQty = (itemId: string): number => parcel.find((s) => s.id === itemId)?.qty ?? 0;
+
+  function addToParcel(): void {
+    if (!packItem || packQty < 1) return;
+    const qty = Math.min(packQty, 20, heldQty(packItem) - packedQty(packItem));
+    if (qty < 1 || parcel.length >= 5) return;
+    setParcel((p) => {
+      const existing = p.find((s) => s.id === packItem);
+      return existing
+        ? p.map((s) => (s.id === packItem ? { ...s, qty: Math.min(20, s.qty + qty) } : s))
+        : [...p, { id: packItem, qty }];
+    });
+    setPackQty(1);
+  }
 
   async function send(recipient: string, text: string): Promise<void> {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      await sendMessage(recipient, text);
-      setNote('Posted. The Post Office thanks you for writing legibly.');
+      await sendMessage(recipient, text, parcel);
+      setNote(
+        parcel.length > 0
+          ? 'Posted, parcel and all. The string held.'
+          : 'Posted. The Post Office thanks you for writing legibly.',
+      );
       setBody('');
+      setParcel([]);
       inbox.reload();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'The letter came back, stampless.');
@@ -143,13 +175,59 @@ export function PostOfficePage(): ReactElement {
               placeholder="Dear neighbor…"
               aria-label="Letter body"
             />
+            {/* A Parcel, With String (§7s): tie up to five small stacks to the letter. */}
+            <div className="parcel-pack">
+              <span className="muted">📦 Tie on a parcel (optional):</span>
+              <div className="row-actions">
+                <select
+                  value={packItem}
+                  onChange={(e) => setPackItem(e.target.value)}
+                  aria-label="Item to add to the parcel"
+                >
+                  <option value="">— from your stores —</option>
+                  {inv
+                    .filter((s) => s.qty - packedQty(s.id) > 0)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {pretty(s.id)} · have {s.qty - packedQty(s.id)}
+                      </option>
+                    ))}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={packQty}
+                  onChange={(e) => setPackQty(Math.max(1, Number(e.target.value) || 1))}
+                  aria-label="Quantity to add"
+                  className="parcel-qty"
+                />
+                <button disabled={busy || !packItem || parcel.length >= 5} onClick={addToParcel}>
+                  + Add
+                </button>
+              </div>
+              {parcel.length > 0 && (
+                <div className="card-row">
+                  {parcel.map((s) => (
+                    <button
+                      key={s.id}
+                      className="calling-card"
+                      title="remove from parcel"
+                      onClick={() => setParcel((p) => p.filter((x) => x.id !== s.id))}
+                    >
+                      {pretty(s.id)} ×{s.qty} ✕
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="row-actions">
               <button
                 className="primary"
                 disabled={busy || !toHerd.trim() || !body.trim()}
                 onClick={() => void send(toHerd.trim(), body.trim())}
               >
-                📮 Post it
+                {parcel.length > 0 ? '📦 Post it, parcel and all' : '📮 Post it'}
               </button>
             </div>
           </section>
@@ -174,6 +252,12 @@ export function PostOfficePage(): ReactElement {
                       <span className="muted">{postmark(l.createdAt)}</span>
                     </div>
                     <p className="letter-body">{l.body}</p>
+                    {l.parcel && l.parcel.length > 0 && (
+                      <p className="parcel-tag">
+                        📦 Came with: {l.parcel.map((s) => `${pretty(s.id)} ×${s.qty}`).join(', ')}{' '}
+                        — already in your stores.
+                      </p>
+                    )}
                     {l.fromHerd && herd && l.fromHerd !== herd.id && (
                       <div className="row-actions">
                         <button

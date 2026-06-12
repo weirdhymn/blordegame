@@ -473,6 +473,9 @@ export const messages = pgTable(
       .notNull()
       .references(() => herds.id, { onDelete: 'cascade' }),
     body: text('body').notNull(),
+    /** A Parcel, With String (§7s): items that rode this letter. The transfer happened
+     *  atomically at send time — this is the record, not the escrow. */
+    parcel: jsonb('parcel').$type<{ id: string; qty: number }[]>(),
     readAt: timestamp('read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

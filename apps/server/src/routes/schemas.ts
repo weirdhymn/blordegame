@@ -25,6 +25,18 @@ export const bounded = (maximum: number, minimum?: number) => {
 /** An array of id-ish strings (party pickers, enemy lists, horse lists). */
 export const idArray = (maxItems: number) => ({ type: 'array', items: id, maxItems }) as const;
 
+/** An array of `{ id, qty }` stacks (parcels) — transport bounds; services own the rules. */
+export const stackArray = (maxItems: number, maxQty: number) =>
+  ({
+    type: 'array',
+    maxItems,
+    items: {
+      type: 'object',
+      properties: { id, qty: { type: 'integer', minimum: 1, maximum: maxQty } },
+      required: ['id', 'qty'],
+    },
+  }) as const;
+
 /** A `{ schema: { body } }` route option. Additional properties stay allowed (forward-compat). */
 export const bodySchema = (properties: Record<string, unknown>, required: string[] = []) =>
   ({ schema: { body: { type: 'object', properties, required } } }) as const;

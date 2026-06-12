@@ -6,6 +6,7 @@
  */
 import { DUSTY_DUNES_SCRIPTS } from './adventures/dusty-dunes.js';
 import { GREEN_GRASS_SCRIPTS } from './adventures/green-grass.js';
+import { THE_TUNDRA_SCRIPTS } from './adventures/the-tundra.js';
 import type { AdventureScript } from './adventures/types.js';
 import { WEIRD_WOODS_SCRIPTS } from './adventures/weird-woods.js';
 
@@ -22,6 +23,8 @@ export const ADVENTURE_SCRIPTS: AdventureScript[] = [
   ...GREEN_GRASS_SCRIPTS,
   ...DUSTY_DUNES_SCRIPTS,
   ...WEIRD_WOODS_SCRIPTS,
+  // §7v: The Tundra appends LAST — existing regions' seeded draws stay byte-identical.
+  ...THE_TUNDRA_SCRIPTS,
 ];
 
 /** Each region's pool of RANDOM expeditions — a run picks one (seeded) at startRun (§9.3). Keeper

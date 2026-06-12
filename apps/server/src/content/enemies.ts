@@ -248,6 +248,104 @@ export const ENEMIES: EnemyDef[] = [
       ],
     },
   },
+
+  // ── The Tundra (§7v) ─────────────────────────────────────────────────────
+  {
+    id: 'frostbitten-stump',
+    name: 'a Frostbitten Stump',
+    maxHp: 56,
+    power: 14,
+    guard: 12,
+    speed: 6,
+    weakness: 'confront', // frozen wood is strong but brittle — one honest shoulder does it
+    resist: 'outwit', // there is no out-thinking a stump; it has committed to its plan
+    intro:
+      'What you took for a dead tree shrugs off its snow-load and stands up, creaking like a ship. Rime drips from it in slow sheets. It plants itself in the path with the unhurried confidence of something that has not lost an argument in two hundred years.',
+    tell: 'It is wood through and through — patient, frozen, brittle at the joints. Cleverness slides off it like sleet, but a hard, honest hit will split it along the frost lines.',
+    moves: [
+      {
+        id: 'limb-swing',
+        kind: 'strike',
+        weight: 3,
+        text: 'A frozen limb swings around in a wide, glittering arc.',
+      },
+      {
+        id: 'rime-shake',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It shakes itself like a wet dog and pelts the whole party with ice.',
+      },
+    ],
+    reward: { cubes: 30, items: [{ id: 'timber', qty: 2 }] },
+  },
+  {
+    id: 'sleet-wisp',
+    name: 'a Sleet-Wisp',
+    maxHp: 44,
+    power: 15,
+    guard: 13,
+    speed: 15,
+    weakness: 'soothe', // it is only cold and lonely — a kind word warms it right through
+    resist: 'skirmish', // blades and quick feet pass straight through weather
+    intro:
+      'The sleet ahead stops falling and starts circling. It tightens into a small, frantic whirl with something like a face in it, hissing static. It is not angry, exactly. It is having an extremely bad century and would like someone to know.',
+    tell: 'You cannot cut weather, and dancing around it only feeds the spin. But underneath the hiss it is just cold and terribly lonely — warmth, plainly offered, takes all the wind out of it.',
+    moves: [
+      {
+        id: 'ice-needle',
+        kind: 'strike',
+        weight: 3,
+        text: 'A needling gust finds the gap in everyone’s winter coat at once.',
+      },
+      {
+        id: 'white-spin',
+        kind: 'sweep',
+        weight: 1,
+        text: 'It spins up into a brief, furious white-out.',
+      },
+    ],
+    reward: { cubes: 32, items: [{ id: 'ore', qty: 1 }] },
+  },
+  {
+    // The Tundra region boss (§9.4c/§7v) — weak to a Rogue's Skirmish (quick feet find the
+    // seams in ten-thousand-year ice), resists a Cleric's Soothe (it has been calm for an
+    // age already; your kindness is redundant). The ROGUE's boss — the last class gets one.
+    id: 'tn-glacier-shepherd',
+    keeper: true,
+    name: 'the Glacier-Shepherd',
+    maxHp: 96,
+    power: 15,
+    guard: 14,
+    speed: 7,
+    weakness: 'skirmish', // old ice is seamed and slow — nimble feet find every crack
+    resist: 'soothe', // it has been perfectly calm for ten thousand years; you are redundant
+    intro:
+      'At the head of the valley the glacier has a shape walking ahead of it — enormous, slow, translucent-blue, tending the ice the way a shepherd tends a very slow flock. It notices you the way mountains notice things: gradually, completely, and without any particular hurry. It would prefer you went around. It has all century to insist.',
+    tell: 'It is calm the way winter is calm — soothing it is bringing snow to a blizzard, and meeting its patience head-on is a long way to lose slowly. But the old ice is full of seams. Quick feet, quicker choices: skip along the cracks and it cannot turn fast enough to mind them all.',
+    moves: [
+      {
+        id: 'calving-blow',
+        kind: 'strike',
+        weight: 3,
+        text: 'A slab of it calves off mid-swing — slow to start, impossible to stop.',
+      },
+      {
+        id: 'valley-groan',
+        kind: 'sweep',
+        weight: 1,
+        text: 'The whole valley groans as it leans, and the ice underfoot disagrees with everyone at once.',
+      },
+    ],
+    reward: {
+      cubes: 150,
+      items: [
+        { id: 'rare-gem', qty: 1 },
+        { id: 'ore', qty: 3 },
+        { id: 'saffron-bloom', qty: 1 },
+        { id: 'fairy-dust', qty: 1 },
+      ],
+    },
+  },
 ];
 
 export const ENEMY_BY_ID = new Map(ENEMIES.map((e) => [e.id, e]));

@@ -86,6 +86,22 @@ export const QUESTS: QuestDef[] = [
     ],
     reward: { cubes: 300 },
   },
+  {
+    id: 'through-the-woods',
+    title: 'Through the Woods',
+    requires: 'into-the-dunes',
+    objectives: [
+      { type: 'roam', regionId: 'weird-woods', count: 1, label: 'Forage once in Weird Woods' },
+      {
+        type: 'expedition',
+        regionId: 'weird-woods',
+        count: 2,
+        label: 'Complete two Weird Woods expeditions',
+      },
+    ],
+    // The far side of the Woods is cold (§7v) — completing this opens The Tundra.
+    reward: { cubes: 300 },
+  },
 ];
 
 export const QUEST_BY_ID = new Map(QUESTS.map((q) => [q.id, q]));

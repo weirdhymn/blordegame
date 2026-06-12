@@ -112,8 +112,42 @@ const WEIRD_WOODS_OMENS: Omen[] = [
   },
 ];
 
+const THE_TUNDRA_OMENS: Omen[] = [
+  {
+    id: 'tn-diamond-dust',
+    name: 'Diamond Dust',
+    text: 'The air itself has decided to sparkle — fine ice hanging weightless, every breath a small lit chandelier. Thinking feels cleaner up here.',
+    stat: 'int',
+  },
+  {
+    id: 'tn-long-blue-hour',
+    name: 'The Long Blue Hour',
+    text: 'The sun barely clears the ridge and the whole day runs on patient blue light. Good light for noticing things.',
+    stat: 'wis',
+  },
+  {
+    id: 'tn-snow-silence',
+    name: 'Snow Silence',
+    text: 'Fresh snowfall has turned the volume of the world down to almost nothing. Voices carry gently, and for once everybody listens.',
+    stat: 'cha',
+  },
+  {
+    id: 'tn-firm-crust',
+    name: 'Firm Crust',
+    text: 'Last night’s melt froze hard, and the snow bears weight without complaint. The going is quick, if you trust it.',
+    stat: 'dex',
+  },
+  {
+    id: 'tn-glasswind',
+    name: 'Glasswind',
+    text: 'The wind has scoured the high faces down to bare, glittering rock. Foragers keep finding ore just lying about, looking embarrassed.',
+    bonusItem: 'ore',
+  },
+];
+
 export const OMENS_BY_REGION = new Map<string, Omen[]>([
   ['green-grass', GREEN_GRASS_OMENS],
   ['dusty-dunes', DUSTY_DUNES_OMENS],
   ['weird-woods', WEIRD_WOODS_OMENS],
+  ['the-tundra', THE_TUNDRA_OMENS],
 ]);

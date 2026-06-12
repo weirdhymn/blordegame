@@ -101,6 +101,28 @@ export const REGIONS: Region[] = [
       { item: 'bone', weight: 1 }, // rich-fertilizer input (§7j)
     ],
   },
+  {
+    id: 'the-tundra',
+    name: 'The Tundra',
+    tier: 4,
+    recommendedPower: 10,
+    requiresQuest: 'through-the-woods',
+    // The cold edge of the map (§7v) — leans RELATIVELY gray/silver/roan: pale things
+    // weather well here. Gray stays rare globally (§14.7); this is a lean, not a flood.
+    freqOverride: {
+      ...DEFERRED_OFF,
+      G: { G: 0.12, g: 0.88 },
+      Z: { Z: 0.1, n: 0.9 },
+      Rn: { Rn: 0.08, rn: 0.92 },
+      C: { Cr: 0.1, prl: 0.04, C: 0.86 },
+    },
+    loot: [
+      { item: 'ore', weight: 6 }, // the wind scours the high faces bare
+      { item: 'timber', weight: 2 }, // wind-stunted, but it burns
+      { item: 'bone', weight: 2 }, // the cold keeps them (§7j)
+      { item: 'rare-gem', weight: 1 }, // ice-clear
+    ],
+  },
 ];
 
 export const REGION_BY_ID = new Map(REGIONS.map((r) => [r.id, r]));

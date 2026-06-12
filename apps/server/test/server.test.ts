@@ -74,6 +74,8 @@ import {
 import { MAGIC_CROP_POOL } from '../src/content/crops.js';
 import { ENEMY_BY_ID } from '../src/content/enemies.js';
 import { ITEM_BY_ID } from '../src/content/items.js';
+import { OMENS_BY_REGION } from '../src/content/omens.js';
+import { QUEST_BY_ID } from '../src/content/quests.js';
 import { RECIPE_BY_ID } from '../src/content/recipes.js';
 import { REGION_BY_ID } from '../src/content/regions.js';
 import { STUDBOOK_GOAL_BY_ID } from '../src/content/studbook.js';
@@ -130,7 +132,7 @@ import {
   herdHorseCount,
   upgradeHerd,
 } from '../src/services/progression.js';
-import { getQuestState } from '../src/services/quests.js';
+import { getQuestState, recordEvent } from '../src/services/quests.js';
 import { induceGlitch, patchGlitch, SHRINE_OFFERING_ID } from '../src/services/shrine.js';
 import { skillCheck } from '../src/services/stats.js';
 import { checkStudbookOnMature, getStudbook } from '../src/services/studbook.js';
@@ -5042,6 +5044,92 @@ async function main(): Promise<void> {
         (REGION_BY_ID.get('green-grass')?.freqOverride.My?.my ?? 0) === 0 &&
         (REGION_BY_ID.get('dusty-dunes')?.freqOverride.My?.my ?? 0) === 0,
     );
+  }
+
+  // ── The Tundra (§7v): the fourth region — gated, pooled, omened, and Keeper-crowned ──
+  section('The Tundra (§7v)');
+  {
+    // Content integrity: the region, its loot, its omens, its pool, its Keeper.
+    const tundra = REGION_BY_ID.get('the-tundra');
+    check(
+      'the region exists at tier 4, gated by Through the Woods',
+      tundra?.tier === 4 && tundra.requiresQuest === 'through-the-woods',
+    );
+    check(
+      'every loot drop is a real item',
+      (tundra?.loot ?? []).every((l) => ITEM_BY_ID.has(l.item)),
+    );
+    check(
+      'the gray lean is relative (above the global base, far below common)',
+      (tundra?.freqOverride.G?.G ?? 0) > 0.05 && (tundra?.freqOverride.G?.G ?? 1) <= 0.15,
+    );
+    const tq = QUEST_BY_ID.get('through-the-woods');
+    check(
+      'the unlock quest extends the chain from Into the Dunes',
+      tq?.requires === 'into-the-dunes' &&
+        tq.objectives.every((o) => !('regionId' in o) || o.regionId === 'weird-woods'),
+    );
+    const tOmens = OMENS_BY_REGION.get('the-tundra') ?? [];
+    check(
+      'five omens, unique ids, buff-only shapes',
+      tOmens.length === 5 && new Set(tOmens.map((o) => o.id)).size === 5,
+    );
+    check(
+      'two expeditions in the random pool; the Keeper stands apart',
+      (ADVENTURE_POOLS.get('the-tundra')?.length ?? 0) === 2 &&
+        REGION_KEEPER.get('the-tundra')?.id === 'glacier-shepherd',
+    );
+    const shepherd = ENEMY_BY_ID.get('tn-glacier-shepherd');
+    check(
+      'the Rogue finally gets its boss: keeper-flagged, weak to skirmish, carrying fairy dust',
+      shepherd?.keeper === true &&
+        shepherd.weakness === 'skirmish' &&
+        (shepherd.reward.items ?? []).some((i) => i.id === 'fairy-dust'),
+    );
+
+    // Gating + a real walk up the Aurora Road.
+    const reg = await inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'northerner', password: 'tundrahorse1' },
+    });
+    const tHerd = reg.json<{ herd: { id: string } }>().herd.id;
+    const walker = await mintHorse(db, {
+      herdId: tHerd,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'founder',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+
+    const locked = await startRun(db, tHerd, 'the-tundra', [walker.id], { seed: 5 });
+    check('the road north is locked before the quest', !locked.ok && locked.code === 'locked');
+
+    // Walk the quest chain by its own events: first-steps → into-the-dunes → through-the-woods.
+    await recordEvent(db, tHerd, { type: 'roam', regionId: 'green-grass' });
+    await recordEvent(db, tHerd, { type: 'roam', regionId: 'dusty-dunes' });
+    await recordEvent(db, tHerd, { type: 'roam', regionId: 'weird-woods' });
+    await recordEvent(db, tHerd, { type: 'expedition', regionId: 'weird-woods' });
+    await recordEvent(db, tHerd, { type: 'expedition', regionId: 'weird-woods' });
+    const tQuests = await getQuestState(db, tHerd);
+    check(
+      'Through the Woods completes on its own events',
+      tQuests.some((q) => q.questId === 'through-the-woods' && q.status === 'completed'),
+    );
+
+    const run = await startRun(db, tHerd, 'the-tundra', [walker.id], {
+      seed: 7,
+      scriptId: 'aurora-road',
+    });
+    check('the Aurora Road opens under the lights', run.ok && run.scene.id === 'first-ribbon');
+    if (run.ok) {
+      await chooseInRun(db, tHerd, run.runId, 'read-the-sky');
+      const home = await chooseInRun(db, tHerd, run.runId, 'long-way-round');
+      check(
+        'banking at the frozen ford ends the run with the haul',
+        home.ok && home.ended === true,
+      );
+    }
   }
 
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──

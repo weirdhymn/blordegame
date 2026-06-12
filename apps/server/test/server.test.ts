@@ -2929,6 +2929,53 @@ async function main(): Promise<void> {
   check('stats count users', stats.users >= 3);
   check('stats count the open report', stats.openReports >= 1);
 
+  // The queue drains (§7r): close the report; it leaves the open list; players can't close.
+  const filedId = modReports
+    .json<{ id: string; targetId: string }[]>()
+    .find((r) => r.targetId === mateId)!.id;
+  eq(
+    'a player cannot close a report → 403',
+    (
+      await inject({
+        method: 'POST',
+        url: `/mod/reports/${filedId}/resolve`,
+        headers: { cookie },
+        payload: { status: 'resolved' },
+      })
+    ).statusCode,
+    403,
+  );
+  eq(
+    'a bogus status → 400',
+    (
+      await inject({
+        method: 'POST',
+        url: `/mod/reports/${filedId}/resolve`,
+        headers: { cookie: cookieMod },
+        payload: { status: 'shredded' },
+      })
+    ).statusCode,
+    400,
+  );
+  eq(
+    'the mod resolves the report → 200',
+    (
+      await inject({
+        method: 'POST',
+        url: `/mod/reports/${filedId}/resolve`,
+        headers: { cookie: cookieMod },
+        payload: { status: 'resolved' },
+      })
+    ).statusCode,
+    200,
+  );
+  check(
+    'a closed report leaves the open queue (and the stats tile)',
+    !(await inject({ method: 'GET', url: '/mod/reports', headers: { cookie: cookieMod } }))
+      .json<{ id: string }[]>()
+      .some((r) => r.id === filedId),
+  );
+
   // Account freeze: admin freezes cherry; cherry keeps read access but can't act.
   const targetUser = await db.query.users.findFirst({ where: drizzleEq(users.username, 'cherry') });
   if (!targetUser) throw new Error('freeze target missing');

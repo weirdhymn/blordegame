@@ -32,6 +32,23 @@ export async function listReports(db: DB, limit = 100) {
     .limit(limit);
 }
 
+/** Close a report (§7r): 'resolved' (acted on) or 'dismissed' (no action needed). Reports
+ *  used to stay open forever — the Mod Desk's queue is only useful if it drains. */
+export async function resolveReport(
+  db: DB,
+  reportId: string,
+  status: 'resolved' | 'dismissed',
+  byUserId: string,
+): Promise<boolean> {
+  const res = await db
+    .update(reports)
+    .set({ status })
+    .where(eq(reports.id, reportId))
+    .returning({ id: reports.id });
+  if (res.length > 0) await logAudit(db, null, 'mod_report_close', { reportId, status, byUserId });
+  return res.length > 0;
+}
+
 /** Freeze/unfreeze an account (§11). A frozen account can read but performs no actions. */
 export async function setFrozen(db: DB, userId: string, frozen: boolean): Promise<boolean> {
   const res = await db

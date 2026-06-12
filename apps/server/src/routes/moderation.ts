@@ -3,7 +3,14 @@ import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import type { UserRow } from '../db/schema.js';
 import { getHerdForUser, resolveSessionUser } from '../services/auth.js';
-import { createReport, getStats, isMod, listReports, setFrozen } from '../services/moderation.js';
+import {
+  createReport,
+  getStats,
+  isMod,
+  listReports,
+  resolveReport,
+  setFrozen,
+} from '../services/moderation.js';
 import { bodySchema, id, shortText } from './schemas.js';
 
 export function registerModerationRoutes(app: FastifyInstance, db: DB): void {
@@ -51,6 +58,24 @@ export function registerModerationRoutes(app: FastifyInstance, db: DB): void {
     if (!isMod(user)) return reply.code(403).send({ error: 'forbidden' });
     return reply.send(await listReports(db));
   });
+
+  // Close a report (§7r) — resolved (acted on) or dismissed (nothing to do). Mod or admin.
+  app.post(
+    '/mod/reports/:id/resolve',
+    bodySchema({ status: id }, ['status']),
+    async (req, reply) => {
+      const user = await authUser(req, reply);
+      if (!user) return reply;
+      if (!isMod(user)) return reply.code(403).send({ error: 'forbidden' });
+      const params = req.params as { id: string };
+      const body = req.body as { status: string };
+      if (body.status !== 'resolved' && body.status !== 'dismissed') {
+        return reply.code(400).send({ error: 'status must be resolved or dismissed' });
+      }
+      const ok = await resolveReport(db, params.id, body.status, user.id);
+      return reply.code(ok ? 200 : 404).send({ ok, status: body.status });
+    },
+  );
 
   app.get('/mod/stats', async (req, reply) => {
     const user = await authUser(req, reply);

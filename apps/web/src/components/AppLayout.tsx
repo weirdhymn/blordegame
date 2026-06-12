@@ -33,6 +33,7 @@ export function AppLayout(): ReactElement {
           <NavLink to="/inventory">Inventory</NavLink>
           <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>
+          {(user?.role === 'admin' || user?.role === 'mod') && <NavLink to="/mod">🛡 Mod</NavLink>}
           {user?.role === 'admin' && <NavLink to="/debug">🛠 Debug</NavLink>}
         </nav>
         <button onClick={() => void signOut()}>Log out</button>

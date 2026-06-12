@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
+import { fileReport } from '../api/moderation.js';
 import { getContacts, getInbox, readAllMail, sendMessage } from '../api/social.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
@@ -50,6 +51,23 @@ export function PostOfficePage(): ReactElement {
       inbox.reload();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'The letter came back, stampless.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // A report needs a reason in the player's words (§7r) — prompt keeps it one gesture.
+  async function reportSender(senderHerd: string): Promise<void> {
+    const reason = window.prompt('Report this sender to the moderators — what happened?');
+    if (!reason?.trim()) return;
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      await fileReport('herd', senderHerd, reason.trim());
+      setNote('Reported. A moderator will read it — thank you.');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'The report did not go through.');
     } finally {
       setBusy(false);
     }
@@ -166,6 +184,13 @@ export function PostOfficePage(): ReactElement {
                           }}
                         >
                           ↩ Reply
+                        </button>
+                        <button
+                          className="link-btn"
+                          disabled={busy}
+                          onClick={() => void reportSender(l.fromHerd!)}
+                        >
+                          ⚑ report
                         </button>
                       </div>
                     )}

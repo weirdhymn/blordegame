@@ -16,6 +16,7 @@ import { TownPage } from './pages/TownPage.js';
 import { WorkshopPage } from './pages/WorkshopPage.js';
 import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
+import { ModDeskPage } from './pages/ModDeskPage.js';
 import { PostOfficePage } from './pages/PostOfficePage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { ShrinePage } from './pages/ShrinePage.js';
@@ -77,6 +78,7 @@ export default function AuthedApp(): ReactElement {
         <Route path="journal" element={<JournalPage />} />
         <Route path="guide" element={<FieldGuidePage />} />
         <Route path="debug" element={<DebugPage />} />
+        <Route path="mod" element={<ModDeskPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

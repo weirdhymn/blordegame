@@ -13,6 +13,7 @@ import {
   type ProfileHighlight,
 } from '../api/social.js';
 import { listHerdHorses } from '../api/horses.js';
+import { fileReport } from '../api/moderation.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { HorseCanvas } from '../render/HorseCanvas.js';
 import { useSession } from '../session.js';
@@ -72,6 +73,19 @@ export function HerdPage(): ReactElement {
       setProfile(await getHerdProfile(id));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No such herd.');
+    }
+  }
+
+  async function reportHerd(id: string): Promise<void> {
+    const reason = window.prompt('Report this herd to the moderators — what happened?');
+    if (!reason?.trim()) return;
+    setError(null);
+    try {
+      await fileReport('herd', id, reason.trim());
+      setError(null);
+      window.alert('Reported. A moderator will read it — thank you.');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'The report did not go through.');
     }
   }
 
@@ -184,7 +198,10 @@ export function HerdPage(): ReactElement {
               <strong>{profile.name}</strong>{' '}
               <span className="muted">
                 · {profile.horseCount} horses · level {profile.level}
-              </span>
+              </span>{' '}
+              <button className="link-btn" onClick={() => void reportHerd(profile.id)}>
+                ⚑ report
+              </button>
             </p>
             <div className="visit-grid">
               {profile.highlights.map((h) => (

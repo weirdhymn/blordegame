@@ -1,212 +1,176 @@
-# BLORSE — Development Progress Report
+# BLORSE — Development Report
 
-**Date:** 2026-06-05
-**Status:** Build roadmap (Phases 0–11) **complete**. Server is feature-complete and fully
-tested per `BLORSE_PLAN.md`. The web client is scaffolded but **not yet wired** to the API.
+**State: feature-complete for beta** (per `BLORSE_PLAN.md` §11's own definition).
+Window: 2026-06-05 → 2026-06-12 · 88 commits · all four workspaces green.
+(Supersedes the 06-05 report, which predated the client wiring and §7j–§7v.)
 
----
-
-## 1. Executive summary
-
-BLORSE (working title "blorsegame") is a cozy, asynchronous-multiplayer life-sim about a herd
-of pixel horses in a literal digital world: real-genetics **breeding**, **exploration**, a
-DnD-style **RPG layer** (stats + dice), and an autonomous **"Living Herd"** simulation. It is
-a full-stack TypeScript pnpm monorepo.
-
-All twelve planned build phases are implemented, verified, and committed. Every gameplay
-system described in the plan runs **server-authoritatively** and is covered by an automated
-test. The remaining work to reach a *playable* beta is primarily **front-end integration**
-(wiring the React/PixiJS client to the now-complete API) plus a small set of deferred
-product decisions, all listed in §7.
-
-| Indicator                | State                                                     |
-| ------------------------ | --------------------------------------------------------- |
-| Phases complete          | **12 / 12** (Phase 0 → Phase 11)                           |
-| Automated tests          | **503 passing**, 0 failing                                |
-| Quality gauntlet         | typecheck ✅ · lint ✅ · format ✅ · test ✅ (all green)      |
-| Server feature-complete  | ✅ Yes                                                     |
-| Web client playable      | ⛔ Not yet (renderer dev page only; API not wired)         |
-| Production-deployable     | ✅ Single-instance beta (Docker + persisted PGlite)        |
+A cozy, asynchronous multiplayer life-sim of pixel horses in a literal digital world:
+real-genetics breeding, exploration, a DnD-style stats-and-dice RPG layer, an autonomous
+Living Herd, and an async social layer — full-stack TypeScript, one repository.
 
 ---
 
-## 2. Metrics at a glance
+## 1. By the numbers
 
-**Code (TypeScript authored, excluding the vendored engine):**
+| Surface | Count |
+|---|---|
+| Code | ~33,500 lines (server 11,975 · server tests 4,967 · web 8,752 · genetics pkg 3,431 · render-core 3,825 · balance 512) |
+| API | 84 endpoints across 19 route files, 35 services |
+| Web | 24 pages (one lazy authed chunk; /login ships 170KB without the genetics engine) |
+| Database | 23 tables, 24 migrations (0000–0023), PGlite **and** node-postgres via one driver-agnostic `DB` type |
+| Tests | **903 checks**: 523 server (e2e on real migrations) · 340 vendored engine · 11 facade · 13 render-core · 16 web |
+| Balance | 132 named constants in one package (the §14 single-source rule held) |
+| Content | 4 regions · 20 adventure scripts (16 pool + 4 Keepers) · 10 enemies · 20 omens · 5 quests · 32 items · 10 recipes · 7 structures · 8 crops · 14 studbook goals · 72-coat catalog · 21 genetic loci · 3 glitches |
 
-| Area                          | Lines  | Notes                                            |
-| ----------------------------- | ------ | ------------------------------------------------ |
-| `apps/server/src`             | 3,537  | 24 service modules, 10 route modules             |
-| `apps/server/test`            | 921    | one end-to-end integration script, 145 checks    |
-| `packages/render-core/src`    | 391    | genetics→art bridge                              |
-| `packages/genetics/src`       | 324    | typed ESM facade over the vendored engine        |
-| `packages/balance/src`        | 123    | 55 exported tuning constants/types (§14)         |
-| `apps/web/src`                | 397    | scaffold + standalone renderer dev page          |
-| **Authored total**            | **~5,693** |                                              |
-| `packages/genetics/vendor`    | 2,352  | engine + data, **vendored byte-for-byte**        |
+## 2. Architecture — the rules and whether they held
 
-**Data model:** 18 tables, 7 enums, 10 migrations (`0000`–`0009`).
+- **Vendored genetics engine, sacred.** `packages/genetics/vendor/` wrapped by a typed ESM
+  facade. Held through the entire build *including the first live gene drop* (§7u): the
+  Mushroom locus is a pure data entry; its look/naming live in the facade (`mushroomize`);
+  the single engine-side change ever made is one row in the static `OFF` baseline table,
+  flagged in the commit and codified in the runbook's field notes.
+- **Server authoritative, seeded determinism.** Every state change runs server-side through
+  `mulberry32`; the client renders previews only. Omens, autonomy beats, adventure draws,
+  battle rolls, glitch birth-rolls, and garden randomness all derive from seeds — a
+  twin-herd test pins Living-Herd determinism outright.
+- **Phenotype derived, never stored.** Only `(genotype, seed, glitch)` persists. The same
+  discipline generalized everywhere: garden plot stages derive from timestamps at read,
+  calling cards derive from interaction history, studbook founded-lines derive from owned
+  horses, wither finalizes lazily and returns the crop.
+- **The atomic economy kernel.** `spendCubes` (conditional `UPDATE … WHERE cubes >= n`),
+  `creditCubes`, `consumeItems` (conditional decrements in a tx, savepoint-safe). Every
+  value flow rides it — craft, cook, recruit, upload, build, garden, shrine, parcel gifts,
+  market, trades. The audit's one P0 (two legacy flows bypassing it) and a family of
+  unconditional-claim races (daily, expedition bank, combat reward, gather cap) were
+  refitted onto the same conditional-claim idiom.
+- **Reveal protection as an invariant class.** Foals render solid white until adulthood;
+  the audit and three later features (visits, pedigree, public horse API) each found and
+  closed a leak of the same class — foal `genotype`/`seed`/coat-name never leave the server.
+- **Balance in one place / show-don't-tell / cozy-first.** No fail states anywhere: worst
+  outcomes are meager hauls, "…but nothing happened," spooked-not-dead, withered crops that
+  refund themselves, and a Keeper you may politely bow out of.
 
-**History:** 14 commits, one per phase/sub-phase. Tags by commit:
+## 3. Systems inventory
 
-| Phase | Commit    | Title                                                    |
-| ----- | --------- | -------------------------------------------------------- |
-| 0     | `9c733fb` | Scaffold: pnpm/TS monorepo, web + server boot, CI        |
-| 1     | `b23155e` | Vendor genetics engine + typed ESM facade                |
-| 2a    | `8a60596` | render-core — palette adapter, shading, glitch           |
-| 2b    | `e9dca8b` | Canvas-2D compositor + renderer dev page                 |
-| 3     | `4beb468` | Persistence & accounts (Drizzle + PGlite + auth)         |
-| 4     | `36e3b15` | Breeding loop (server-authoritative)                     |
-| 5     | `1e9ca96` | Exploration & quests                                     |
-| 6     | `50b4272` | Aging, care & daily rhythm                               |
-| 7     | `e4dd115` | The Pasture, gathering & crafting                        |
-| 8a    | `5122581` | RPG stats, dice & jobs                                   |
-| 8b    | `3996760` | Adventures, wild encounters & the Tavern                 |
-| 9     | `b349b6a` | The Living Herd (autonomy)                               |
-| 10    | `c132d2c` | Social & economy (async)                                 |
-| 11    | `cb71be6` | Beta hardening                                           |
+### Core loop
+- **Breeding** — real Mendelian inheritance over 21 loci; no-shared-ancestor gate via a
+  materialized lineage closure; cooldowns, herd-cap, bond bonuses; punnett odds + carrier
+  whispers on the Breed page; foal-white reveal at adulthood (the Morning Post headline).
+- **Rendering** — grayscale layer manifest + palette adapter; per-individual seeded color
+  jitter; 3 glitch transforms (inverted/screen/shade); integer-scale pixel discipline
+  enforced in CSS (`flex-shrink: 0` on every sprite).
+- **Daily rhythm** — midnight-EST rollover (UTC−5 fixed arithmetic, DST-immune); login
+  catch-up replays missed days deterministically; the **Morning Post** digests it all
+  (stipend, jobs, groom thank-you, fertilizer, coat reveals, quest + studbook completions,
+  Living-Herd beats).
+- **Care hub** — communal cook (stat meal buffs from grains/crops, saffron amplifier) +
+  evening groom (soothes `rattled`, next-morning bonus). Optional by design; skipping never
+  punishes (fed-day fertilizer is a bonus, not a tax).
+- **The Garden (§7j)** — plant the crop itself (no seeds); 8 crops over 5 tiers
+  (12h–96h) with dual yields; value-per-hour ~0.50→0.58 ⬡/h; three fertilizers (care-gated
+  basic ×0.8 time, rich +1–2 crops, magic +1 random); 48h water drain + tier-scaled grace
+  (7–10 day runways); withering returns the planted crop — zero net loss; sprinkler as a
+  convenience sink (15 ⬡/day).
 
----
+### Adventure & RPG
+- **Regions** — Green Grass, Dusty Dunes, Weird Woods, **The Tundra** (§7v), each with
+  genetic frequency weather (Tundra leans relatively gray), loot tables, 5 daily omens
+  (buff-only), and a quest-gated unlock chain.
+- **Expeditions (§9.3)** — 16 pool scripts drawn randomly per region (seeded), branch-graph
+  validated, voice-bar enforced (sensory-first, one dry line, push/bank fork, personality
+  gates); banking on end; wild-horse encounters that recruit narratively or walk to the
+  Tavern.
+- **Combat (§9.4)** — turn-based, party of 4, class/approach puzzle (Knight/Wizard/Rogue/
+  Cleric ↔ confront/outwit/skirmish/soothe), weakness/resist with readable tells, Mend,
+  potions, retreat; 0 HP = spooked. **Four Keepers complete the class square** (GG soothe ·
+  DD confront · WW outwit · TN skirmish), each an earned, separate challenge that gates the
+  tier ladder (the standalone battle route refuses keeper ids).
+- **Progression** — one spine: 5 herd tiers (Smallholding → Dynasty), Cube costs +
+  milestone gates (bosses, quests, rare coats); jobs (structure-bound, daily dice, skill
+  XP + accomplishments); per-horse daily gather cap as the economy's source throttle.
 
-## 3. Architecture & stack
+### The Living Herd (§8)
+- Daily autonomy tick: personality-compatibility drift over a relationship graph
+  (friend/rival/bonded), club formation (reading circle, game club), journal beats with
+  the day's vignette on the Pasture.
+- **Night Reading (§7o)** — the craft→autonomy loop closed: Books are consumed for reading
+  XP (accomplishments included), Board Games host Meeting-Hall game nights (affinity
+  nudges, occasional wear-out) — crafted goods finally *do* something.
 
-```
-packages/genetics/    vendored equine-genetics engine (untouched) + typed ESM facade + tests
-packages/render-core/ pure genetics→art bridge: RenderSpec, palette adapter, shading, glitches
-packages/balance/     all §14 tuning constants in one place (no magic numbers in logic)
-apps/server/          Fastify + Drizzle + PGlite — auth, all game logic, the autonomy sim
-apps/web/             React + Vite (+ Canvas-2D renderer dev page); client not yet API-wired
-```
+### Town & social (§10)
+- **The Town (§7k)** — seven pixel-façade buildings: Tavern (recruitment with live
+  headcount), Workshop (crafting/structures), Market (listings + escrowed trades), Sparring
+  Ring, **Registrar** (Studbook), **Debug Shrine** (glitches for fairy dust; bug reports to
+  clear), **Post Office** (§7p — the boarded façade's payoff).
+- **Mail** — sender names, read state, one-stamp read-all, unread badge on the nav; system
+  letters (the §10 "your stranger found a home" recruit notice, delivered at last);
+  **parcels (§7s)** — up to 5×20 items move atomically with the letter ("the string
+  snapped" on shortfall).
+- **Calling Cards (§7q)** — the derived address book (mail/trade/road ties), pickers in
+  compose + visit; visits render real sprites (adults only).
+- **Moderation (§7r)** — /mod desk (queue with resolve/dismiss, stats, admin freeze) +
+  player ⚑ report affordances; central freeze guard; tight rate limits on report/mail.
 
-- **Language/tooling:** TypeScript (strict; `verbatimModuleSyntax`, `noUncheckedIndexedAccess`),
-  pnpm workspaces (pnpm 11.5.2 via Corepack), ESLint flat config + Prettier, Node 24 native
-  TS type-stripping (no bundler for the server).
-- **Server:** Fastify 5, Drizzle ORM, PGlite (embedded Postgres). Schema is dialect-postgres,
-  so production can swap to managed Postgres via `drizzle-orm/node-postgres` with no schema
-  or query changes.
-- **Determinism:** all randomness is server-side through a seeded RNG (`mulberry32`); every
-  horse stores `(genotype, seed[, glitch])` and its phenotype/art is **derived on demand**,
-  never stored — the same inputs render pixel-identically forever (this is what makes
-  "copy link / shareable horse" work).
-- **Time:** a daily midnight rollover (UTC−5) with a login-catchup loop that deterministically
-  resolves every missed day's jobs and autonomy.
+### Collection & goals
+- **Field Guide** — 72-coat catalog with sprites + genotype detail; **Naturalist's Purse**
+  milestones (10/25/40/55/72 → 3,200 ⬡ lifetime) paid automatically at discovery.
+- **The Studbook (§7m)** — 14 standing breeding goals over 3 pages (~4,650 ⬡ lifetime),
+  fulfilled once each at the coat reveal of your own breeding; allele-predicate based
+  (a Dunalino is not "a chestnut"); founded-lines registry; ✒ stamps on the pedigree.
+- **Pedigree (§7t)** — depth-3 portrait tree with linked sprite cards and the dashed
+  generation spine; the no-shared-ancestor rule made visible.
 
----
+### Live service
+- **Gene drops (§7u)** — the runbook exercised end-to-end once: Mushroom shipped dark,
+  dialed up in the Weird Woods only; field notes captured the seven lessons (what is data,
+  what belongs in the facade, the OFF row, the test pins, the catalog ripple).
+- **Glitches (§7l)** — natural 1-in-1,000 birth roll (seed-derived) + the deliberate
+  Shrine path; foals reveal glitches only at adulthood; never heritable.
 
-## 4. What's built, phase by phase
+## 4. Economy map
 
-- **Phase 0 — Scaffold.** Monorepo, workspaces, shared TS config, lint/format, CI
-  (typecheck → lint → format:check → test). Web + server boot; `GET /health`.
-- **Phase 1 — Genetics.** Vendored `genetics.js`/`data.js` byte-for-byte; brought across its
-  ~340-test suite (green); added a typed ESM facade (`resolve`, `breedFoal`, `punnett`,
-  `randomGenotype`) plus the regional-frequency table format.
-- **Phase 2 — Renderer + palette adapter.** `render-core` turns a genotype into a `RenderSpec`
-  (palette adapter, procedural shading for roan/sooty/pangaré, glitch transforms, layer
-  manifest); a Canvas-2D compositor + a standalone dev page render and export horses.
-- **Phase 3 — Persistence & accounts.** Drizzle schema + migrations, password auth + sessions,
-  User + Herd (1:1) + Horse tables, mint/store/load, render-on-demand with caching.
-- **Phase 4 — Breeding loop.** Server-authoritative `breedFoal` with cooldowns and adult
-  gates, no-shared-ancestor rule (lineage closure), foal minting (white until adulthood),
-  `punnett()` odds preview, pedigree view.
-- **Phase 5 — Exploration & quests.** Regions with per-region genetics bias and encounter
-  tables, a paced roam action for items/resources/quest beats, quest chains, region gating.
-- **Phase 6 — Aging, care & daily rhythm.** Life-stage progression over real time, care
-  actions (no fail states), the white-foal → adult-color reveal at maturity, the daily
-  rollover + dailies + login-catchup cursor, the Field Guide.
-- **Phase 7 — The Pasture, gathering & crafting.** Developable Pasture, placeable Structures,
-  resource gathering, crafting (books/games/tools/materials).
-- **Phase 8 — RPG progression.** Six stats + hidden Luck (heritable + trainable), seeded
-  dice resolution, structure-gated jobs, single-horse and small-party adventures with
-  per-region encounter tables, the wild-encounter → party-recruit → **Tavern** flow (atomic
-  fee-based recruiting), accomplishments.
-- **Phase 9 — The Living Herd.** Personality vectors + compatibility, a relationship graph,
-  the deterministic daily autonomy tick (global + login-catchup), criteria-gated journal
-  events, friend/rival/bonded relationships, structure-gated clubs/roles. *(The signature
-  feature.)*
-- **Phase 10 — Social & economy.** Marketplace (server-escrowed, atomic buy), direct trades
-  (atomic two-sided swap), inter-herd visits, async messaging, AuditLog.
-- **Phase 11 — Beta hardening.** Account freeze + central mutation guard, report flow,
-  moderator/admin tools, rate limiting, consistent JSON error envelopes, extended audit
-  coverage, basic analytics (`/mod/stats`), a Docker deploy pipeline, and a rehearsed
-  gene-drop runbook.
+**Faucets** (all audited): daily stipend + job income (capped by slots), gather (capped
+per horse/day), expedition banks + battle rewards (effort-priced), quick-sell, upload
+parting gifts, quest/studbook/guide one-times (~7,850 ⬡ lifetime across the three
+ladders). **Sinks:** tier ladder (650→3,600 ⬡ per rung), Tavern fees (rarity-scaled),
+structures, sprinkler, shrine patches, market/trade circulation. **Scarcity currencies:**
+saffron bloom + fairy dust (Keeper-only; dust has two competing sinks — magic fertilizer
+vs. shrine glitches), bones (regional), rare gems (confirm-gated sells). Measured economy
+(3-day sim): ~20 raw materials/day, ~138 ⬡/day early → days-to-tier ≈ 4/6/8/11.
 
----
+## 5. Hardening history (the audit arc)
 
-## 5. Test coverage
+A four-agent audit (server, web, tests/CI/deploy, plan-gap) found and the following turns
+fixed: **P0** market/trade debits bypassing the kernel (negative balances possible);
+**P1** the unconditional-claim race family (daily/bank/reward/gather), keeper-gate bypass,
+foal genotype leaks, production logging off, four misleading web states, CI gaps
+(migration drift, untested HTTP skins, prod-serving, real Postgres); **P2** ~25 items
+(N+1s, indexes, faucet audit logs, abuse rate limits, case-insensitive usernames, 22P02
+mapping, a11y batch, AA contrast, code splitting, test de-flaking, engines floor). All
+closed; every fix carries a pinned regression check.
 
-| Suite                         | Tests | What it exercises                                              |
-| ----------------------------- | ----- | -------------------------------------------------------------- |
-| Genetics engine (vendored)    | 340   | differential/ratio correctness of the genetics model          |
-| Genetics facade               | 5     | typed API parity (resolve/breed/roll) Node ↔ Vite             |
-| render-core                   | 13    | palette adapter, shading, glitch transforms, manifest         |
-| Server (integration)          | 145   | the **real** Fastify + Drizzle + PGlite stack, end to end      |
-| **Total**                     | **503** |                                                             |
+## 6. Test & CI posture
 
-The server suite is a single deterministic script that drives the live stack via
-`app.inject()` — registration, auth, minting, breeding, lineage, exploration, care, the daily
-rollover, crafting, RPG dice/jobs/adventures, the Tavern, autonomy, marketplace/trades,
-messaging, moderation, freeze, rate limiting, and error handling — using injected seeds and
-clocks so every run is reproducible.
+903 checks. Server: end-to-end on real migrations over PGlite — auth/invites/freeze,
+breeding integrity, every economy flow, route HTTP skins (status mapping + auth guards),
+prod-serving mode, cookie security flags, day-boundary-immune clock tests, determinism
+twins, content integrity (loot/scripts/keepers/omens), and a §-section per feature. CI:
+verify (typecheck/lint/format/tests + migration-drift gate), a **real Postgres service
+job**, Docker build + boot + healthcheck. Engines pinned ≥22.18 (type-stripping floor);
+graceful shutdown (SIGTERM → app close → pg pool drain).
 
----
+## 7. Deployment readiness & honest limits
 
-## 6. Key technical decisions & flagged deviations
+Ready: Dockerfile (non-root, healthcheck), fly.toml, DEPLOY.md (env table verified
+accurate), volume-backed PGlite path live-equivalent, postgres:// path CI-tested.
+Required at cut-over: DEPLOY.md §9's persistence canary against the managed instance.
+Known v1 limits, all documented in-plan: punnett odds don't enumerate dropped loci
+(carriers still breed true); studbook honors bought-young foals (deliberate market hook);
+Post Office compose still accepts raw ids as the fallback; the trait-chip calculator UI is
+engine-vendored and unused by the game.
 
-- **Vendored engine is sacred.** The genetics engine is wrapped, never refactored; its
-  ~340 tests are the guardrail. New heritable genes ship as *data*, not code (see the
-  gene-drop runbook).
-- **PGlite + native Node TS (not tsx/Vite) for the server.** During Phase 3 the server could
-  not run under tsx/Vite/`node:test` (PGlite's WASM init breaks when `import.meta.url` is
-  rewritten; the engine's `window` shim also tripped PGlite's browser detection). Resolved by
-  running TypeScript source directly on Node with a resolve-only loader, and by removing the
-  transient `window` global after the engine loads. *Documented; stable.*
-- **Renderer is Canvas-2D, not PixiJS** — a deliberate deviation from the §2 stack lock.
-  `render-core` is renderer-agnostic, so this is reversible. **Open decision (§7).**
-- **Phenotype derived, never stored** — only `(genotype, seed, glitch)` persists. This makes
-  rendering reproducible and backups/rollbacks trivial.
-- **Atomicity** — marketplace buys, trades, and Tavern recruiting use DB transactions with
-  conditional-update claims (e.g. `WHERE status='active'`) so only the first claimant wins.
-- **Rate-limit registration order** (Phase 11) — routes were moved into a child plugin that
-  loads *after* `@fastify/rate-limit`, because the limiter's `onRoute` listener must be
-  attached before routes register or per-route caps are silently dropped.
+## 8. Deliberately deferred (post-beta, per §9.5/§13)
 
----
-
-## 7. Known gaps & standing decisions
-
-None block the build; these are the next moves toward a playable, launched beta.
-
-1. **Web client ↔ API wiring (largest remaining item).** The React/PixiJS client is
-   scaffolded and the renderer dev page works standalone, but the client does not yet call
-   the completed API. This is the bulk of the work to a playable beta.
-2. **Canvas-2D vs PixiJS** — resolve the §2 stack-lock deviation before the client UI lands.
-3. **LORE.md sync** — canonical-name doc is stale relative to the §13 locked names; reconcile
-   before any player-facing copy.
-4. **node-postgres for horizontal scale** — `createDb()` already guards the `postgres://`
-   path; single-instance beta runs on PGlite persisted to a volume. Swapping the driver is
-   the one code change required to scale out.
-
----
-
-## 8. Quality & deployment posture
-
-- **CI** runs install → typecheck → lint → format:check → test on every push/PR, plus a job
-  that builds the server Docker image to validate the deploy artifact.
-- **Deploy:** `docker compose up -d --build` runs a single instance with state persisted to a
-  `/data` volume (`DEPLOY.md`). Migrations re-apply idempotently on boot.
-- **Anti-abuse:** rate limiting, an AuditLog over every state-changing action, a report flow,
-  account freeze, and moderator/admin tooling are in place.
-- **Content ops:** `docs/GENE_DROP_RUNBOOK.md` is a rehearsed checklist for shipping new
-  genetic content with no engine changes and no data migration.
-
----
-
-## 9. Recommended next steps
-
-1. **Wire the web client to the API** — auth, herd/pasture view, horse detail + live render,
-   breeding UI (with the `punnett` odds preview), exploration/adventures, and the journal.
-2. **Settle the renderer choice** (Canvas-2D vs PixiJS) so the client builds on a fixed base.
-3. **Reconcile LORE.md** with the locked canonical names.
-4. **Stand up a staging deploy** and run the gene-drop runbook once end-to-end as a dress
-   rehearsal.
-5. **(At scale) wire node-postgres** and move to managed Postgres behind stateless replicas.
+White-spotting/leopard loci (await art) · NPC shops (a façade slot remains in fiction) ·
+large/strategic parties, deeper job trees, civil-society offices · seasons beyond omens ·
+combat status effects (typed, unwritten) · personality-altering items · further regions.

@@ -1309,6 +1309,45 @@ a.bldg:hover {
   white-space: pre-wrap;
 }
 
+/* ── Calling Cards (§7q) — the rolodex + sprite visits ── */
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.calling-card {
+  font-size: 0.85rem;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bd) solid var(--ink);
+  background: var(--band-paper);
+  box-shadow: var(--px) var(--px) 0 var(--sage-deep);
+  cursor: pointer;
+}
+.calling-card:hover {
+  background: var(--sage);
+  transform: translate(-1px, -1px);
+}
+.visit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.visit-sprite {
+  margin: 0;
+  padding: var(--sp-2);
+  border: var(--bd) solid var(--sage-deep);
+  background: var(--band-paper);
+  text-align: center;
+}
+.visit-sprite .horse-canvas {
+  flex-shrink: 0; /* integer-scale rule */
+}
+.visit-sprite figcaption {
+  font-size: 12px;
+  margin-top: var(--sp-1);
+}
+
 /* ── The polish bundle (§7n) ── */
 /* Brag Lines: accomplishment chips on the horse sheet. */
 .brag-lines {

@@ -1,45 +1,75 @@
-import { useCallback, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import { resolve } from '@blorse/genetics';
+import { buildRenderSpec } from '@blorse/render-core';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import {
   getClubs,
+  getContacts,
   getHerdProfile,
   getJournal,
   getRelationships,
   type HerdProfile,
+  type ProfileHighlight,
 } from '../api/social.js';
 import { listHerdHorses } from '../api/horses.js';
 import { useLoad } from '../hooks/useLoad.js';
+import { HorseCanvas } from '../render/HorseCanvas.js';
 import { useSession } from '../session.js';
 import { pretty } from '../util/format.js';
+
+/** A visited horse's sprite (§7q). Adults arrive with render fields; foals arrive WITHOUT
+ *  genotype (the reveal stays hidden, §4.2) — any stock genotype paints the same white. */
+function VisitSprite({ h }: { h: ProfileHighlight }): ReactElement {
+  const spec = useMemo(
+    () =>
+      buildRenderSpec(resolve(h.genotype ?? { E: 'ee' }), {
+        seed: h.seed ?? 1,
+        glitch: h.glitch ?? null,
+        lifeStage: h.lifeStage === 'foal' ? 'foal' : 'adult',
+      }),
+    [h.genotype, h.seed, h.glitch, h.lifeStage],
+  );
+  return (
+    <figure className="visit-sprite">
+      <HorseCanvas spec={spec} scale={1} />
+      <figcaption>
+        <strong>{h.name ?? 'A horse'}</strong>
+        <span className="muted"> — {h.displayName}</span>
+      </figcaption>
+    </figure>
+  );
+}
 
 export function HerdPage(): ReactElement {
   const { herd } = useSession();
   const social = useLoad(
     useCallback(async () => {
-      const [journal, clubs, rels, horses] = await Promise.all([
+      const [journal, clubs, rels, horses, contacts] = await Promise.all([
         getJournal(),
         getClubs(),
         getRelationships(),
         herd ? listHerdHorses(herd.id) : Promise.resolve([]),
+        getContacts(),
       ]);
-      return { journal, clubs, rels, horses };
+      return { journal, clubs, rels, horses, contacts };
     }, [herd]),
   );
   const journal = social.data?.journal ?? [];
   const clubs = social.data?.clubs ?? [];
   const rels = social.data?.rels ?? [];
+  const contacts = social.data?.contacts ?? [];
   const nameOf = (id: string): string =>
     social.data?.horses.find((h) => h.id === id)?.name ?? 'a horse since departed';
   const [visitId, setVisitId] = useState('');
   const [profile, setProfile] = useState<HerdProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function visit(): Promise<void> {
+  async function visitHerd(id: string): Promise<void> {
     setError(null);
     setProfile(null);
     try {
-      setProfile(await getHerdProfile(visitId));
+      setProfile(await getHerdProfile(id));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No such herd.');
     }
@@ -122,12 +152,29 @@ export function HerdPage(): ReactElement {
 
       <section className="section">
         <h2 className="section-h">Visit another herd</h2>
+        {contacts.length > 0 && (
+          <div className="card-row">
+            {contacts.map((c) => (
+              <button
+                key={c.herdId}
+                className="calling-card"
+                onClick={() => {
+                  setVisitId(c.herdId);
+                  void visitHerd(c.herdId);
+                }}
+                title={`met by ${c.via}`}
+              >
+                {c.via === 'mail' ? '✉' : c.via === 'trade' ? '⚖' : '🛤'} {c.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="row-actions">
           <label className="field">
             <span>Herd id</span>
             <input value={visitId} onChange={(e) => setVisitId(e.target.value)} />
           </label>
-          <button disabled={!visitId} onClick={() => void visit()}>
+          <button disabled={!visitId} onClick={() => void visitHerd(visitId)}>
             Visit
           </button>
         </div>
@@ -139,11 +186,9 @@ export function HerdPage(): ReactElement {
                 · {profile.horseCount} horses · level {profile.level}
               </span>
             </p>
-            <div className="guide-grid">
+            <div className="visit-grid">
               {profile.highlights.map((h) => (
-                <div className="guide-chip" key={h.id}>
-                  {h.name ?? 'A horse'} — {h.displayName}
-                </div>
+                <VisitSprite key={h.id} h={h} />
               ))}
             </div>
             {profile.recentJournal.length > 0 && (

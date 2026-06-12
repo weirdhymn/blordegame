@@ -15,6 +15,9 @@ export async function getHerdProfile(db: DB, herdId: string) {
     // a visiting player sees foals as white silhouettes — the coat is still hidden (§4.2)
     displayName: h.lifeStage === 'foal' ? 'Foal' : resolve(h.genotype).displayName,
     lifeStage: h.lifeStage,
+    // Render fields so visits show REAL sprites (§7q) — ADULTS ONLY: shipping a foal's
+    // genotype would let a visitor compute the unrevealed coat (the §4.2 leak class).
+    ...(h.lifeStage === 'adult' ? { genotype: h.genotype, seed: h.seed, glitch: h.glitch } : {}),
   }));
   const recentJournal = (
     await db

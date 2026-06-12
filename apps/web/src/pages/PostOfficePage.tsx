@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
-import { getInbox, readAllMail, sendMessage } from '../api/social.js';
+import { getContacts, getInbox, readAllMail, sendMessage } from '../api/social.js';
 import { useLoad } from '../hooks/useLoad.js';
 import { useSession } from '../session.js';
 
@@ -15,8 +15,14 @@ function postmark(ms: number): string {
  *  Opening the page reads everything — one stamp, no per-letter ceremony. */
 export function PostOfficePage(): ReactElement {
   const { herd, refresh, unreadMail } = useSession();
-  const inbox = useLoad(useCallback(() => getInbox(), []));
-  const letters = inbox.data ?? [];
+  const inbox = useLoad(
+    useCallback(async () => {
+      const [letters, contacts] = await Promise.all([getInbox(), getContacts()]);
+      return { letters, contacts };
+    }, []),
+  );
+  const letters = inbox.data?.letters ?? [];
+  const contacts = inbox.data?.contacts ?? [];
 
   // Walking in reads the mail: stamp once per visit (a ref survives StrictMode's
   // double-mount), then refresh the session so the Town tab's number clears.
@@ -76,14 +82,41 @@ export function PostOfficePage(): ReactElement {
         <>
           <section className="card compose-card">
             <h2 className="section-h">✒ Write a letter</h2>
-            <div className="row-actions">
-              <input
-                value={toHerd}
-                onChange={(e) => setToHerd(e.target.value)}
-                placeholder="recipient herd id"
-                aria-label="Recipient herd id"
-              />
-            </div>
+            {contacts.length > 0 ? (
+              <div className="row-actions">
+                <select
+                  value={contacts.some((c) => c.herdId === toHerd) ? toHerd : ''}
+                  onChange={(e) => setToHerd(e.target.value)}
+                  aria-label="Recipient from your calling cards"
+                >
+                  <option value="">— your calling cards —</option>
+                  {contacts.map((c) => (
+                    <option key={c.herdId} value={c.herdId}>
+                      {c.name} · met by {c.via}
+                    </option>
+                  ))}
+                </select>
+                <span className="muted">or paste an id:</span>
+                <input
+                  value={toHerd}
+                  onChange={(e) => setToHerd(e.target.value)}
+                  placeholder="herd id"
+                  aria-label="Recipient herd id"
+                />
+              </div>
+            ) : (
+              <div className="row-actions">
+                <input
+                  value={toHerd}
+                  onChange={(e) => setToHerd(e.target.value)}
+                  placeholder="recipient herd id"
+                  aria-label="Recipient herd id"
+                />
+                <span className="muted">
+                  Write someone once and they join your calling cards — no more ids.
+                </span>
+              </div>
+            )}
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -100,9 +133,6 @@ export function PostOfficePage(): ReactElement {
               >
                 📮 Post it
               </button>
-              <span className="muted">
-                A herd&apos;s id is on its profile — visiting (Herd page) shows it.
-              </span>
             </div>
           </section>
 

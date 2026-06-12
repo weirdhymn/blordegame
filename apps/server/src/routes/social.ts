@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { SESSION_COOKIE } from '../auth/tokens.js';
 import type { DB } from '../db/client.js';
 import { getClubs, getRelationships } from '../services/autonomy.js';
+import { getCallingCards } from '../services/contacts.js';
 import { getJournal } from '../services/journal.js';
 import { getInbox, markAllRead, sendMessage } from '../services/messaging.js';
 import { getHerdProfile } from '../services/visit.js';
@@ -72,5 +73,12 @@ export function registerSocialRoutes(app: FastifyInstance, db: DB): void {
     if (!herd) return reply.code(401).send({ error: 'unauthorized' });
     await markAllRead(db, herd.id);
     return reply.send({ ok: true });
+  });
+
+  // Calling Cards (§7q): the derived address book — mail, trades, and road ties.
+  app.get('/contacts', async (req, reply) => {
+    const herd = await herdFor(db, req.cookies[SESSION_COOKIE]);
+    if (!herd) return reply.code(401).send({ error: 'unauthorized' });
+    return reply.send(await getCallingCards(db, herd.id));
   });
 }

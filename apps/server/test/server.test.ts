@@ -121,6 +121,7 @@ import {
 import { consumeItems, grantItems, itemQty, quickSellItem } from '../src/services/inventory.js';
 import { jobDc, resolveJobsForDay } from '../src/services/jobs.js';
 import { buyListing, listHorse } from '../src/services/market.js';
+import { sendSystemLetter } from '../src/services/messaging.js';
 import { omenFor } from '../src/services/omens.js';
 import { compatibility } from '../src/services/personality.js';
 import {
@@ -4597,6 +4598,116 @@ async function main(): Promise<void> {
     check(
       'no letter when the finder recruits its own stranger',
       readerInbox.every((l) => l.fromHerd !== null || !l.body.includes('found a home')),
+    );
+  }
+
+  // ── Calling Cards (§7q): the derived address book + sprite visits without leaks ──
+  section('Calling Cards (§7q)');
+  {
+    const mk = async (n: string): Promise<{ id: string; name: string; cookie: string }> => {
+      const r = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: n, password: `${n}horse1` },
+      });
+      const herd = r.json<{ herd: { id: string; name: string } }>().herd;
+      return { id: herd.id, name: herd.name, cookie: cookieOf(r) };
+    };
+    const ann = await mk('cardann');
+    const bob = await mk('cardbob');
+    const cal = await mk('cardcal');
+    const dot = await mk('carddot');
+
+    interface Card {
+      herdId: string;
+      name: string;
+      via: string;
+      lastContactAt: number;
+    }
+    const cardsOf = async (cookie: string): Promise<Card[]> =>
+      (await inject({ method: 'GET', url: '/contacts', headers: { cookie } })).json<Card[]>();
+
+    // Mail introduces both directions.
+    await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: ann.cookie },
+      payload: { toHerd: bob.id, body: 'Your fence is leaning. Charmingly.' },
+    });
+    const annCards1 = await cardsOf(ann.cookie);
+    const bobCards1 = await cardsOf(bob.cookie);
+    check(
+      'one letter puts each herd in the other’s rolodex (via mail)',
+      annCards1.some((c) => c.herdId === bob.id && c.via === 'mail' && c.name === bob.name) &&
+        bobCards1.some((c) => c.herdId === ann.id && c.via === 'mail'),
+    );
+
+    // A trade introduces (raw row — the derivation doesn't care how the trade went).
+    await db.insert(trades).values({ fromHerd: ann.id, toHerd: cal.id });
+    check(
+      'a trade adds a card (via trade)',
+      (await cardsOf(ann.cookie)).some((c) => c.herdId === cal.id && c.via === 'trade'),
+    );
+
+    // The road ties both ways: dot first met a stray that lives with ann now.
+    await mintHorse(db, {
+      herdId: ann.id,
+      genotype: { E: 'ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    }).then((h) =>
+      db.update(horses).set({ firstEncounteredBy: dot.id }).where(drizzleEq(horses.id, h.id)),
+    );
+    check(
+      'the road ties both rolodexes (finder ↔ adopter)',
+      (await cardsOf(ann.cookie)).some((c) => c.herdId === dot.id && c.via === 'road') &&
+        (await cardsOf(dot.cookie)).some((c) => c.herdId === ann.id && c.via === 'road'),
+    );
+
+    // Dedup: bob trades with ann too — still ONE card, freshest via wins (trade is newer).
+    await db.insert(trades).values({ fromHerd: bob.id, toHerd: ann.id });
+    const annCards2 = await cardsOf(ann.cookie);
+    check(
+      'one card per herd — the freshest interaction sets the label',
+      annCards2.filter((c) => c.herdId === bob.id).length === 1 &&
+        annCards2.find((c) => c.herdId === bob.id)?.via === 'trade',
+    );
+
+    // System letters introduce nobody: a herd whose only mail is from the Post Office
+    // keeps an empty rolodex.
+    const eve = await mk('cardeve');
+    await sendSystemLetter(db, eve.id, 'Your subscription to nothing has been renewed.');
+    check('system letters introduce nobody', (await cardsOf(eve.cookie)).length === 0);
+
+    // Sprite visits without leaks: adults carry render fields; foals never do (§4.2).
+    await mintHorse(db, {
+      herdId: bob.id,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'bred',
+      lifeStage: 'foal',
+      glitch: null,
+    });
+    interface Highlight {
+      lifeStage: string;
+      genotype?: unknown;
+      seed?: number;
+    }
+    const profile = (
+      await inject({
+        method: 'GET',
+        url: `/herds/${bob.id}/profile`,
+        headers: { cookie: ann.cookie },
+      })
+    ).json<{ highlights: Highlight[] }>();
+    const adults = profile.highlights.filter((h) => h.lifeStage === 'adult');
+    const foals = profile.highlights.filter((h) => h.lifeStage === 'foal');
+    check(
+      'visit highlights: adults carry genotype+seed, foals carry NEITHER (no reveal leak)',
+      adults.length > 0 &&
+        adults.every((h) => h.genotype !== undefined && typeof h.seed === 'number') &&
+        foals.length > 0 &&
+        foals.every((h) => h.genotype === undefined && h.seed === undefined),
     );
   }
 

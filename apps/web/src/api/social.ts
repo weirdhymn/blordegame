@@ -1,3 +1,5 @@
+import type { Genotype } from '@blorse/genetics';
+import type { GlitchKind } from '@blorse/render-core';
 import { api } from './client.js';
 
 export interface JournalEvent {
@@ -45,15 +47,35 @@ export interface InboxLetter {
   createdAt: number;
 }
 
+/** A visited herd's horse — adults carry render fields; foals NEVER do (the coat stays
+ *  hidden until the reveal, §4.2): the client paints foals with a stock white silhouette. */
+export interface ProfileHighlight {
+  id: string;
+  name: string | null;
+  displayName: string;
+  lifeStage: string;
+  genotype?: Genotype;
+  seed?: number;
+  glitch?: GlitchKind | null;
+}
+
 export interface HerdProfile {
   id: string;
   name: string;
   level: number;
   horseCount: number;
   adultCount: number;
-  highlights: { id: string; name: string | null; displayName: string; lifeStage: string }[];
+  highlights: ProfileHighlight[];
   recentJournal: { kind: string; text: string; glyph: string | null }[];
   clubs: string[];
+}
+
+/** One calling card (§7q) — how you met rides along. */
+export interface CallingCard {
+  herdId: string;
+  name: string;
+  via: 'mail' | 'trade' | 'road';
+  lastContactAt: number;
 }
 
 export const getClubs = (): Promise<Club[]> => api.get<Club[]>('/clubs');
@@ -67,3 +89,4 @@ export const readAllMail = (): Promise<{ ok: boolean }> =>
   api.post<{ ok: boolean }>('/messages/read-all');
 export const getHerdProfile = (id: string): Promise<HerdProfile> =>
   api.get<HerdProfile>(`/herds/${id}/profile`);
+export const getContacts = (): Promise<CallingCard[]> => api.get<CallingCard[]>('/contacts');

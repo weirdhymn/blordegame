@@ -466,9 +466,9 @@ export const messages = pgTable(
   'messages',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    fromHerd: uuid('from_herd')
-      .notNull()
-      .references(() => herds.id, { onDelete: 'cascade' }),
+    /** null = a SYSTEM letter from the Post Office itself (§7p) — e.g. "your stranger found
+     *  a home". Player mail always carries the sender. */
+    fromHerd: uuid('from_herd').references(() => herds.id, { onDelete: 'cascade' }),
     toHerd: uuid('to_herd')
       .notNull()
       .references(() => herds.id, { onDelete: 'cascade' }),

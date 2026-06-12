@@ -17,6 +17,8 @@ export interface Herd {
 export interface AuthResult {
   user: SessionUser;
   herd: Herd;
+  /** Unread Post Office letters (§7p) — only /me carries it; login/register omit it. */
+  unreadMail?: number;
 }
 
 export const getMe = (): Promise<AuthResult> => api.get<AuthResult>('/me');

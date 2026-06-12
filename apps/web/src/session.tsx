@@ -14,6 +14,8 @@ import type { DailyResult } from './api/daily.js';
 interface SessionState {
   user: SessionUser | null;
   herd: Herd | null;
+  /** Unread Post Office letters (§7p) — the Town tab's little number. */
+  unreadMail: number;
   loading: boolean;
   /** Re-fetch /me (e.g. after an action that changes Cubes). */
   refresh: () => Promise<void>;
@@ -30,6 +32,7 @@ const SessionContext = createContext<SessionState | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }): ReactElement {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [herd, setHerd] = useState<Herd | null>(null);
+  const [unreadMail, setUnreadMail] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -37,9 +40,11 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactEle
       const me = await getMe();
       setUser(me.user);
       setHerd(me.herd);
+      setUnreadMail(me.unreadMail ?? 0);
     } catch {
       setUser(null);
       setHerd(null);
+      setUnreadMail(0);
     } finally {
       setLoading(false);
     }
@@ -77,7 +82,7 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactEle
 
   return (
     <SessionContext.Provider
-      value={{ user, herd, loading, refresh, signOut, setSession, consumeDaily }}
+      value={{ user, herd, unreadMail, loading, refresh, signOut, setSession, consumeDaily }}
     >
       {children}
     </SessionContext.Provider>

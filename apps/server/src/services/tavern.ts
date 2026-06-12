@@ -6,6 +6,7 @@ import type { DB } from '../db/client.js';
 import { herds, horses, type HorseRow } from '../db/schema.js';
 import { logAudit } from './audit.js';
 import { getHorse } from './horse.js';
+import { sendSystemLetter } from './messaging.js';
 import { checkHerdCapacity } from './progression.js';
 import type { SkillBlock, StatBlock } from './stats.js';
 import { spendCubes } from './wallet.js';
@@ -113,6 +114,15 @@ export async function recruitFromTavern(
   }
   if (gone) return { ok: false, code: 'gone', message: 'Someone else recruited it first.' };
   await logAudit(db, herdId, 'tavern_recruit', { horseId, fee });
-  // firstEncounteredBy is retained for the recruit notification (delivered in Phase 9).
+  // The §10 promise, finally delivered (§7p): the herd that FIRST met this stranger on the
+  // road hears that it found a home. Quietly skipped when the finder did the recruiting.
+  if (h.firstEncounteredBy && h.firstEncounteredBy !== herdId) {
+    const coat = resolve(h.genotype).displayName;
+    await sendSystemLetter(
+      db,
+      h.firstEncounteredBy,
+      `The stranger you met on the road — the ${coat} — found a home with ${herd.name}. It looked back once, in a good way.`,
+    );
+  }
   return { ok: true, horseId, fee };
 }

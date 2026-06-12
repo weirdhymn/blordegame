@@ -35,12 +35,14 @@ export interface Relationship {
   type: string | null;
 }
 
-export interface Message {
+/** One inbox letter (§7p) — null sender = a Post Office system letter (postmark only). */
+export interface InboxLetter {
   id: string;
-  fromHerd: string;
-  toHerd: string;
+  fromHerd: string | null;
+  fromName: string | null;
   body: string;
-  createdAt: string;
+  read: boolean;
+  createdAt: number;
 }
 
 export interface HerdProfile {
@@ -57,8 +59,11 @@ export interface HerdProfile {
 export const getClubs = (): Promise<Club[]> => api.get<Club[]>('/clubs');
 export const getRelationships = (): Promise<Relationship[]> =>
   api.get<Relationship[]>('/relationships');
-export const getInbox = (): Promise<Message[]> => api.get<Message[]>('/messages');
+export const getInbox = (): Promise<InboxLetter[]> => api.get<InboxLetter[]>('/messages');
 export const sendMessage = (toHerd: string, body: string): Promise<{ ok: boolean }> =>
   api.post<{ ok: boolean }>('/messages', { toHerd, body });
+/** Opening the Post Office reads everything — one stamp (§7p). */
+export const readAllMail = (): Promise<{ ok: boolean }> =>
+  api.post<{ ok: boolean }>('/messages/read-all');
 export const getHerdProfile = (id: string): Promise<HerdProfile> =>
   api.get<HerdProfile>(`/herds/${id}/profile`);

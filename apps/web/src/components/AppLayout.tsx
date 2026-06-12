@@ -4,7 +4,7 @@ import { useSession } from '../session.js';
 import { formatCubes } from '../util/format.js';
 
 export function AppLayout(): ReactElement {
-  const { user, herd, signOut } = useSession();
+  const { user, herd, signOut, unreadMail } = useSession();
   return (
     <div className="app">
       <header className="topbar">
@@ -22,7 +22,14 @@ export function AppLayout(): ReactElement {
           <NavLink to="/care">🐴 Care</NavLink>
           <NavLink to="/garden">🌱 Garden</NavLink>
           <NavLink to="/adventure">⚔ Adventure</NavLink>
-          <NavLink to="/town">🏘 Town</NavLink>
+          <NavLink to="/town">
+            🏘 Town
+            {unreadMail > 0 && (
+              <span className="mail-badge" aria-label={`${unreadMail} unread letters`}>
+                {unreadMail}
+              </span>
+            )}
+          </NavLink>
           <NavLink to="/inventory">Inventory</NavLink>
           <NavLink to="/herd">Herd</NavLink>
           <NavLink to="/guide">Guide</NavLink>

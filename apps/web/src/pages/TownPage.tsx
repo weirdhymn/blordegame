@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { browseMarket } from '../api/economy.js';
 import { listTavern } from '../api/tavern.js';
 import { useLoad } from '../hooks/useLoad.js';
+import { useSession } from '../session.js';
 
 /** The Town (§7k) — the frontier's one settlement, drawn as a row of storefronts. Every
  *  façade is a real system; the flows live in their own pages (the Adventure-hub pattern).
- *  Live touches (tavern headcount, market listings) ride a single parallel fetch. */
+ *  Live touches (tavern headcount, market listings, waiting mail) ride cheap fetches. */
 export function TownPage(): ReactElement {
+  const { unreadMail } = useSession();
   const counts = useLoad(
     useCallback(async () => {
       const [tavern, listings] = await Promise.all([listTavern(), browseMarket()]);
@@ -110,15 +112,21 @@ export function TownPage(): ReactElement {
           <span className="hub-go">Ring the bell →</span>
         </Link>
 
-        <div className="bldg bldg-closed">
+        <Link to="/town/post" className="bldg bldg-post">
           <span className="bldg-awning" aria-hidden="true" />
-          <span className="bldg-sign">🪧</span>
-          <h2>(boarded up)</h2>
+          <span className="bldg-sign">📮</span>
+          <h2>The Post Office</h2>
           <p>
-            The sign says &ldquo;opening soon.&rdquo; The sign has said that for as long as anyone
-            can remember.
+            The plywood came down on a Tuesday; nobody saw who did it. Letters from other herds wait
+            here — and sometimes the Post Office writes its own.
           </p>
-        </div>
+          {unreadMail > 0 && (
+            <p className="bldg-live">
+              {unreadMail} unread letter{unreadMail === 1 ? '' : 's'} in your pigeonhole.
+            </p>
+          )}
+          <span className="hub-go">Check your pigeonhole →</span>
+        </Link>
       </div>
     </div>
   );

@@ -4494,6 +4494,112 @@ async function main(): Promise<void> {
     await prodApp.close();
   }
 
+  // ── The Post Office (§7p): named mail, read state, and the §10 recruit letter ──
+  section('The Post Office (§7p)');
+  {
+    const mkHerd = async (n: string): Promise<{ id: string; name: string; cookie: string }> => {
+      const r = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: n, password: `${n}horse1` },
+      });
+      const herd = r.json<{ herd: { id: string; name: string } }>().herd;
+      return { id: herd.id, name: herd.name, cookie: cookieOf(r) };
+    };
+    const sender = await mkHerd('postsender');
+    const reader = await mkHerd('postreader');
+
+    const sent = await inject({
+      method: 'POST',
+      url: '/messages',
+      headers: { cookie: sender.cookie },
+      payload: { toHerd: reader.id, body: 'The fence post you like is free at noon.' },
+    });
+    check('a letter sends (201)', sent.statusCode === 201);
+
+    interface Letter {
+      fromHerd: string | null;
+      fromName: string | null;
+      body: string;
+      read: boolean;
+    }
+    const inboxOf = async (cookie: string): Promise<Letter[]> =>
+      (await inject({ method: 'GET', url: '/messages', headers: { cookie } })).json<Letter[]>();
+    const unreadOf = async (cookie: string): Promise<number> =>
+      (await inject({ method: 'GET', url: '/me', headers: { cookie } })).json<{
+        unreadMail: number;
+      }>().unreadMail;
+
+    check('unread mail rides /me (the Town tab number)', (await unreadOf(reader.cookie)) === 1);
+    const inbox1 = await inboxOf(reader.cookie);
+    check(
+      'the inbox names the sender and marks the letter unread',
+      inbox1.length === 1 && inbox1[0]!.fromName === sender.name && inbox1[0]!.read === false,
+    );
+
+    await inject({
+      method: 'POST',
+      url: '/messages/read-all',
+      headers: { cookie: reader.cookie },
+    });
+    const inbox2 = await inboxOf(reader.cookie);
+    check(
+      'opening the Post Office reads everything in one stamp',
+      (await unreadOf(reader.cookie)) === 0 && inbox2.every((l) => l.read),
+    );
+
+    // The §10 promise, finally delivered: the FINDER hears its stranger found a home.
+    const stray = await mintHorse(db, {
+      herdId: null,
+      genotype: { E: 'ee' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    await db
+      .update(horses)
+      .set({ tavernFee: 10, firstEncounteredBy: sender.id })
+      .where(drizzleEq(horses.id, stray.id));
+    const recruited = await inject({
+      method: 'POST',
+      url: `/tavern/${stray.id}/recruit`,
+      headers: { cookie: reader.cookie },
+    });
+    check('another herd recruits the stray', recruited.statusCode === 201);
+    const senderInbox = await inboxOf(sender.cookie);
+    const letter = senderInbox.find((l) => l.fromHerd === null);
+    check(
+      'the finder gets the Post Office letter (system mail: no sender, postmark only)',
+      !!letter &&
+        letter.fromName === null &&
+        letter.body.includes('found a home') &&
+        letter.read === false,
+    );
+
+    // Quietly skipped when the finder recruits its own stranger — no letter to yourself.
+    const stray2 = await mintHorse(db, {
+      herdId: null,
+      genotype: { E: 'Ee', A: 'Aa' },
+      origin: 'wild',
+      lifeStage: 'adult',
+      glitch: null,
+    });
+    await db
+      .update(horses)
+      .set({ tavernFee: 10, firstEncounteredBy: reader.id })
+      .where(drizzleEq(horses.id, stray2.id));
+    await inject({
+      method: 'POST',
+      url: `/tavern/${stray2.id}/recruit`,
+      headers: { cookie: reader.cookie },
+    });
+    const readerInbox = await inboxOf(reader.cookie);
+    check(
+      'no letter when the finder recruits its own stranger',
+      readerInbox.every((l) => l.fromHerd !== null || !l.body.includes('found a home')),
+    );
+  }
+
   // ── Living-Herd determinism (§8): identical seeds + temperaments → identical beats ──
   section('Living-Herd determinism (§8)');
   {

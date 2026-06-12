@@ -16,6 +16,7 @@ import { TownPage } from './pages/TownPage.js';
 import { WorkshopPage } from './pages/WorkshopPage.js';
 import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
+import { PostOfficePage } from './pages/PostOfficePage.js';
 import { RenderDevPage } from './pages/RenderDevPage.js';
 import { ShrinePage } from './pages/ShrinePage.js';
 import { StudbookPage } from './pages/StudbookPage.js';
@@ -59,6 +60,7 @@ export default function AuthedApp(): ReactElement {
         <Route path="town/market" element={<MarketPage />} />
         <Route path="town/shrine" element={<ShrinePage />} />
         <Route path="town/studbook" element={<StudbookPage />} />
+        <Route path="town/post" element={<PostOfficePage />} />
         {/* Old flat routes redirect into the Town so existing links never break. */}
         <Route path="tavern" element={<Navigate to="/town/tavern" replace />} />
         <Route path="adventure" element={<AdventurePage />} />

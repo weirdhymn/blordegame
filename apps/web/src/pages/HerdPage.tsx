@@ -4,10 +4,8 @@ import { ApiError } from '../api/client.js';
 import {
   getClubs,
   getHerdProfile,
-  getInbox,
   getJournal,
   getRelationships,
-  sendMessage,
   type HerdProfile,
 } from '../api/social.js';
 import { listHerdHorses } from '../api/horses.js';
@@ -19,44 +17,23 @@ export function HerdPage(): ReactElement {
   const { herd } = useSession();
   const social = useLoad(
     useCallback(async () => {
-      const [journal, clubs, rels, inbox, horses] = await Promise.all([
+      const [journal, clubs, rels, horses] = await Promise.all([
         getJournal(),
         getClubs(),
         getRelationships(),
-        getInbox(),
         herd ? listHerdHorses(herd.id) : Promise.resolve([]),
       ]);
-      return { journal, clubs, rels, inbox, horses };
+      return { journal, clubs, rels, horses };
     }, [herd]),
   );
   const journal = social.data?.journal ?? [];
   const clubs = social.data?.clubs ?? [];
   const rels = social.data?.rels ?? [];
-  const inbox = social.data?.inbox ?? [];
   const nameOf = (id: string): string =>
     social.data?.horses.find((h) => h.id === id)?.name ?? 'a horse since departed';
   const [visitId, setVisitId] = useState('');
   const [profile, setProfile] = useState<HerdProfile | null>(null);
-  const [msgTo, setMsgTo] = useState('');
-  const [msgBody, setMsgBody] = useState('');
-  const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function send(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    setNote(null);
-    try {
-      await sendMessage(msgTo, msgBody);
-      setNote('Message sent.');
-      setMsgBody('');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not send.');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function visit(): Promise<void> {
     setError(null);
@@ -75,7 +52,6 @@ export function HerdPage(): ReactElement {
         Your herd id: <code>{herd?.id}</code> — share it so others can visit, trade, or message you.
         The herd&apos;s full history lives in <Link to="/journal">📜 the Journal</Link>.
       </p>
-      {note && <div className="note">{note}</div>}
       {(error ?? social.error) && (
         <div className="error" role="alert">
           {error ?? social.error}
@@ -138,35 +114,10 @@ export function HerdPage(): ReactElement {
 
       <section className="section">
         <h2 className="section-h">Messages</h2>
-        {inbox.length === 0 ? (
-          <p className="muted">Inbox empty.</p>
-        ) : (
-          <ul className="list">
-            {inbox.map((m) => (
-              <li key={m.id}>
-                <span>{m.body}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <h3 className="section-h">Send a message</h3>
-        <div className="row-actions">
-          <label className="field">
-            <span>To herd (id)</span>
-            <input value={msgTo} onChange={(e) => setMsgTo(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>Message</span>
-            <input value={msgBody} onChange={(e) => setMsgBody(e.target.value)} maxLength={500} />
-          </label>
-          <button
-            className="primary"
-            disabled={busy || !msgTo || !msgBody}
-            onClick={() => void send()}
-          >
-            Send
-          </button>
-        </div>
+        <p className="muted">
+          Mail lives at <Link to="/town/post">📮 the Post Office</Link> now — letters arrive with
+          sender names, and the Town tab counts the unread ones.
+        </p>
       </section>
 
       <section className="section">

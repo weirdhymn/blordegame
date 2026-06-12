@@ -1148,6 +1148,10 @@ a.bldg:hover {
 .bldg-registrar .bldg-awning {
   background: repeating-linear-gradient(90deg, var(--gold) 0 6px, var(--paper) 6px 12px);
 }
+/* The Post Office: berry-and-gold, the closest the palette gets to postal livery. */
+.bldg-post .bldg-awning {
+  background: repeating-linear-gradient(90deg, var(--berry) 0 12px, var(--gold) 12px 24px);
+}
 .bldg-sign {
   font-size: 2rem;
   line-height: 1;
@@ -1250,6 +1254,59 @@ a.bldg:hover {
 }
 .registry-table th {
   background: var(--sage);
+}
+
+/* ── The Post Office (§7p) — letters + the Town tab's little number ── */
+.mail-badge {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1);
+  min-width: 1.1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--paper);
+  background: var(--berry);
+  border: var(--bd) solid var(--ink);
+  border-radius: 6px;
+}
+.compose-card {
+  max-width: 36rem;
+}
+.compose-card textarea {
+  resize: vertical;
+  font: inherit;
+  padding: var(--sp-2);
+  border: var(--bd) solid var(--ink);
+  background: var(--paper);
+}
+.letter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: 44rem;
+}
+.letter {
+  padding: var(--sp-3);
+  border: var(--bd) solid var(--sage-deep);
+  background: var(--band-paper);
+}
+.letter-unread {
+  border-color: var(--berry);
+  box-shadow: var(--px) var(--px) 0 var(--sage-deep);
+}
+.letter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.letter-body {
+  margin: var(--sp-1) 0;
+  white-space: pre-wrap;
 }
 
 /* ── The polish bundle (§7n) ── */

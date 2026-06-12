@@ -12,6 +12,7 @@ import {
   UsernameTakenError,
 } from '../services/auth.js';
 import { advanceHerd } from '../services/daily.js';
+import { unreadCount } from '../services/messaging.js';
 
 interface Credentials {
   username: string;
@@ -107,6 +108,8 @@ export function registerAuthRoutes(app: FastifyInstance, db: DB, cfg: AuthConfig
     return reply.send({
       user: { id: user.id, username: user.username, role: user.role },
       herd: publicHerd(herd),
+      // The Town tab's little number (§7p) — rides /me so every refresh keeps it honest.
+      unreadMail: await unreadCount(db, herd.id),
     });
   });
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ALTER COLUMN "from_herd" DROP NOT NULL;

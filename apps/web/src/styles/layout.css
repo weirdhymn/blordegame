@@ -3,8 +3,8 @@
    single column. Desktop-first: optimise for wide screens, collapse cleanly to
    one column on narrow ones. The horizontal space buys MORE PANELS side-by-side,
    never wider text — content widths inside each panel stay comfortable.
-   POC: the Pasture only. Other screens keep a centred readable column until the
-   pattern is approved + rolled out.
+   Rolled out: Pasture, Care, Breed, Horse-detail, Workshop, Town, Garden, Studbook.
+   Pages not yet migrated keep the centred readable column below.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* Un-migrated pages keep a comfortable single column, centred in the wide shell

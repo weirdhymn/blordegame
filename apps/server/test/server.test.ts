@@ -60,6 +60,7 @@ import {
   journalEvents,
   marketListings,
   relationships,
+  sessions,
   structures,
   trades,
   users,
@@ -90,7 +91,7 @@ import {
   startRun,
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
-import { registerUser } from '../src/services/auth.js';
+import { createSession, purgeExpiredSessions, registerUser } from '../src/services/auth.js';
 import { getClubs, resolveAutonomyForDay } from '../src/services/autonomy.js';
 import { bondedBreedBonus, breedHorses, breedingOdds } from '../src/services/breeding.js';
 import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
@@ -4501,6 +4502,32 @@ async function main(): Promise<void> {
     check(
       'usernames are case-insensitive: duplicate 409, any-case login 200',
       reg1.statusCode === 201 && reg2.statusCode === 409 && shoutyLogin.statusCode === 200,
+    );
+
+    // Session-table housekeeping (durability follow-up): the hourly purge deletes only
+    // EXPIRED rows and leaves live ones — expiry is still enforced at read regardless.
+    const purgeUser = (await db.query.users.findFirst({
+      where: drizzleEq(users.username, 'casefold'),
+    }))!;
+    await createSession(db, purgeUser.id); // a live session for this user
+    const liveBefore = (
+      await db.select().from(sessions).where(drizzleEq(sessions.userId, purgeUser.id))
+    ).length;
+    // Back-date one session well past its TTL, then sweep.
+    await db
+      .update(sessions)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(drizzleEq(sessions.userId, purgeUser.id));
+    const purged = await purgeExpiredSessions(db);
+    const liveAfter = (
+      await db.select().from(sessions).where(drizzleEq(sessions.userId, purgeUser.id))
+    ).length;
+    check(
+      'purgeExpiredSessions deletes lapsed rows (and a non-expired sweep is a no-op)',
+      liveBefore >= 1 &&
+        purged >= 1 &&
+        liveAfter < liveBefore &&
+        (await purgeExpiredSessions(db, 0)) === 0,
     );
   }
 

@@ -33,14 +33,14 @@ A cozy, asynchronous multiplayer life-sim about a herd of pixel horses in a lite
 ```
 packages/genetics/   # vendored engine + typed facade + tests
 packages/render-core/ # layer manifest types + palette adapter + glitch transforms
-apps/web/            # React + Vite + PixiJS client
+apps/web/            # React + Vite client; horses paint on a 2D <canvas> compositor
 apps/server/         # Fastify + Drizzle + auth + game logic + autonomy sim
-assets/layers/       # grayscale PNGs + manifest + palette-map.ts
-balance.ts           # all §14 tuning constants
+apps/web/public/assets/horse/  # the grayscale layer PNGs + manifest the compositor paints
+packages/balance/    # all §14 tuning constants (@blorse/balance)
 ```
 
 ## Stack & conventions
-- TypeScript everywhere; React + Vite (client), Fastify + Drizzle + PostgreSQL (server), PixiJS (rendering). pnpm workspaces.
+- TypeScript everywhere; React + Vite (client), Fastify + Drizzle + Postgres (server — PGlite for dev/test, managed Postgres in prod), 2D-canvas pixel compositor (rendering). pnpm workspaces.
 - Prefer pure, testable modules (the genetics package has zero runtime deps). Determinism via injected seeded RNG.
 - Update `BLORSE_PLAN.md` in the *same commit* when a public contract changes (e.g., the genetics facade or data model).
 

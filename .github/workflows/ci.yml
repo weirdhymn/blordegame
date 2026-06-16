@@ -76,6 +76,51 @@ jobs:
           DATABASE_URL: postgres://blorse:blorse@localhost:5432/blorse_test
         run: pnpm --filter @blorse/server test
 
+  restore-drill:
+    name: Backup/restore round-trip (proves restore works every push)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: blorse
+          POSTGRES_PASSWORD: blorse
+          POSTGRES_DB: blorse_drill
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blorse" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://blorse:blorse@localhost:5432/blorse_drill
+      PG_BIN: /usr/lib/postgresql/16/bin
+      BACKUP_DIR: ./.data/backups
+      CONFIRM_RESTORE: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # pg_dump/pg_restore matching the postgres:16 server (avoid client/server version mismatch).
+      - name: Install postgresql-client-16
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Seed real game data, then DESTROY it and prove a backup restores it byte-identical.
+      # This is the deliverable "restore actually works", asserted on every push — not a one-off.
+      - name: Seed game data
+        run: pnpm --filter @blorse/server seed
+
+      - name: Restore drill (back up → DROP SCHEMA → restore → assert identical)
+        run: pnpm --filter @blorse/server restore-drill
+
   docker:
     name: Server image builds
     runs-on: ubuntu-latest

@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { closeDbPools, createDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
+import { purgeExpiredSessions } from './services/auth.js';
 
 const db = createDb();
 await runMigrations(db);
@@ -43,3 +44,12 @@ app
     console.error(err);
     process.exit(1);
   });
+
+// Keep the sessions table from growing without bound: sweep expired rows hourly. Expiry is
+// already enforced at read, so this is pure housekeeping. `unref()` so it never holds the
+// process open during a graceful shutdown.
+const PURGE_INTERVAL_MS = 60 * 60 * 1000;
+const purgeTimer = setInterval(() => {
+  void purgeExpiredSessions(db).catch((err: unknown) => app.log.warn({ err }, 'session purge'));
+}, PURGE_INTERVAL_MS);
+purgeTimer.unref();

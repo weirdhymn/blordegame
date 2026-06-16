@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { lazy, Suspense, type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.js';
 import { AdventurePage } from './pages/AdventurePage.js';
@@ -18,12 +18,19 @@ import { MarketPage } from './pages/MarketPage.js';
 import { HerdPage } from './pages/HerdPage.js';
 import { ModDeskPage } from './pages/ModDeskPage.js';
 import { PostOfficePage } from './pages/PostOfficePage.js';
-import { RenderDevPage } from './pages/RenderDevPage.js';
 import { ShrinePage } from './pages/ShrinePage.js';
 import { StudbookPage } from './pages/StudbookPage.js';
 import { SparPage } from './pages/SparPage.js';
 import { VenturePage } from './pages/VenturePage.js';
 import { useSession } from './session.js';
+
+// The render dev page is an engine-heavy internal tool with no place in production. In a prod
+// build `import.meta.env.DEV` is statically false, so this whole ternary collapses to `null` and
+// Rollup drops the dynamic import — RenderDevPage is neither reachable NOR bundled for players
+// (durability follow-up — it was previously an unauthenticated route in the prod bundle).
+const RenderDevPage = import.meta.env.DEV
+  ? lazy(() => import('./pages/RenderDevPage.js').then((m) => ({ default: m.RenderDevPage })))
+  : null;
 
 /** Gate the authed area on a session; bounce to /login otherwise. */
 function RequireAuth({ children }: { children: ReactElement }): ReactElement {
@@ -41,8 +48,18 @@ function RequireAuth({ children }: { children: ReactElement }): ReactElement {
 export default function AuthedApp(): ReactElement {
   return (
     <Routes>
-      {/* The render dev page is public but engine-heavy — it belongs in this chunk. */}
-      <Route path="render" element={<RenderDevPage />} />
+      {/* Render dev page: DEV-only. In a production build `import.meta.env.DEV` is statically
+          false, so this route is dropped and RenderDevPage is tree-shaken out of the bundle. */}
+      {import.meta.env.DEV && RenderDevPage && (
+        <Route
+          path="render"
+          element={
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <RenderDevPage />
+            </Suspense>
+          }
+        />
+      )}
       <Route
         element={
           <RequireAuth>

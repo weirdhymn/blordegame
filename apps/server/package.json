@@ -11,6 +11,10 @@
     "test": "node --import ./scripts/register.mjs test/server.test.ts",
     "seed": "node --import ./scripts/register.mjs scripts/seed.ts",
     "set-admin": "node --import ./scripts/register.mjs scripts/set-admin.ts",
+    "backup": "node --import ./scripts/register.mjs scripts/backup.ts",
+    "restore": "node --import ./scripts/register.mjs scripts/restore.ts",
+    "restore-drill": "node --import ./scripts/register.mjs scripts/restore-drill.ts",
+    "canary": "node --import ./scripts/register.mjs scripts/canary.ts",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

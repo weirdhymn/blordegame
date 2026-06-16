@@ -1,121 +1,155 @@
 # Deploying BLORSE (private beta on Fly.io)
 
-One **same-origin container**: the Fastify server serves the built web client **and** the API
-(`/api/*`) on a single origin (no CORS). State lives in an embedded Postgres (**PGlite**)
-on a **persistent Fly volume**. Closed-by-default signups behind invite codes.
+One **same-origin, stateless container**: the Fastify server serves the built web client **and**
+the API (`/api/*`) on a single origin (no CORS). All durable state lives in **managed Postgres
+(Neon)** — *not* on the machine — so the app box can be replaced at will and there is no volume to
+lose. Signups are closed-by-default behind invite codes.
 
-> **The hard gate:** do not invite anyone until the **canary survives a real redeploy** with
-> the same volume ID (§5). PGlite on an *ephemeral* disk silently loses every herd on deploy.
+> **Why managed Postgres:** the goal is un-loseable player data. Neon gives **automated backups +
+> point-in-time recovery off the database disk** for free; a redeploy replaces the app container and
+> cannot touch the DB. We *also* keep our own logical dumps (below) so durability never depends on a
+> single system. (PGlite stays the zero-setup driver for **local dev, tests, and CI** — the
+> driver-agnostic `DB` type means identical code on both.)
 
 ## 1. What you need
 
-- **Fly.io account** + the `flyctl` CLI (`fly auth login`).
-- **A credit card on file** — Fly is pay-as-you-go; there is no guaranteed $0 tier.
-- **Honest cost:** a `shared-cpu-1x` 256 MB machine ≈ **$1.94/mo** + a 1 GB volume ≈ **$0.15/mo**
-  + negligible bandwidth → **~$2–3/month** always-on. Nothing else costs money.
+- **Fly.io account** + `flyctl` (`fly auth login`) for the app.
+- **A Neon account** (or any managed Postgres: Fly Managed Postgres, Supabase, RDS…) for the DB.
+- **Honest cost:** a `shared-cpu-1x` 256 MB Fly machine ≈ **$1.94/mo**; Neon has a usable free tier
+  (scale-to-zero) → roughly **$2–5/month** for a quiet beta. No volume cost (no volume).
 
 ## 2. Configuration (env / secrets)
 
-Most config is in `fly.toml [env]`. The only **secret** is the invite code.
+Non-secret config is in `fly.toml [env]`. The **secrets** are the DB URL and the invite code.
 
 | Key | Where | Value |
 | --- | --- | --- |
 | `PORT` | `fly.toml` | `8080` |
-| `NODE_ENV` | `fly.toml` | `production` (turns on secure cookies + the invite gate) |
+| `NODE_ENV` | `fly.toml` | `production` (secure cookies + invite gate + JSON logs) |
 | `TRUST_PROXY` | `fly.toml` | `true` (rate-limit keys on the real client IP behind Fly's edge) |
 | `WEB_DIR` | `fly.toml` | `/app/apps/web/dist` |
-| `DATABASE_URL` | `fly.toml` | `file:/data/blorse` (PGlite on the volume) |
+| `DATABASE_SSL` | `fly.toml` | `true` (Neon and most managed PG require TLS) |
+| `DATABASE_URL` | **`fly secrets set`** | `postgres://user:pw@…neon.tech/blorse?sslmode=require` |
 | `INVITE_CODES` | **`fly secrets set`** | comma-separated; **unset ⇒ no signups** |
 | `ALLOW_MINT` | (unset) | leave unset ⇒ `POST /api/horses` is admin-only |
 
-No DB password, no session secret — sessions are DB-backed opaque tokens; passwords are scrypt.
+No session secret — sessions are DB-backed opaque tokens; passwords are scrypt.
 
-## 3. Deploy
+## 3. Cut over to Neon (one-time)
 
 ```bash
-fly launch --no-deploy                 # reconciles app name + region into fly.toml (review it)
-fly volumes create blorse_data --size 1 --region <your-region>   # the persistent disk
-fly deploy                             # builds the Dockerfile (web + server), boots
-# migrations run idempotently on first boot; the app comes up at https://<app>.fly.dev
+# 1. Create the Neon project + database; copy its pooled connection string.
+# 2. Hand it to Fly as a secret (note sslmode=require):
+fly secrets set DATABASE_URL='postgres://USER:PW@ep-xxx.REGION.aws.neon.tech/blorse?sslmode=require'
+# 3. Deploy. Migrations run idempotently on first boot against Neon.
+fly launch --no-deploy     # reconciles app name + region into fly.toml (review it)
+fly deploy
+# → app at https://<app>.fly.dev ; GET /health → {status:"ok"}
 ```
 
-Signups are **closed** until you open a wave (§6). First, prove persistence (§5).
+There is **no volume** to create — the machine is stateless. Signups stay closed until §6.
+First, run the persistence canary (§5).
 
 ## 4. Make a user an admin (mod tools + the gated mint route)
 
-There is no self-service role change. After the person has registered, promote them from inside
-the running machine (the `set-admin` script targets the same PGlite DB on the volume):
+After the person has registered, promote them from inside the running machine:
 
 ```bash
 fly ssh console
-# inside the container:
 cd /app/apps/server
-pnpm set-admin <username>
-# → "promoted "<username>" to admin"
+DATABASE_URL="$DATABASE_URL" pnpm set-admin <username>   # → "promoted … to admin"
 exit
 ```
 
 `role='admin'` unlocks `GET /api/mod/*` and lets that account use `POST /api/horses`.
 
-## 5. Persistence proof — survive a REDEPLOY, not just a restart (do this BEFORE inviting)
+## 5. Persistence canary — survive a REDEPLOY, not just a restart (BEFORE inviting)
 
-A restart reuses the machine; a **redeploy** builds a new image and replaces it. The risk is
-PGlite writing to the image (ephemeral) instead of the volume. Confirm:
+A redeploy builds a new image and replaces the machine. With managed Postgres the only real risk is
+that the app points at the **wrong** (or an ephemeral) database — so the canary proves a redeploy
+keeps reading and writing the same external DB.
+
+The mechanism is **already proven against a live Postgres** in CI on every push (the
+`restore-drill` job) and locally (`pnpm canary write` then `pnpm canary check` across two processes
+survives the boundary byte-identically). On the real Neon instance, confirm it once:
 
 ```bash
 # 1. Register a CANARY account in the browser (it gets starter horses). Note the username.
-# 2. Prove the data is on the volume, not the image:
-fly ssh console -C "df -h /data"            # shows the volume device, not overlay/rootfs
-fly ssh console -C "ls -la /data/blorse"    # PGlite files present
-fly volumes list                            # RECORD the volume ID
-# 3. Restart test (necessary, not sufficient):
-fly machine restart <machine-id>            # → log in as canary: horses still there
-# 4. THE REAL TEST — redeploy (new image + machine):
+# 2. Redeploy — the actual test (new image + machine, same Neon DB):
 fly deploy
-# → log in as canary again, and:
-fly volumes list                            # same volume ID as step 2?
+# 3. Log in as the canary again → its horses are still there.
+# (belt-and-suspenders, from inside the box:)
+fly ssh console -C "cd /app/apps/server && DATABASE_URL=\"$DATABASE_URL\" pnpm canary write"
+fly deploy
+fly ssh console -C "cd /app/apps/server && DATABASE_URL=\"$DATABASE_URL\" pnpm canary check <token>"
 ```
 
-- ✅ **Pass:** canary logs in with its horses **and** the volume ID is unchanged ⇒ safe to invite.
-- 🚩 **Fail:** canary gone / 0 horses / new volume ID ⇒ the data dir isn't on the volume.
-  Fix the `[mounts]` / `DATABASE_URL` path and re-run — **do not invite anyone.**
+- ✅ **Pass:** the canary logs in with its horses after the redeploy ⇒ safe to invite.
+- 🚩 **Fail:** canary gone / 0 horses ⇒ `DATABASE_URL` is wrong or pointing at an ephemeral DB.
+  Fix the secret and re-run — **do not invite anyone.**
 
-## 6. Invite waves (your progressive-rollout control)
+## 6. Backups & restore
 
-Signups are **closed by default** (no `INVITE_CODES` ⇒ every register returns
-`403 invite_required`). Opening a wave is a deliberate config change:
+Two independent layers, so a failure of either still leaves a good copy:
+
+**Layer 1 — the provider (Neon).** Automated backups + **point-in-time recovery** to any moment in
+the retention window, off the database disk. Restore via the Neon console/CLI (branch or restore to a
+timestamp). Confirm your project's retention; the free tier's window is short, which is exactly why
+we keep Layer 2.
+
+**Layer 2 — our own logical dumps (guaranteed retention, off-provider).** A `pg_dump` we own,
+shipped off-box and rotated:
+
+```bash
+# Run on a schedule (a Fly scheduled machine / cron), once a day:
+DATABASE_URL="$DATABASE_URL" \
+BACKUP_DIR=/tmp/backups \
+BACKUP_UPLOAD_CMD='aws s3 cp {file} s3://blorse-backups/' \   # or: rclone copyto {file} r2:…
+  pnpm --filter @blorse/server backup
+# → blorse-YYYYMMDD-HHMMSS.dump, uploaded off-disk, retention 30 daily / 8 weekly.
+```
+
+`BACKUP_UPLOAD_CMD` ships the dump to object storage (`{file}` is substituted) so a database-disk
+failure never takes the backups with it. Retention is `BACKUP_RETAIN_DAYS` (30) + one weekly dump
+for `BACKUP_RETAIN_WEEKS` (8).
+
+**Restore (emergency):**
+
+```bash
+DATABASE_URL="$DATABASE_URL" CONFIRM_RESTORE=yes \
+  pnpm --filter @blorse/server restore /path/to/blorse-….dump   # newest in BACKUP_DIR if omitted
+```
+
+**Proof, not faith.** `pnpm --filter @blorse/server restore-drill` performs the full cycle — seed →
+back up → `DROP SCHEMA public CASCADE` → confirm gone → restore → assert byte-identical row counts +
+herd + horse genotype/seed. It is run **on every push** in CI (the `restore-drill` job against a real
+`postgres:16`) and has been run by hand against a live Postgres: *58 rows destroyed and restored,
+identical.* Restore is a tested procedure, not an assumption.
+
+## 7. Invite waves (progressive-rollout control)
+
+Signups are **closed by default** (no `INVITE_CODES` ⇒ every register returns `403 invite_required`).
 
 ```bash
 fly secrets set INVITE_CODES=wave1-$(openssl rand -hex 4)   # set + auto-redeploy
-# share that exact code with wave 1's testers; they enter it on the Register screen
 ```
 
 Add codes (comma-separated) for later waves; remove a code to close it. Existing sessions are
 unaffected — the code only gates *new* registrations.
 
-## 7. Reset / wipe test data
+## 8. Reset / wipe test data
 
 ```bash
-fly ssh console -C "rm -rf /data/blorse"   # delete the PGlite dir
-fly machine restart <machine-id>           # next boot re-migrates an empty DB
-# (or destroy + recreate the volume for a guaranteed clean slate)
+# Against Neon: drop + recreate the schema (next boot re-migrates an empty DB):
+psql "$DATABASE_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+fly machine restart <machine-id>
+# (or create a fresh Neon branch/database and point DATABASE_URL at it)
 ```
 
-## 8. Local development
+## 9. Local development
 
-`pnpm dev:server` + `pnpm dev:web` run unchanged: `NODE_ENV` is unset locally, so signups are
-**open** (no invite needed) and the cookie isn't `secure`. The client's Vite proxy forwards
-`/api` to the server (same path as prod). Mint stays admin-only unless you set `ALLOW_MINT=true`.
-
-## 9. Scaling beyond one machine
-
-PGlite is in-process → single instance only. When the beta outgrows one box, move to managed
-Postgres — **now a config flip**: the node-postgres driver is wired (`createNodePgDb` in
-`apps/server/src/db/client.ts`; every service types against the driver-agnostic `DB` base, and
-`runMigrations` picks the right migrator). Set `DATABASE_URL=postgres://user:pw@host/db` and
-deploy; migrations apply on boot exactly as with PGlite.
-
-Caveat before flipping for real: the postgres:// path is verified by type-safety + a driver-routing
-test, but has **not yet run against a live Postgres** (no local instance) — on first cut-over, run
-the §5 persistence canary against the new DB before inviting players back. Keep the volume around
-until then.
+`pnpm dev:server` + `pnpm dev:web` run unchanged on **PGlite** (`DATABASE_URL` unset → in-memory; or
+`file:./.data/blorse` to persist). `NODE_ENV` is unset locally, so signups are **open** and the
+cookie isn't `secure`. To exercise the production driver locally, point `DATABASE_URL` at any
+`postgres://` instance — migrations and every query run identically (the CI `postgres` job does
+exactly this on every push).

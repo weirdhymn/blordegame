@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { STARTING_CUBES } from '@blorse/balance';
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { generateSessionToken, hashToken, SESSION_TTL_MS } from '../auth/tokens.js';
 import { STARTER_HORSES } from '../content/onboarding.js';
@@ -132,6 +132,20 @@ export async function resolveSessionUser(
 
 export async function deleteSession(db: DB, token: string | undefined): Promise<void> {
   if (token) await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+}
+
+/**
+ * Delete every session whose TTL has lapsed (audit follow-up). Expiry is already enforced
+ * lazily at read (`resolveSessionUser`), so this changes no behaviour — it just stops the
+ * `sessions` table growing without bound (one row per login/device, forever). Returns the
+ * count purged. Run on an interval in prod (index.ts) and freely callable in tests.
+ */
+export async function purgeExpiredSessions(db: DB, nowMs = Date.now()): Promise<number> {
+  const gone = await db
+    .delete(sessions)
+    .where(lt(sessions.expiresAt, new Date(nowMs)))
+    .returning({ id: sessions.id });
+  return gone.length;
 }
 
 export async function getHerdForUser(db: DB, userId: string): Promise<HerdRow | null> {

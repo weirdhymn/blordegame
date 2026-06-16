@@ -1,6 +1,9 @@
-# Fly.io config for BLORSE — one same-origin machine + a persistent volume for PGlite.
-# Prepared, NOT deployed. `fly launch` will reconcile app name + region; review before deploy.
-# Open a wave AFTER the persistence-proof passes:  fly secrets set INVITE_CODES=wave1-xxxx
+# Fly.io config for BLORSE — one same-origin, STATELESS machine. Durable state lives in
+# managed Postgres (Neon), not on this box — so there is no volume to lose (see DEPLOY.md).
+# Prepared, NOT deployed. `fly launch` reconciles app name + region; review before deploy.
+# DATABASE_URL is a SECRET (it carries the DB password):
+#   fly secrets set DATABASE_URL='postgres://…neon.tech/blorse?sslmode=require'
+# Open a wave AFTER the persistence canary passes:  fly secrets set INVITE_CODES=wave1-xxxx
 app = "blorsegame"
 primary_region = "iad" # change to your nearest Fly region
 
@@ -12,7 +15,7 @@ primary_region = "iad" # change to your nearest Fly region
   NODE_ENV = "production"
   TRUST_PROXY = "true"
   WEB_DIR = "/app/apps/web/dist"
-  DATABASE_URL = "file:/data/blorse"
+  DATABASE_SSL = "true" # Neon (and most managed PG) require TLS; DATABASE_URL set via secrets
 
 [http_service]
   internal_port = 8080
@@ -30,11 +33,9 @@ primary_region = "iad" # change to your nearest Fly region
     method = "GET"
     path = "/health"
 
-# The persistent disk. PGlite writes to /data/blorse; this volume survives restarts AND
-# redeploys (verified by the §C canary test before anyone is invited).
-[mounts]
-  source = "blorse_data"
-  destination = "/data"
+# No [mounts]: the machine is stateless — all durable data lives in managed Postgres, which
+# the provider backs up off-disk with point-in-time recovery (DEPLOY.md → Backups). A redeploy
+# replaces this container and cannot touch the database.
 
 [[vm]]
   size = "shared-cpu-1x"

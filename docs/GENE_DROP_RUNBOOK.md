@@ -91,7 +91,8 @@ new PNGs to ship. Keep White/Gray the rarest.
 
 ## 3. Deploy
 
-6. Snapshot the data volume (see `DEPLOY.md` → Backups). This is the rollback point.
+6. Take a fresh backup before deploying (`pnpm --filter @blorse/server backup`, and/or a Neon
+   restore point) — see `DEPLOY.md` → "Backups & restore". This is the rollback point.
 7. Build & roll the image:
    ```bash
    docker compose up -d --build      # migrations re-apply idempotently on boot
@@ -135,4 +136,4 @@ Because phenotype is derived and a gene/glitch needs no migration, rollback is c
 - [ ] New genotype renders; an existing genotype renders pixel-identically.
 - [ ] Shipped gated (freq 0), smoke-tested live, then enabled to target rarity.
 - [ ] Gene tagged with introduced-version + rarity; Field Guide slot reserved.
-- [ ] Volume snapshot taken before deploy.
+- [ ] Fresh backup / Neon restore point taken before deploy (DEPLOY.md → "Backups & restore").

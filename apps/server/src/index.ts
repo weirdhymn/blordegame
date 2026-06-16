@@ -3,10 +3,22 @@ import { closeDbPools, createDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { purgeExpiredSessions } from './services/auth.js';
 
+const isProd = process.env.NODE_ENV === 'production';
+
+// Durability guard: in production the database MUST be managed Postgres. Without this, a missing
+// or mistyped DATABASE_URL would silently fall back to an embedded/ephemeral DB and lose every
+// herd on the next redeploy — the exact failure this whole setup exists to prevent. Fail LOUD.
+if (isProd && !(process.env.DATABASE_URL ?? '').startsWith('postgres')) {
+  console.error(
+    'FATAL: NODE_ENV=production requires DATABASE_URL=postgres://… (managed Postgres).\n' +
+      'Refusing to boot on an embedded/ephemeral database — set the secret and redeploy.',
+  );
+  process.exit(1);
+}
+
 const db = createDb();
 await runMigrations(db);
 
-const isProd = process.env.NODE_ENV === 'production';
 const app = buildApp(db, {
   webDir: process.env.WEB_DIR, // serve the built client same-origin when set
   secureCookie: isProd,

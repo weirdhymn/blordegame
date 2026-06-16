@@ -21,8 +21,8 @@ primary_region = "iad" # change to your nearest Fly region
   internal_port = 8080
   force_https = true
   auto_start_machines = true
-  # Always-on (one machine) keeps the volume attachment + canary test predictable.
-  # Cost optimisation later: auto_stop_machines = "stop" + min_machines_running = 0.
+  # Always-on (one machine) for a predictable beta. The app is stateless, so this is purely a
+  # latency/availability choice. Cost optimisation later: auto_stop_machines = "stop".
   auto_stop_machines = false
   min_machines_running = 1
 

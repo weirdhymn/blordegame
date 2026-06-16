@@ -98,12 +98,14 @@ timestamp). Confirm your project's retention; the free tier's window is short, w
 we keep Layer 2.
 
 **Layer 2 — our own logical dumps (guaranteed retention, off-provider).** A `pg_dump` we own,
-shipped off-box and rotated:
+shipped off-box and rotated. **Run it from any machine with `pg_dump` + network to Neon** — your
+laptop, or a small scheduled runner with `postgresql-client` installed. (The Fly app image is
+deliberately minimal: `node:24-slim` has no `pg_dump`, so backups run *outside* the app box, which
+is arguably better — they don't depend on the app being healthy.)
 
 ```bash
-# Run on a schedule (a Fly scheduled machine / cron), once a day:
-DATABASE_URL="$DATABASE_URL" \
-BACKUP_DIR=/tmp/backups \
+DATABASE_URL="$NEON_URL" \
+BACKUP_DIR=./.data/backups \
 BACKUP_UPLOAD_CMD='aws s3 cp {file} s3://blorse-backups/' \   # or: rclone copyto {file} r2:…
   pnpm --filter @blorse/server backup
 # → blorse-YYYYMMDD-HHMMSS.dump, uploaded off-disk, retention 30 daily / 8 weekly.
@@ -111,20 +113,36 @@ BACKUP_UPLOAD_CMD='aws s3 cp {file} s3://blorse-backups/' \   # or: rclone copyt
 
 `BACKUP_UPLOAD_CMD` ships the dump to object storage (`{file}` is substituted) so a database-disk
 failure never takes the backups with it. Retention is `BACKUP_RETAIN_DAYS` (30) + one weekly dump
-for `BACKUP_RETAIN_WEEKS` (8).
+for `BACKUP_RETAIN_WEEKS` (8). Schedule it daily (cron / a CI scheduled job / a tiny runner).
 
 **Restore (emergency):**
 
 ```bash
-DATABASE_URL="$DATABASE_URL" CONFIRM_RESTORE=yes \
+DATABASE_URL="$NEON_URL" CONFIRM_RESTORE=yes \
   pnpm --filter @blorse/server restore /path/to/blorse-….dump   # newest in BACKUP_DIR if omitted
 ```
 
-**Proof, not faith.** `pnpm --filter @blorse/server restore-drill` performs the full cycle — seed →
-back up → `DROP SCHEMA public CASCADE` → confirm gone → restore → assert byte-identical row counts +
-herd + horse genotype/seed. It is run **on every push** in CI (the `restore-drill` job against a real
-`postgres:16`) and has been run by hand against a live Postgres: *58 rows destroyed and restored,
-identical.* Restore is a tested procedure, not an assumption.
+**Verify restore SAFELY against real Neon (without endangering production).** Don't destroy the live
+DB to test restore — restore into a **scratch Neon branch** (instant copy-on-write) and fingerprint-
+match it to production:
+
+```bash
+# 1. Back up production (above) → a .dump file.
+# 2. In the Neon console, create a branch (e.g. "restore-test"); copy its connection string.
+# 3. Restore the dump INTO the branch:
+DATABASE_URL="$BRANCH_URL" CONFIRM_RESTORE=yes \
+  pnpm --filter @blorse/server restore ./.data/backups/blorse-….dump
+# 4. Prove the restored branch matches production, read-only on both:
+pnpm --filter @blorse/server compare-db "$NEON_URL" "$BRANCH_URL"
+# → "COMPARE: MATCH — the restored copy is byte-identical to the source"
+# 5. Delete the branch.
+```
+
+**Proof, not faith.** `pnpm --filter @blorse/server restore-drill` performs the full destroy→restore
+cycle (seed → back up → `DROP SCHEMA public CASCADE` → confirm gone → restore → assert identical). It
+runs **on every push** in CI against a real `postgres:16`, and has been run by hand against a live
+Postgres (*58 rows destroyed and restored, identical*). Restore is a tested procedure, not an
+assumption.
 
 ## 7. Invite waves (progressive-rollout control)
 

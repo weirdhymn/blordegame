@@ -1,6 +1,6 @@
-# BLORSE — single same-origin container: the Fastify server serves the built web client AND
-# the API (`/api/*`). State persists in an embedded Postgres (PGlite) on the /data volume.
-# Node 24 strips TypeScript natively, so the server runs from source (no compile step).
+# BLORSE — single same-origin, STATELESS container: the Fastify server serves the built web
+# client AND the API (`/api/*`). Durable state lives in managed Postgres (DATABASE_URL secret) —
+# nothing here. Node 24 strips TypeScript natively, so the server runs from source (no compile).
 FROM node:24-slim
 
 WORKDIR /app
@@ -24,14 +24,15 @@ RUN pnpm --filter @blorse/web build
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV WEB_DIR=/app/apps/web/dist
-ENV DATABASE_URL=file:/data/blorse
 ENV TRUST_PROXY=true
-# INVITE_CODES is intentionally NOT set here — provide it as a host secret to open a wave.
-VOLUME ["/data"]
+# DATABASE_URL is intentionally NOT set here — it is a host SECRET (the Neon URL). In production,
+# index.ts refuses to boot unless it is a postgres:// URL, so a missing secret fails LOUD rather
+# than silently falling back to an ephemeral embedded DB. INVITE_CODES is likewise a host secret.
 EXPOSE 8080
 
-# Drop root (§11 hardening): the bundled `node` user owns the app and the data volume mount.
-RUN mkdir -p /data && chown -R node:node /data /app
+# Drop root (§11 hardening): the bundled `node` user owns the app. No data volume — state is in
+# managed Postgres.
+RUN chown -R node:node /app
 USER node
 
 # Liveness: the unauthenticated /health route (kept at the root, no /api prefix).

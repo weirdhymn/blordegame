@@ -124,6 +124,9 @@ export const horses = pgTable(
       .notNull()
       .default({}),
     accomplishments: jsonb('accomplishments').$type<string[]>().notNull().default([]),
+    /** Cosmetic quirks picked up from the Living Herd (§8) — purely flavour, never a stat
+     *  effect. Shown on the horse sheet; capped at HORSE_MAX_QUIRKS. */
+    quirks: jsonb('quirks').$type<string[]>().notNull().default([]),
     /** Completed interactive adventures (§9.3) — drives the cosmetic "Seasoned" mark. Flavor only. */
     adventures: integer('adventures').notNull().default(0),
     /** Combat class (§9.4b) — identity + signature approach; null = unclassed. Freely re-assignable. */

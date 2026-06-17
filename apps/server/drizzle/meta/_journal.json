@@ -169,6 +169,13 @@
       "when": 1781241181996,
       "tag": "0023_cool_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781655316302,
+      "tag": "0024_living_herd_quirks",
+      "breakpoints": true
     }
   ]
 }

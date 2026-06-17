@@ -378,7 +378,7 @@ Horses act on their own. This is the Tomodachi-Life heart of BLORSE and its bigg
   - **Heritability: partially inherited, mostly random, only rarely altered.** A foal's traits are a fresh roll with a light parental nudge (parents shift the distribution slightly, they don't determine it), so personality stays surprising and can't be hard-bred. Once set it's near-immutable — only rare events/items can shift a trait. Treat personality as *who a horse innately is*.  
   - Traits shape autonomy directly: Extraversion/Agreeableness drive friendship formation, Neuroticism feeds rivalry/anxiety beats, Openness/Conscientiousness bias which skills a horse enjoys growing.  
 - **Stats & skills (RPG, §9)** — separate axis: personality says *who a horse is*; stats say *how capable it is*. Unlike personality, stats are **mostly inherited and trainable** — the thing you selectively breed and improve.  
-- **Compatibility** — a pure function of two horses' OCEAN proximity (with Agreeableness/Extraversion weighted for friendship, Neuroticism for friction) \+ shared activities \+ time co-located → an affinity delta applied each daily tick.
+- **Compatibility** — a function of two horses' OCEAN proximity (with Agreeableness/Extraversion weighted for friendship, Neuroticism for friction) \+ shared activities \+ time co-located → an affinity *lean* each encounter. The lean is never the whole story: a **seeded jitter, scaled by temperament** (Neuroticism amplifies the swing, Conscientiousness steadies it), rides on top — so a compatible pair *usually* warms but can have an off day, and a mismatch can, rarely, click. Compatible ≠ predetermined (§8.6).
 
 ### 8.2 How it runs (the daily rollover)
 
@@ -389,7 +389,7 @@ Horses act on their own. This is the Tomodachi-Life heart of BLORSE and its bigg
 
 ### 8.3 What autonomy produces (criteria-gated, like Tomodachi)
 
-- Affinity crossing thresholds fires **events**: two horses become friends, a rivalry sparks, a bonded pair forms, a mentor takes on a foal.  
+- Affinity crossing thresholds fires **events**: two horses become friends, a rivalry sparks, a bonded pair forms. The vocabulary is deliberately richer than the thresholds alone — a low-compatibility pair that bonds anyway reads as an **odd couple** (✨), a warm pair that cools as a **falling-out** (💔) — plus solo beats (a **quirk** picked up 🌿, a moonlit **escapade** 🌙) so even a young, bond-less herd has charm in the journal (§8.6).  
 - Enough friends with a shared interest \+ the right structure → they **self-organize a club** (reading circle, game club) and take on **civil-society roles** that map onto the RPG layer (a librarian, an organizer, a guild lead — §9 jobs/roles).  
 - Autonomy and the RPG layer interlock: a horse may **pursue a job or short adventure on its own** between player-directed ones, generating journal beats and modest rewards — the herd visibly *does things* whether or not you direct it.  
 - Each event appends to the **JournalEvent** log — the player's warm "here's what happened while you were away" feed, told in icons \+ short flavor.  
@@ -402,6 +402,19 @@ Ship: personality \+ compatibility \+ friend/rival/bonded relationships \+ a jou
 ### 8.5 Why this is built mid-roadmap, not first
 
 It depends on horses, herds, persistence, and items existing. But it's the retention engine, so it lands right after the core sim is real (see phases) and well before beta polish.
+
+### 8.6 The deepening: encounters, jitter, quirks, voice (shipped)
+
+The first cut of autonomy was deterministic *and* predictable — it evaluated every co-located pair every day, so outcomes followed straight from temperament and the journal read like a log, not a living herd. The deepening keeps the determinism (catch-up still replays identically) and adds the surprise. Goal: **more surprise and charm per unit of mechanic**, not a bigger simulation. All tunables live in `@blorse/balance` §8; the prose lives in `apps/server/src/content/herd-life.ts`.
+
+- **Encounters, not roll-call.** Each day a *handful* of seeded encounters happen — `clamp(1 + ⌊adults/4⌋, 1, AUTONOMY_ENCOUNTERS_CAP=3)` — instead of the old exhaustive sweep (the `MAX_AUTONOMY_PAIRS=60` cap is now a backstop, not the norm). Bold (high-Extraversion) horses are likelier to **instigate**; partners lean mildly toward existing friends, so cliques deepen rather than reshuffling at random. One graph read per day; bounded by design.
+- **Seeded jitter is the soul.** `delta = compatibility(a,b) + jitter`, where `jitter ∈ [−J, +J]` (`AUTONOMY_JITTER`) scaled by **volatility** = `1 + N_COEFF·avgN − C_COEFF·avgC` (clamped). High-Neuroticism pairs lurch; high-Conscientiousness pairs are dependable. Unpredictable to the player, deterministic to the server.
+- **Personality stays legible.** Because the *lean* tracks compatibility and the prose weaves each horse's dominant trait in ("Pixel, who can't sit still, has taken up with Latte…"), a player can read *why* a pairing went the way it did. A causation test pins this: on the same seed, a compatible pair ends strictly warmer than a clashing one — the only variable is temperament.
+- **A richer event vocabulary.** Beyond friend/bonded/rival: **odd-couple (✨)** when a low-compatibility lean (≤ `AUTONOMY_ODD_COUPLE_COMPAT_MAX`) crosses into friendship anyway — the unexpected pairing that clicks; **falling-out (💔)** when a warm pair's affinity drags back below the line; **quirk (🌿)** and **escapade (🌙)** as solo beats.
+- **Persistent quirks (cosmetic).** A high-Openness horse can pick up a habit from a small library — *"won't cross a stream without checking its reflection first"* — stored in `horses.quirks` (capped at `HORSE_MAX_QUIRKS=3`), worn on the horse sheet. **Purely flavour: never a hidden stat effect.**
+- **A combinatorial voice.** Each beat is a base frame × a detail (× a personality descriptor where the frame asks for one), biased toward the *specific, slightly strange* over generic friendliness. Distinct base line-variations per type: friend ~56, escapade ~72, quirk ~80, bonded/rival/odd-couple/falling-out ~36 each — and names + descriptors multiply that further, so the journal runs a long way before it repeats.
+- **Independent sub-streams.** Each day's rng is split into independent generators per pass (encounters / solo / night-life), so adding or reordering a pass never perturbs another's seeded outcomes — a dramatic relationships day doesn't change who reads a book that night.
+- **Held back as follow-ons (deliberately out of scope):** autonomy ↔ combat/adventures cross-pollination, the unused harmony hook, and anything that sprawls into a bigger sim. This pass is about charm density, not surface area.
 
 ---
 

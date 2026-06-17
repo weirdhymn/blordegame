@@ -495,6 +495,42 @@ export const AFFINITY_MAX = 200;
 export const MAX_AUTONOMY_PAIRS = 60;
 export const CLUB_MIN_MEMBERS = 2;
 
+// ── §8 The Living Herd: the ENCOUNTER model (seeded surprise, not roll-call) ──
+// Each day the herd has a few seeded encounters — who meets whom, and how it goes, varies.
+// All draws ride the day's seeded rng, so catch-up replays identically (deterministic to the
+// server, unpredictable to the player). Tunables here per the single-source rule.
+
+/** Encounters per day = clamp(BASE + floor(adults / PER), 1, CAP). Small herds get one; big
+ *  herds a few — never a full sweep. Keeps the journal sparse so each line lands. */
+export const AUTONOMY_ENCOUNTERS_BASE = 1;
+export const AUTONOMY_ENCOUNTERS_PER = 4;
+export const AUTONOMY_ENCOUNTERS_CAP = 3;
+
+/** The soul of the system: a seeded ± swing added to the compatibility lean, so a compatible
+ *  pair USUALLY clicks but can have an off day, and an incompatible pair can surprise. Uniform
+ *  in [-JITTER, +JITTER] before the volatility multiplier below. */
+export const AUTONOMY_JITTER = 8;
+/** Volatility scales the jitter by temperament: Neuroticism amplifies (drama), Conscientiousness
+ *  steadies (calm). vol = 1 + N_COEFF·avgN − C_COEFF·avgC, clamped ≥ VOL_MIN. */
+export const AUTONOMY_VOL_N_COEFF = 0.8;
+export const AUTONOMY_VOL_C_COEFF = 0.4;
+export const AUTONOMY_VOL_MIN = 0.35;
+
+/** Extraversion bias on who INSTIGATES an encounter (bold horses act). A horse's pick-weight is
+ *  1 + E_BIAS·(E/100); 0 = uniform. Partner pick is mildly drawn to existing friends. */
+export const AUTONOMY_INSTIGATE_E_BIAS = 1.5;
+export const AUTONOMY_PARTNER_AFFINITY_BIAS = 0.01; // per affinity point, atop a base weight of 1
+
+/** A bond/friendship counts as an "odd couple" (the surprise) when the pair's raw compatibility
+ *  is at or below this — they objectively shouldn't have clicked, yet the jitter made it so. */
+export const AUTONOMY_ODD_COUPLE_COMPAT_MAX = 2;
+
+/** Solo beats — gentle daily chances so most stretches have charm even before bonds form. */
+export const AUTONOMY_QUIRK_CHANCE = 0.28; // a high-Openness horse picks up a habit
+export const AUTONOMY_ESCAPADE_CHANCE = 0.26; // a high-Openness/Extraversion horse wanders off
+/** A horse collects at most this many cosmetic quirks (then it has enough character). */
+export const HORSE_MAX_QUIRKS = 3;
+
 // ── §14.7 Combat (turn-based battles, §9.4) ─────────────────────────────────
 // Cozy & no-death: a horse at 0 HP is "spooked" (out for the fight, fine after — a nap); a full
 // party wipe is a *retreat* home with reduced rewards, never a loss. Reuses skillCheck + DEX +

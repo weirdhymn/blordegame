@@ -31,6 +31,8 @@ export function publicHorse(h: HorseRow) {
     stats: h.stats,
     skills: h.skills,
     accomplishments: h.accomplishments,
+    /** Cosmetic quirks picked up living in the herd (§8) — flavour only, never a stat. */
+    quirks: h.quirks,
     personality: h.personality,
     /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3, flavor only). */
     adventures: h.adventures,

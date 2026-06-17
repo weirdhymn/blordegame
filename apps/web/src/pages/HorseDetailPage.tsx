@@ -273,6 +273,20 @@ export function HorseDetailPage(): ReactElement {
                   ))}
                 </div>
               )}
+              {/* Quirks (§8): habits picked up living in the herd — pure character, no stats. */}
+              {(horse.quirks?.length ?? 0) > 0 && (
+                <div className="quirk-lines">
+                  {horse.quirks.map((q) => (
+                    <span
+                      className="quirk-chip"
+                      key={q}
+                      title="A habit picked up living in the herd"
+                    >
+                      🌿 {q}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

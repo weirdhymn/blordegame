@@ -11,6 +11,9 @@ import {
   ADVENTURE_MARK_THRESHOLD,
   ADVENTURE_SKILL_XP_ATTEMPT,
   ADVENTURE_SKILL_XP_SUCCESS,
+  AFFINITY_MAX,
+  AFFINITY_MIN,
+  AUTONOMY_ENCOUNTERS_CAP,
   BONDED_BREED_STAT_BONUS,
   BONDED_THRESHOLD,
   CLASS_APPROACH,
@@ -24,6 +27,7 @@ import {
   GATHER_PER_HORSE_PER_DAY,
   GROOM_CUBES,
   HERD_TIERS,
+  HORSE_MAX_QUIRKS,
   type HorseClass,
   JOB_DC,
   JOB_SEASONED_DC_BONUS,
@@ -92,7 +96,9 @@ import {
 } from '../src/services/adventure-run.js';
 import { getAudit } from '../src/services/audit.js';
 import { createSession, purgeExpiredSessions, registerUser } from '../src/services/auth.js';
-import { getClubs, resolveAutonomyForDay } from '../src/services/autonomy.js';
+import { getClubs, resolveNightLifeForDay } from '../src/services/autonomy.js';
+import { QUIRK_PHRASES } from '../src/content/herd-life.js';
+import type { Personality } from '../src/services/personality.js';
 import { bondedBreedBonus, breedHorses, breedingOdds } from '../src/services/breeding.js';
 import { cook, getCareState, getMealBuff, groom } from '../src/services/care-hub.js';
 import {
@@ -4136,14 +4142,14 @@ async function main(): Promise<void> {
     });
 
     // No books → no beat (and zero rng draws — determinism for item-less herds).
-    const dark = await resolveAutonomyForDay(db, nightH, seq([]));
+    const dark = await resolveNightLifeForDay(db, nightH, seq([]));
     check(
       'no books, no hall → the night passes quietly',
       !dark.some((e) => e.kind === 'reading' || e.kind === 'game'),
     );
 
     await grantItems(db, nightH, [{ id: 'book', qty: 2 }]);
-    const night1 = await resolveAutonomyForDay(db, nightH, seq([0.0]));
+    const night1 = await resolveNightLifeForDay(db, nightH, seq([0.0]));
     const readerNow = (await getHorse(db, reader.id))!;
     check(
       'night reading consumes ONE book and grants real reading XP',
@@ -4157,7 +4163,7 @@ async function main(): Promise<void> {
       .update(horses)
       .set({ skills: { reading: { level: 4, xp: 999_999 } } })
       .where(drizzleEq(horses.id, reader.id));
-    const refreshed = await resolveAutonomyForDay(db, nightH, seq([0.0]));
+    const refreshed = await resolveNightLifeForDay(db, nightH, seq([0.0]));
     check(
       'a level-up earned by night reading writes the 🏅 brag beat',
       refreshed.some((e) => e.kind === 'accomplishment' && /Skilled Reading/.test(e.text)) &&
@@ -4173,14 +4179,14 @@ async function main(): Promise<void> {
       glitch: null,
     });
     await grantItems(db, nightH, [{ id: 'board-game', qty: 1 }]);
-    const noHall = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.99]));
+    const noHall = await resolveNightLifeForDay(db, nightH, seq([0.0, 0.0, 0.99]));
     check(
       'no Meeting Hall → no game night (the shelf gathers dust)',
       !noHall.some((e) => e.kind === 'game'),
     );
 
     await db.insert(structures).values({ herdId: nightH, type: 'meeting-hall' });
-    const gameNight = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.99]));
+    const gameNight = await resolveNightLifeForDay(db, nightH, seq([0.0, 0.0, 0.99]));
     const [aId, bId] = [reader.id, partner.id].sort();
     const pairRow = (
       await db
@@ -4206,7 +4212,7 @@ async function main(): Promise<void> {
         (await getClubs(db, nightH)).some((c) => c.type === 'game-club'),
     );
 
-    const wornOut = await resolveAutonomyForDay(db, nightH, seq([0.0, 0.0, 0.0]));
+    const wornOut = await resolveNightLifeForDay(db, nightH, seq([0.0, 0.0, 0.0]));
     check(
       'a low wear roll retires the game to the floorboards (consumed, with a beat)',
       wornOut.some((e) => /floorboards/.test(e.text)) &&
@@ -5213,6 +5219,237 @@ async function main(): Promise<void> {
     check(
       'twin herds (same simSeed, same temperaments) write identical beat kinds',
       b1.journal.length > 0 && kinds(b1) === kinds(b2),
+    );
+  }
+
+  // ── The Living Herd, deepened (§8): emergence, legible personality, bounded + deterministic ──
+  section('The Living Herd, deepened (§8)');
+  {
+    const DAY = 86_400_000;
+    // A lab herd: pinned seed, pinned roster (starters released so only our temperaments act).
+    const mkLab = async (name: string, seed: number, persons: Personality[]): Promise<string> => {
+      const reg = await inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username: name, password: `${name}horse1` },
+      });
+      const hid = reg.json<{ herd: { id: string } }>().herd.id;
+      await db.update(horses).set({ herdId: null }).where(drizzleEq(horses.herdId, hid));
+      await db
+        .update(herds)
+        .set({ simSeed: seed, lastSimTick: gameDay(Date.now()) })
+        .where(drizzleEq(herds.id, hid));
+      for (const p of persons)
+        await mintHorse(db, {
+          herdId: hid,
+          genotype: { E: 'ee' },
+          origin: 'wild',
+          lifeStage: 'adult',
+          glitch: null,
+          personality: p,
+        });
+      return hid;
+    };
+    const relsOf = (hid: string): Promise<{ affinity: number; type: string | null }[]> =>
+      db.select().from(relationships).where(drizzleEq(relationships.herdId, hid));
+    const horsesOf = (hid: string): Promise<{ id: string; quirks: unknown }[]> =>
+      db.select().from(horses).where(drizzleEq(horses.herdId, hid));
+    const quirksOf = (h: { quirks: unknown }): string[] => h.quirks as string[];
+
+    // (A) PERSONALITY CAUSATION — same seed, same structure; vary ONLY temperament. The compatible
+    // pair must end strictly warmer than the incompatible one and reach friendship; the clashing
+    // pair must never bond. Identical jitter stream ⇒ the gap is caused by personality, nothing else.
+    const SEED = 0x5eed01;
+    const warmHerd = await mkLab('warmlab', SEED, [
+      { o: 55, c: 60, e: 85, a: 90, n: 12 },
+      { o: 52, c: 58, e: 88, a: 92, n: 10 },
+    ]);
+    const coldHerd = await mkLab('coldlab', SEED, [
+      { o: 100, c: 0, e: 8, a: 5, n: 100 },
+      { o: 0, c: 100, e: 10, a: 6, n: 98 },
+    ]);
+    const horizon = Date.now() + 8 * DAY;
+    await advanceHerd(db, warmHerd, horizon);
+    await advanceHerd(db, coldHerd, horizon);
+    const warmRel = (await relsOf(warmHerd))[0];
+    const coldRel = (await relsOf(coldHerd))[0];
+    check(
+      'causation: a compatible pair ends warmer than an incompatible one on the SAME seed',
+      (warmRel?.affinity ?? -999) > (coldRel?.affinity ?? 999),
+    );
+    check(
+      'causation: personality legibly drives it — compatible reaches friendship, clashing never bonds',
+      (warmRel?.type === 'friend' || warmRel?.type === 'bonded') && coldRel?.type !== 'bonded',
+    );
+
+    // (B) BOUNDEDNESS — affinity is clamped to [MIN, MAX] no matter how long the herd runs, and a
+    // big herd's daily encounters never exceed the cap (the old exhaustive sweep is gone).
+    const pegHerd = await mkLab('peglab', 0xb0a, [
+      { o: 50, c: 70, e: 95, a: 98, n: 5 },
+      { o: 50, c: 70, e: 95, a: 98, n: 5 },
+    ]);
+    await advanceHerd(db, pegHerd, Date.now() + 30 * DAY);
+    const pegAff = (await relsOf(pegHerd)).map((r) => r.affinity);
+    check(
+      'boundedness: affinities stay within [AFFINITY_MIN, AFFINITY_MAX] over a long run',
+      pegAff.length > 0 && pegAff.every((a) => a >= AFFINITY_MIN && a <= AFFINITY_MAX),
+    );
+    check(
+      'boundedness: a devoted pair pegs the ceiling, never overshoots it',
+      Math.max(...pegAff) === AFFINITY_MAX,
+    );
+    const bigHerd = await mkLab(
+      'biglab',
+      0xb19,
+      Array.from({ length: 12 }, (_, i) => ({
+        o: 40 + i * 4,
+        c: 50,
+        e: 40 + ((i * 7) % 50),
+        a: 55,
+        n: 30 + ((i * 5) % 40),
+      })),
+    );
+    await advanceHerd(db, bigHerd, Date.now() + 1 * DAY);
+    check(
+      'boundedness: one day of a 12-horse herd touches at most AUTONOMY_ENCOUNTERS_CAP pairs',
+      (await relsOf(bigHerd)).length <= AUTONOMY_ENCOUNTERS_CAP,
+    );
+
+    // (C) VARIETY — a mixed herd over two weeks surfaces several DIFFERENT beat kinds and rarely
+    // repeats a line, so the journal reads alive rather than looped.
+    const varietyHerd = await mkLab('varietylab', 0x7a17, [
+      // A tight, compatible pair (climbs to friend then bonded), a curious wanderer (quirks +
+      // escapades), and a filler — enough temperament spread to surface several kinds of beat.
+      { o: 80, c: 55, e: 88, a: 90, n: 12 },
+      { o: 78, c: 58, e: 90, a: 88, n: 14 },
+      { o: 96, c: 35, e: 65, a: 55, n: 40 },
+      { o: 55, c: 45, e: 75, a: 65, n: 30 },
+    ]);
+    const vJournal = (await advanceHerd(db, varietyHerd, Date.now() + 30 * DAY)).journal.map(
+      (b) => ({
+        glyph: b.glyph,
+        text: b.text,
+      }),
+    );
+    const distinctGlyphs = new Set(vJournal.map((b) => b.glyph));
+    const distinctTexts = new Set(vJournal.map((b) => b.text));
+    check(
+      'variety: a mixed herd surfaces ≥4 distinct beat kinds over a month',
+      distinctGlyphs.size >= 4,
+    );
+    check(
+      'variety: lines rarely repeat — most beats are distinct text',
+      vJournal.length >= 8 && distinctTexts.size >= Math.ceil(vJournal.length * 0.7),
+    );
+
+    // (D) CATCH-UP DETERMINISM — advancing many days in ONE call equals advancing them one at a
+    // time (within the catch-up window): identical beats, relationships, and quirks. No drift.
+    const persD: Personality[] = [
+      { o: 70, c: 45, e: 80, a: 75, n: 22 },
+      { o: 62, c: 52, e: 72, a: 82, n: 28 },
+      { o: 88, c: 30, e: 85, a: 55, n: 40 },
+    ];
+    const batched = await mkLab('batchlab', 0xca7c, persD);
+    const stepwise = await mkLab('steplab', 0xca7c, persD);
+    const start = Date.now();
+    const batchJournal = (await advanceHerd(db, batched, start + 6 * DAY)).journal;
+    const stepJournal: { glyph: string | null }[] = [];
+    for (let d = 1; d <= 6; d++) {
+      const r = await advanceHerd(db, stepwise, start + d * DAY);
+      for (const b of r.journal) stepJournal.push({ glyph: b.glyph });
+    }
+    const glyphMulti = (arr: { glyph: string | null }[]): string =>
+      JSON.stringify(arr.map((b) => b.glyph ?? '·').sort());
+    const affMulti = async (hid: string): Promise<string> =>
+      JSON.stringify((await relsOf(hid)).map((r) => r.affinity).sort((a, b) => a - b));
+    const quirkMulti = async (hid: string): Promise<string> =>
+      JSON.stringify((await horsesOf(hid)).flatMap(quirksOf).sort());
+    check(
+      'catch-up determinism: batched and stepwise advance write identical beats',
+      batchJournal.length > 0 && glyphMulti(batchJournal) === glyphMulti(stepJournal),
+    );
+    check(
+      'catch-up determinism: identical final relationships and quirks',
+      (await affMulti(batched)) === (await affMulti(stepwise)) &&
+        (await quirkMulti(batched)) === (await quirkMulti(stepwise)),
+    );
+
+    // (E) QUIRKS — high-Openness herds pick up cosmetic habits that persist, stay capped, and only
+    // ever come from the quirk library (never a hidden stat).
+    const quirkHerd = await mkLab('quirklab', 0x9111, [
+      { o: 95, c: 40, e: 70, a: 60, n: 30 },
+      { o: 92, c: 45, e: 65, a: 65, n: 35 },
+      { o: 98, c: 35, e: 75, a: 55, n: 25 },
+    ]);
+    await advanceHerd(db, quirkHerd, Date.now() + 30 * DAY);
+    const quirkHorses = await horsesOf(quirkHerd);
+    const allQuirks = quirkHorses.flatMap(quirksOf);
+    check('quirks: a high-Openness herd accrues cosmetic quirks over time', allQuirks.length > 0);
+    check(
+      'quirks: never exceed HORSE_MAX_QUIRKS per horse, and all come from the library',
+      quirkHorses.every((h) => quirksOf(h).length <= HORSE_MAX_QUIRKS) &&
+        allQuirks.every((q) => (QUIRK_PHRASES as readonly string[]).includes(q)),
+    );
+    const beforeQ = new Set(quirkHorses.flatMap((h) => quirksOf(h).map((q) => `${h.id}:${q}`)));
+    await advanceHerd(db, quirkHerd, Date.now() + 50 * DAY);
+    const afterQ = new Set(
+      (await horsesOf(quirkHerd)).flatMap((h) => quirksOf(h).map((q) => `${h.id}:${q}`)),
+    );
+    check(
+      'quirks persist: every quirk a horse held is still on it after another stretch of days',
+      [...beforeQ].every((id) => afterQ.has(id)),
+    );
+
+    // (F) THE NEW BEATS ARE REACHABLE — a barely-compatible distant pair (lean at/under the odd-
+    // couple threshold) that climbs over the line reads as an "odd couple" (✨); a warm pair whose
+    // negative lean drags it back down reads as a "falling-out" (💔). Seeded just shy of the
+    // threshold so the deterministic drift carries it across within the window.
+    const oddPair: Personality[] = [
+      { o: 90, c: 10, e: 30, a: 30, n: 65 },
+      { o: 10, c: 90, e: 30, a: 30, n: 65 },
+    ];
+    const oddHerd = await mkLab('oddlab', 0x0dd, oddPair);
+    {
+      const hs = (await horsesOf(oddHerd)).map((h) => h.id).sort();
+      await db.insert(relationships).values({
+        herdId: oddHerd,
+        horseA: hs[0]!,
+        horseB: hs[1]!,
+        affinity: FRIEND_THRESHOLD - 2,
+        type: null,
+      });
+    }
+    const oddBeats: (string | null)[] = [];
+    for (let d = 1; d <= 12; d++)
+      for (const b of (await advanceHerd(db, oddHerd, Date.now() + d * DAY)).journal)
+        oddBeats.push(b.glyph);
+    check(
+      'the odd-couple beat (✨) is reachable for a low-compatibility pair that clicks',
+      oddBeats.includes('✨'),
+    );
+
+    const fallPair: Personality[] = [
+      { o: 100, c: 0, e: 12, a: 8, n: 95 },
+      { o: 0, c: 100, e: 14, a: 10, n: 92 },
+    ];
+    const fallHerd = await mkLab('falllab', 0xfa11, fallPair);
+    {
+      const hs = (await horsesOf(fallHerd)).map((h) => h.id).sort();
+      await db.insert(relationships).values({
+        herdId: fallHerd,
+        horseA: hs[0]!,
+        horseB: hs[1]!,
+        affinity: FRIEND_THRESHOLD + 2,
+        type: 'friend',
+      });
+    }
+    const fallBeats: (string | null)[] = [];
+    for (let d = 1; d <= 12; d++)
+      for (const b of (await advanceHerd(db, fallHerd, Date.now() + d * DAY)).journal)
+        fallBeats.push(b.glyph);
+    check(
+      'the falling-out beat (💔) is reachable for a soured friendship',
+      fallBeats.includes('💔'),
     );
   }
 

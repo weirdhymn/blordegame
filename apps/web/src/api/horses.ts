@@ -18,6 +18,8 @@ export interface Horse {
   skills: Record<string, { level: number; xp: number }>;
   /** Earned at skill milestones (§9.1) — worn as 🏅 chips on the horse sheet (§7n). */
   accomplishments: string[];
+  /** Cosmetic quirks picked up living in the herd (§8) — flavour only, no stat effect. */
+  quirks: string[];
   personality: Record<string, number>;
   /** Completed interactive adventures + the derived cosmetic "Seasoned" mark (§9.3). */
   adventures?: number;

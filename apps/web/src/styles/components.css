@@ -1416,6 +1416,21 @@ a.bldg:hover {
   color: var(--gold);
   background: var(--paper);
 }
+/* Quirks (§8): habits picked up living in the herd — softer than a trophy, just character. */
+.quirk-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+.quirk-chip {
+  font-size: 12px;
+  font-style: italic;
+  padding: 1px var(--sp-2);
+  border: var(--bd) dashed var(--leaf);
+  color: var(--leaf);
+  background: var(--paper);
+}
 /* The Registrar's carrier whisper on the odds card. */
 .carrier-whisper {
   font-style: italic;

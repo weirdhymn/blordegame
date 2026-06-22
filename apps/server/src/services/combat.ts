@@ -17,6 +17,14 @@ import {
   COMBAT_GUARD_BASE,
   COMBAT_RESIST_MULT,
   COMBAT_WEAKNESS_MULT,
+  EXPOSED_MULT,
+  EXPOSED_TURNS_BASE,
+  EXPOSED_TURNS_MAX,
+  FEINT_DMG_MULT,
+  GUARD_TURNS,
+  HEARTENED_MULT,
+  HEARTENED_TURNS_BASE,
+  HEARTENED_TURNS_MAX,
   HP_BASE,
   HP_PER_CON,
   KINDNESS_STAT_DIV,
@@ -24,6 +32,8 @@ import {
   PARTY_MAX,
   POTION_HEAL_HP,
   POTION_REVIVE_HP,
+  RATTLED_MULT,
+  RATTLED_TURNS,
   REWARD_RETREAT_FRACTION,
   STAT_MAX,
   STAT_MIN,
@@ -35,6 +45,8 @@ import {
   horses,
   type BattleSnapshot,
   type Combatant,
+  type CombatStatus,
+  type CombatStatusKind,
   type HorseRow,
 } from '../db/schema.js';
 import { mulberry32 } from '../util/rng.js';
@@ -56,7 +68,9 @@ import { creditCubes } from './wallet.js';
 // ×RESIST multiplier — the tactical heart. A class's effectiveness scales with the horse's STATS
 // (a high-STR Knight hits hard); Soothe keys off **kindness** (Agreeableness), so a Cleric gives
 // Benevolent horses a real role (+ the Mend heal). Plus Item, Defend, Flee, two-sided HP, KO +
-// retreat. Deferred: statuses, harmony, the rest of each class's ability kit, the run→battle handoff.
+// retreat. §9.4e gives each class a second move over a status layer (Knight Bulwark→guarding,
+// Wizard Mark→exposed, Rogue Feint→rattled, Cleric Rally→heartened): a setup→capitalize loop.
+// Deferred: harmony, the run→battle handoff.
 
 const POTION_ID = 'healing-potion';
 const MAX_LOG = 60;
@@ -75,7 +89,11 @@ function rngAt(seed: number, round: number, turnIndex: number, salt: number): ()
 
 export type BattleAction =
   | { type: 'attack'; targetId: string; approach?: Approach }
-  | { type: 'mend'; targetId: string } // Cleric class ability — heal/revive an ally
+  | { type: 'mend'; targetId: string } // Cleric — heal/revive an ally
+  | { type: 'rally'; targetId: string } // Cleric — `heartened` buff on an ally (§9.4e)
+  | { type: 'bulwark' } // Knight — `guarding`: redirect foes' single-target hits to itself (§9.4e)
+  | { type: 'mark'; targetId: string } // Wizard — `exposed` on a foe: party hits land harder (§9.4e)
+  | { type: 'feint'; targetId: string } // Rogue — light chip + `rattled` on a foe (§9.4e)
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };
@@ -220,6 +238,34 @@ function applyDamage(target: Combatant, dmg: number): boolean {
   return false;
 }
 
+// ── statuses (§9.4e): the setup→capitalize layer, finally riding the `statuses` array ──
+const hasStatus = (c: Combatant, kind: CombatStatusKind): boolean =>
+  c.statuses.some((s) => s.kind === kind);
+
+/** Add or refresh a status; a same-kind status never stacks — it just takes the longer duration. */
+function applyStatus(c: Combatant, kind: CombatStatusKind, turns: number): void {
+  const existing = c.statuses.find((s) => s.kind === kind);
+  if (existing) existing.turns = Math.max(existing.turns, turns);
+  else c.statuses.push({ kind, turns });
+}
+
+/** Tick every status on a combatant at the start of its turn; drop the lapsed ones. */
+function tickStatuses(c: Combatant): void {
+  c.statuses = c.statuses.filter((s) => --s.turns > 0);
+}
+
+/** Wizard's Mark holds the foe open longer in sharper hooves — a high-INT Wizard (emergent spec). */
+function exposedTurns(c: Combatant): number {
+  const bonus = abilityMod(c.stats.int ?? 10) >= 3 ? 1 : 0; // INT ≥ 16 → one extra turn
+  return Math.min(EXPOSED_TURNS_MAX, EXPOSED_TURNS_BASE + bonus);
+}
+
+/** Cleric's Rally inspires a turn longer the kinder the Cleric (mirrors Mend's kindness scaling). */
+function heartenedTurns(c: Combatant): number {
+  const bonus = kindnessStat(c.kindness ?? 50) >= 15 ? 1 : 0; // Benevolence (Agreeableness) ≥ 75
+  return Math.min(HEARTENED_TURNS_MAX, HEARTENED_TURNS_BASE + bonus);
+}
+
 /** A single strike (reuses skillCheck): clean hit scales with the attacker's stat mod + crit; a miss
  *  still chips (cozy). A **party** attack picks an *approach* and earns the foe's weakness/resist
  *  multiplier; a foe just swings with its power. A Defending target halves it. A resisted hit still
@@ -252,7 +298,14 @@ function resolveStrike(
       (check.crit ? COMBAT_DMG_CRIT_BONUS : 0)
     : COMBAT_DMG_GLANCE;
   dmg = dmg * mult;
-  if (target.defending) dmg = dmg * COMBAT_DEFEND_MULT;
+  // §9.4e statuses: a heartened attacker hits harder; an exposed foe takes more; a rattled foe
+  // swings wide. All multiplicative with weakness/resist and bounded; a hit still lands for ≥1
+  // (cozy — never a 0-damage punish).
+  if (hasStatus(attacker, 'heartened')) dmg = dmg * HEARTENED_MULT;
+  if (attacker.side === 'foe' && hasStatus(attacker, 'rattled')) dmg = dmg * RATTLED_MULT;
+  if (attacker.side === 'party' && target.side === 'foe' && hasStatus(target, 'exposed'))
+    dmg = dmg * EXPOSED_MULT;
+  if (target.defending || hasStatus(target, 'guarding')) dmg = dmg * COMBAT_DEFEND_MULT;
   return {
     dmg: Math.max(1, Math.round(dmg)),
     crit: check.success && check.crit,
@@ -299,7 +352,15 @@ function resolveEnemyTurn(snap: BattleSnapshot, foe: Combatant, seed: number): v
 
   const move = weightedMove(def, rngAt(seed, snap.round, snap.turnIndex, ENEMY_MOVE_SALT));
   const tRng = rngAt(seed, snap.round, snap.turnIndex, ENEMY_TARGET_SALT);
-  const primary = targets[Math.floor(tRng() * targets.length)]!;
+  let primary = targets[Math.floor(tRng() * targets.length)]!;
+  // §9.4e Bulwark: a guarding Knight draws the foe's single-target blows onto itself (a sweep
+  // still splashes — the Knight can't cover everyone). Deterministic: the first standing guardian.
+  if (move.kind === 'strike') {
+    const guardian = snap.combatants.find(
+      (c) => c.side === 'party' && !c.ko && hasStatus(c, 'guarding'),
+    );
+    if (guardian) primary = guardian;
+  }
   const { dmg } = resolveStrike(foe, primary, rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT));
   const ko = applyDamage(primary, dmg);
   pushEvent(snap, `${move.text} ${primary.name} takes ${dmg}.`, 'enemy');
@@ -332,6 +393,7 @@ function settle(snap: BattleSnapshot, seed: number): BattleOutcome {
       snap.turnIndex += 1;
       continue;
     }
+    tickStatuses(cur); // start of this combatant's turn — §9.4e statuses lapse here, deterministically
     if (cur.side === 'foe') {
       resolveEnemyTurn(snap, cur, seed);
       snap.turnIndex += 1;
@@ -407,6 +469,57 @@ function applyAct(
       target.hp = Math.min(target.maxHp, target.hp + heal);
       pushEvent(snap, `${cur.name} mends ${target.name} — +${target.hp - before} HP.`, 'item');
     }
+  } else if (action.type === 'rally') {
+    // Cleric support (§9.4e): hearten an ally — its NEXT attack(s) land for ×HEARTENED_MULT. The
+    // buff's duration scales with kindness (a kinder Cleric inspires longer), mirroring Mend.
+    if (cur.class !== 'cleric') return { outcome: 'active', error: 'bad_action' };
+    const target = byId(snap, action.targetId);
+    if (!target || target.side !== 'party' || target.ko)
+      return { outcome: 'active', error: 'bad_target' };
+    applyStatus(target, 'heartened', heartenedTurns(cur));
+    pushEvent(
+      snap,
+      `${cur.name} rallies ${target.name} — it stands a little taller (💪 heartened).`,
+      'rally',
+    );
+  } else if (action.type === 'bulwark') {
+    // Knight protect (§9.4e): plant a guard — until the Knight's next turn, foes' single-target
+    // blows redirect onto it (soaked at Defend strength). A sweep still gets the party (counterplay).
+    if (cur.class !== 'knight') return { outcome: 'active', error: 'bad_action' };
+    applyStatus(cur, 'guarding', GUARD_TURNS);
+    pushEvent(snap, `${cur.name} plants itself in front of the party (🛡 guarding).`, 'guard');
+  } else if (action.type === 'mark') {
+    // Wizard setup (§9.4e): expose a foe — the whole party's hits against it land for ×EXPOSED_MULT.
+    // The opening stays read longer the sharper the Wizard (high INT) — emergent spec.
+    if (cur.class !== 'wizard') return { outcome: 'active', error: 'bad_action' };
+    const target = byId(snap, action.targetId);
+    if (!target || target.side !== 'foe' || target.ko)
+      return { outcome: 'active', error: 'bad_target' };
+    applyStatus(target, 'exposed', exposedTurns(cur));
+    pushEvent(snap, `${cur.name} reads ${target.name} and calls the opening (🎯 exposed).`, 'mark');
+  } else if (action.type === 'feint') {
+    // Rogue control (§9.4e): a light chip (scales with DEX via the Skirmish strike) that leaves the
+    // foe `rattled` — its next swing goes wide (×RATTLED_MULT). Fast hooves usually land it first.
+    if (cur.class !== 'rogue') return { outcome: 'active', error: 'bad_action' };
+    const target = byId(snap, action.targetId);
+    if (!target || target.side !== 'foe' || target.ko)
+      return { outcome: 'active', error: 'bad_target' };
+    const res = resolveStrike(
+      cur,
+      target,
+      rngAt(seed, snap.round, snap.turnIndex, ATTACK_SALT),
+      'skirmish',
+      snap.mealBuff ?? {},
+    );
+    const chip = Math.max(1, Math.round(res.dmg * FEINT_DMG_MULT));
+    applyDamage(target, chip);
+    applyStatus(target, 'rattled', RATTLED_TURNS);
+    pushEvent(
+      snap,
+      `${cur.name} feints — ${target.name} takes ${chip}, left reeling (💫 rattled).`,
+      'feint',
+    );
+    if (target.ko) pushEvent(snap, `${target.name} throws in the towel and shuffles off.`, 'ko');
   } else if (action.type === 'defend') {
     cur.defending = true;
     pushEvent(snap, `${cur.name} raises its guard.`, 'defend');
@@ -468,6 +581,8 @@ export interface CombatantView {
   maxHp: number;
   ko: boolean;
   defending: boolean;
+  /** Active §9.4e statuses (exposed/heartened/rattled/guarding) — surfaced as badges + the menu reads them. */
+  statuses: CombatStatus[];
   /** Foe only — the readable hint at its weakness, so the puzzle isn't blind guesswork (§9.4a). */
   tell?: string;
   /** Party only — this horse's attack value per approach, so the player can match horse↔approach. */
@@ -496,6 +611,7 @@ function combatantView(c: Combatant): CombatantView {
     maxHp: c.maxHp,
     ko: c.ko,
     defending: c.defending,
+    statuses: c.statuses,
   };
   if (c.side === 'foe') return { ...base, tell: enemyDefOf(c)?.tell };
   return {

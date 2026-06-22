@@ -29,6 +29,14 @@ function parseAction(body: unknown): BattleAction | null {
     }
     case 'mend':
       return b.targetId ? { type: 'mend', targetId: b.targetId } : null;
+    case 'rally':
+      return b.targetId ? { type: 'rally', targetId: b.targetId } : null;
+    case 'mark':
+      return b.targetId ? { type: 'mark', targetId: b.targetId } : null;
+    case 'feint':
+      return b.targetId ? { type: 'feint', targetId: b.targetId } : null;
+    case 'bulwark':
+      return { type: 'bulwark' };
     case 'item':
       return b.targetId && b.itemId
         ? { type: 'item', itemId: b.itemId, targetId: b.targetId }

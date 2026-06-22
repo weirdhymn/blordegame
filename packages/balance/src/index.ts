@@ -593,3 +593,26 @@ export const COMBAT_RESIST_MULT = 0.5; // …× this when the foe resists the ap
 // the 0–20 stat scale (A 100 → 20, A 50 → 10). (APPROACH_STAT.soothe='cha' is only its social
 // governing stat, reserved for later social checks; Soothe *damage* reads kindness.)
 export const KINDNESS_STAT_DIV = 5;
+
+// ── §9.4e Combat statuses — the setup→capitalize layer that gives each class a real second move
+// and each turn a genuine decision. Statuses ride the (until now inert) `statuses` array on each
+// combatant; they tick down at the start of the affected combatant's turn. Cozy throughout: foe
+// statuses only ever *reduce* the threat or *amplify your* payoff — never a punish, never a death.
+// Two are pure setup→capitalize (exposed, heartened); two are protective control (rattled, guarding).
+//   exposed   (foe)  — Wizard's Mark: the party's hits land for ×EXPOSED_MULT until it lapses.
+//   heartened (ally) — Cleric's Rally: the buffed ally's own attacks land for ×HEARTENED_MULT.
+//   rattled   (foe)  — Rogue's Feint: the spooked foe swings wide, its attacks ×RATTLED_MULT.
+//   guarding  (self) — Knight's Bulwark: foes' single-target hits redirect to it (soaked at Defend).
+// Durations are picked for a START-of-turn tick: a foe/ally status set to N reliably colours that
+// combatant's next action plus the window before it. Mark/Rally scale with the caster's stat
+// (INT / kindness) — the emergent-spec rule: a better-statted horse is a better class.
+export const EXPOSED_MULT = 1.4; // party attack damage × this against an `exposed` foe
+export const EXPOSED_TURNS_BASE = 2; // …for this many turns; a sharp Wizard (high INT) holds it open longer
+export const EXPOSED_TURNS_MAX = 3;
+export const HEARTENED_MULT = 1.3; // a `heartened` ally's attacks × this
+export const HEARTENED_TURNS_BASE = 2; // …a kinder Cleric (high Benevolence) inspires a turn longer
+export const HEARTENED_TURNS_MAX = 3;
+export const RATTLED_MULT = 0.5; // a `rattled` foe's attacks × this — it swings wide (never below 1 dmg)
+export const RATTLED_TURNS = 2; // blunts the foe's very next attack, then clears
+export const GUARD_TURNS = 1; // a Knight's Bulwark covers the party until its next turn
+export const FEINT_DMG_MULT = 0.6; // Feint is a light chip — a setup, not a full Skirmish

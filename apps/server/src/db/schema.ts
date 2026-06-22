@@ -252,8 +252,9 @@ export const adventureRuns = pgTable(
 
 // ── Combat (§9.4) — the persisted, battle-scoped combat state (jsonb payload of `battles.state`).
 // Everything here is ephemeral to one fight: HP, KO, statuses all reset between battles (cozy — no
-// grind-down, no persistent wounds). `statuses` is forward-compat (v1 minimum leaves it empty).
-export type CombatStatusKind = 'rattled' | 'heartened';
+// grind-down, no persistent wounds). `statuses` carries the §9.4e setup→capitalize layer
+// (exposed/heartened/rattled/guarding), ticked down at the start of the affected combatant's turn.
+export type CombatStatusKind = 'rattled' | 'heartened' | 'exposed' | 'guarding';
 export interface CombatStatus {
   kind: CombatStatusKind;
   turns: number;

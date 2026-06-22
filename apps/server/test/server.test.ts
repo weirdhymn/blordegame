@@ -2370,6 +2370,183 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §9.4e class kits + combat statuses: the setup→capitalize layer ───────────────────────────
+  section('§9.4e class kits + combat statuses (setup→capitalize)');
+  const foeIn = (vw: BattleView): BattleView['combatants'][number] =>
+    vw.combatants.find((c) => c.side === 'foe') as BattleView['combatants'][number];
+  const hasFx = (c: BattleView['combatants'][number], kind: string): boolean =>
+    (c.statuses ?? []).some((s) => s.kind === kind);
+
+  // (1) Wizard Mark → `exposed`: the party's NEXT hit lands harder. Same seed/party/actions; only
+  // the Wizard's first move differs (Mark vs Defend), so the Knight's identical roll isolates ×EXPOSED.
+  const mWiz = await combatHorse({ int: 14, dex: 18, luck: 12, cls: 'wizard', name: 'Marker' });
+  const mFighter = await combatHorse({ str: 16, dex: 12, luck: 12, cls: 'knight', name: 'Hitter' });
+  const markCombo = async (markIt: boolean): Promise<{ dmg: number; exposed: boolean }> => {
+    const s = await startBattle(db, herdId, ['bramble-tangle'], [mWiz, mFighter], { seed: 8181 });
+    if (!s.ok) return { dmg: -1, exposed: false };
+    const a1 = await actInBattle(db, herdId, s.battleId, {
+      ...(markIt ? { type: 'mark', targetId: 'foe0' } : { type: 'defend' }),
+    } as BattleAction);
+    const exposed = a1.ok ? hasFx(foeIn(a1.view), 'exposed') : false;
+    const a2 = await actInBattle(db, herdId, s.battleId, { type: 'attack', targetId: 'foe0' });
+    const foe = a2.ok ? foeIn(a2.view) : null;
+    return { dmg: foe ? foe.maxHp - foe.hp : -1, exposed };
+  };
+  const marked = await markCombo(true);
+  const unmarked = await markCombo(false);
+  check('Wizard Mark applies `exposed` to the foe', marked.exposed && !unmarked.exposed);
+  check(
+    'an `exposed` foe takes more from the party’s next hit (capitalize)',
+    marked.dmg > unmarked.dmg,
+  );
+
+  // (2) Mark duration scales with INT — a sharper Wizard holds the gap open longer (emergent spec).
+  const markTurns = async (wizId: string): Promise<number> => {
+    const s = await startBattle(db, herdId, ['bramble-tangle'], [wizId], { seed: 8282 });
+    if (!s.ok) return -1;
+    const r2 = await actInBattle(db, herdId, s.battleId, { type: 'mark', targetId: 'foe0' });
+    const foe = r2.ok ? foeIn(r2.view) : null;
+    return foe ? (foe.statuses.find((x) => x.kind === 'exposed')?.turns ?? 0) : -1;
+  };
+  const dimWiz = await combatHorse({ int: 10, dex: 18, cls: 'wizard', name: 'Dim' });
+  const sharpWiz = await combatHorse({ int: 18, dex: 18, cls: 'wizard', name: 'Sharp' });
+  check(
+    'a sharper Wizard (high INT) holds the foe `exposed` a turn longer',
+    (await markTurns(sharpWiz)) > (await markTurns(dimWiz)),
+  );
+
+  // (3) Cleric Rally → `heartened`: the ally's NEXT hit lands harder (the second support move).
+  const rCleric = await combatHorse({ a: 90, dex: 18, luck: 12, cls: 'cleric', name: 'Rouser' });
+  const rAlly = await combatHorse({ str: 16, dex: 12, luck: 12, cls: 'knight', name: 'Rallied' });
+  const rallyCombo = async (rallyIt: boolean): Promise<{ dmg: number; heartened: boolean }> => {
+    const s = await startBattle(db, herdId, ['bramble-tangle'], [rCleric, rAlly], { seed: 8383 });
+    if (!s.ok) return { dmg: -1, heartened: false };
+    const a1 = await actInBattle(db, herdId, s.battleId, {
+      ...(rallyIt ? { type: 'rally', targetId: rAlly } : { type: 'defend' }),
+    } as BattleAction);
+    const ally = a1.ok ? a1.view.combatants.find((c) => c.id === rAlly) : null;
+    const heartened = ally ? hasFx(ally, 'heartened') : false;
+    const a2 = await actInBattle(db, herdId, s.battleId, { type: 'attack', targetId: 'foe0' });
+    const foe = a2.ok ? foeIn(a2.view) : null;
+    return { dmg: foe ? foe.maxHp - foe.hp : -1, heartened };
+  };
+  const rallied = await rallyCombo(true);
+  const norally = await rallyCombo(false);
+  check('Cleric Rally applies `heartened` to the ally', rallied.heartened && !norally.heartened);
+  check('a `heartened` ally’s next hit lands harder (capitalize)', rallied.dmg > norally.dmg);
+
+  // (4) Rally duration scales with kindness — a kinder Cleric inspires longer (mirrors Mend).
+  const rallyTurns = async (clericId: string, dummyId: string): Promise<number> => {
+    const s = await startBattle(db, herdId, ['bramble-tangle'], [clericId, dummyId], {
+      seed: 8484,
+    });
+    if (!s.ok) return -1;
+    const r2 = await actInBattle(db, herdId, s.battleId, { type: 'rally', targetId: dummyId });
+    const d = r2.ok ? r2.view.combatants.find((c) => c.id === dummyId) : null;
+    return d ? (d.statuses.find((x) => x.kind === 'heartened')?.turns ?? 0) : -1;
+  };
+  const kindCleric = await combatHorse({ a: 95, dex: 18, cls: 'cleric', name: 'VeryKind' });
+  const mildCleric = await combatHorse({ a: 40, dex: 18, cls: 'cleric', name: 'MildlyKind' });
+  const dummy1 = await combatHorse({ con: 10, dex: 4, name: 'Dummy1' });
+  const dummy2 = await combatHorse({ con: 10, dex: 4, name: 'Dummy2' });
+  check(
+    'a kinder Cleric heartens for longer',
+    (await rallyTurns(kindCleric, dummy1)) > (await rallyTurns(mildCleric, dummy2)),
+  );
+
+  // (5) Rogue Feint → `rattled`: the foe's NEXT attack goes wide. Control feints-vs-attacks (never
+  // Defend) so the measured foe blow isn't confounded by the Rogue's own brace.
+  const fRogue = await combatHorse({ dex: 18, luck: 12, cls: 'rogue', name: 'Feinter' });
+  const fBag = await combatHorse({ con: 16, dex: 4, name: 'Bag' });
+  const feintCombo = async (feintIt: boolean): Promise<{ partyLost: number; rattled: boolean }> => {
+    const s = await startBattle(db, herdId, ['thistle-whirl'], [fRogue, fBag], { seed: 8585 });
+    if (!s.ok) return { partyLost: -1, rattled: false };
+    const a1 = await actInBattle(db, herdId, s.battleId, {
+      type: feintIt ? 'feint' : 'attack',
+      targetId: 'foe0',
+    } as BattleAction);
+    if (!a1.ok) return { partyLost: -1, rattled: false };
+    const rattled = hasFx(foeIn(a1.view), 'rattled');
+    const partyLost = a1.view.combatants
+      .filter((c) => c.side === 'party')
+      .reduce((sum, c) => sum + (c.maxHp - c.hp), 0);
+    return { partyLost, rattled };
+  };
+  const feinted = await feintCombo(true);
+  const notFeinted = await feintCombo(false);
+  check('Rogue Feint applies `rattled` to the foe', feinted.rattled && !notFeinted.rattled);
+  check(
+    'a `rattled` foe’s next attack goes wide (less party HP lost)',
+    feinted.partyLost < notFeinted.partyLost,
+  );
+  check('cozy: even a rattled foe still lands ≥1 (never a 0-damage whiff)', feinted.partyLost >= 1);
+
+  // (6) Knight Bulwark → `guarding`: foes' single-target blows redirect onto the Knight; the squishy
+  // is spared and the Knight soaks it (vs a pure-strike foe, so no sweep slips past).
+  const bKnight = await combatHorse({
+    con: 20,
+    dex: 18,
+    str: 14,
+    luck: 12,
+    cls: 'knight',
+    name: 'Wall',
+  });
+  const bSquish = await combatHorse({ con: 3, dex: 4, name: 'Squish' });
+  const bs = await startBattle(db, herdId, ['thistle-whirl'], [bKnight, bSquish], { seed: 8686 });
+  if (bs.ok) {
+    const a1 = await actInBattle(db, herdId, bs.battleId, { type: 'bulwark' });
+    const knight = a1.ok ? a1.view.combatants.find((c) => c.id === bKnight) : null;
+    const squish = a1.ok ? a1.view.combatants.find((c) => c.id === bSquish) : null;
+    check('Knight Bulwark applies `guarding` to itself', !!knight && hasFx(knight, 'guarding'));
+    check(
+      'a guarding Knight draws the foe’s strike — the squishy is spared, the Knight soaks it',
+      !!squish && !!knight && squish.hp === squish.maxHp && knight.hp < knight.maxHp,
+    );
+  }
+
+  // (7) Abilities are class-gated — the engine refuses an off-class move (mirrors Mend's gate).
+  const gKnight = await combatHorse({ str: 14, dex: 18, cls: 'knight', name: 'Gate' });
+  const gs = await startBattle(db, herdId, ['bramble-tangle'], [gKnight], { seed: 8787 });
+  if (gs.ok && gs.view.isPartyTurn) {
+    const m = await actInBattle(db, herdId, gs.battleId, { type: 'mark', targetId: 'foe0' });
+    check('only a Wizard can Mark (a Knight can’t)', !m.ok && m.code === 'bad_action');
+    const ra = await actInBattle(db, herdId, gs.battleId, { type: 'rally', targetId: gKnight });
+    check('only a Cleric can Rally (a Knight can’t)', !ra.ok && ra.code === 'bad_action');
+    const fe = await actInBattle(db, herdId, gs.battleId, { type: 'feint', targetId: 'foe0' });
+    check('only a Rogue can Feint (a Knight can’t)', !fe.ok && fe.code === 'bad_action');
+  }
+  const gWiz = await combatHorse({ int: 14, dex: 18, cls: 'wizard', name: 'GateW' });
+  const gws = await startBattle(db, herdId, ['bramble-tangle'], [gWiz], { seed: 8788 });
+  if (gws.ok && gws.view.isPartyTurn) {
+    const bw = await actInBattle(db, herdId, gws.battleId, { type: 'bulwark' });
+    check('only a Knight can Bulwark (a Wizard can’t)', !bw.ok && bw.code === 'bad_action');
+  }
+
+  // (8) The whole status layer stays deterministic — same seed + same ability script → same battle.
+  const dWiz = await combatHorse({ int: 16, dex: 18, luck: 12, cls: 'wizard', name: 'DetWiz' });
+  const dKnight = await combatHorse({
+    str: 16,
+    dex: 12,
+    luck: 12,
+    cls: 'knight',
+    name: 'DetKnight',
+  });
+  const scriptAbilities = async (): Promise<string> => {
+    const s = await startBattle(db, herdId, ['bramble-tangle'], [dWiz, dKnight], { seed: 9090 });
+    if (!s.ok) return 'x';
+    await actInBattle(db, herdId, s.battleId, { type: 'mark', targetId: 'foe0' });
+    await actInBattle(db, herdId, s.battleId, { type: 'attack', targetId: 'foe0' });
+    const v = (await getBattleView(db, herdId, s.battleId)) as BattleView;
+    return JSON.stringify(
+      v.combatants.map((c) => [c.hp, c.ko, (c.statuses ?? []).map((x) => x.kind).sort()]),
+    );
+  };
+  eq(
+    'abilities + statuses are deterministic (same seed → same battle)',
+    await scriptAbilities(),
+    await scriptAbilities(),
+  );
+
   // boss handoff (§9.4c): a deep Green Grass adventure culminates in a boss battle ----------------
   const cubesPreBoss = await herdCubes();
   const bossParty = [

@@ -857,6 +857,33 @@ button.danger {
 .combatant-name {
   font-weight: 700;
 }
+/* §9.4e status badges — the setup→capitalize layer, made legible on each combatant chip. */
+.combatant-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.3rem;
+}
+.status-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.status-badge.status-exposed {
+  color: var(--berry);
+}
+.status-badge.status-rattled {
+  color: var(--gold);
+}
+.status-badge.status-heartened {
+  color: var(--leaf);
+}
+.status-badge.status-guarding {
+  color: var(--ink-soft);
+}
 .hp-track {
   height: 0.8rem;
   background: var(--sage-deep);
@@ -929,6 +956,22 @@ button.ghost {
 }
 .battle-log .log-resist {
   color: var(--gold);
+}
+.battle-log .log-mark {
+  color: var(--berry);
+  font-weight: 700;
+}
+.battle-log .log-rally {
+  color: var(--leaf);
+  font-weight: 700;
+}
+.battle-log .log-feint {
+  color: var(--gold);
+  font-weight: 700;
+}
+.battle-log .log-guard {
+  color: var(--ink-soft);
+  font-weight: 700;
 }
 .foe-tell {
   font-size: 0.8rem;

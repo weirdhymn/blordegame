@@ -2,6 +2,11 @@ import { api } from './client.js';
 
 export type Approach = 'confront' | 'outwit' | 'skirmish' | 'soothe';
 export type HorseClass = 'knight' | 'wizard' | 'rogue' | 'cleric';
+export type CombatStatusKind = 'rattled' | 'heartened' | 'exposed' | 'guarding';
+export interface CombatStatus {
+  kind: CombatStatusKind;
+  turns: number;
+}
 
 export interface CombatantView {
   id: string;
@@ -11,6 +16,8 @@ export interface CombatantView {
   maxHp: number;
   ko: boolean;
   defending: boolean;
+  /** Active §9.4e statuses — shown as badges. */
+  statuses: CombatStatus[];
   /** Foe only — the readable hint at its weakness (§9.4a). */
   tell?: string;
   /** Party only — this horse's attack value per approach. */
@@ -36,6 +43,10 @@ export interface BattleView {
 export type BattleAction =
   | { type: 'attack'; targetId: string; approach?: Approach }
   | { type: 'mend'; targetId: string }
+  | { type: 'rally'; targetId: string }
+  | { type: 'bulwark' }
+  | { type: 'mark'; targetId: string }
+  | { type: 'feint'; targetId: string }
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' };

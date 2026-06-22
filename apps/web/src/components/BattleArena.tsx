@@ -5,6 +5,7 @@ import {
   type BattleAction,
   type BattleView,
   type CombatantView,
+  type CombatStatusKind,
   type HorseClass,
 } from '../api/combat.js';
 import { useSession } from '../session.js';
@@ -15,6 +16,26 @@ const CLASS_META: Record<HorseClass, { label: string; icon: string; attack: stri
   wizard: { label: 'Wizard', icon: '🔮', attack: 'Hex' },
   rogue: { label: 'Rogue', icon: '🗡', attack: 'Skirmish' },
   cleric: { label: 'Cleric', icon: '🌿', attack: 'Soothe' },
+};
+
+// The class's SECOND move (§9.4e). `pick` is which target-picker it opens — Bulwark needs no
+// target, so it fires immediately. (The Cleric's Rally is handled alongside its Mend below.)
+const ABILITY_META: Record<
+  HorseClass,
+  { label: string; icon: string; pick: 'mark' | 'feint' | null }
+> = {
+  knight: { label: 'Bulwark', icon: '🛡', pick: null },
+  wizard: { label: 'Mark', icon: '🎯', pick: 'mark' },
+  rogue: { label: 'Feint', icon: '🎭', pick: 'feint' },
+  cleric: { label: 'Rally', icon: '📣', pick: null }, // rendered as its own button (it has Mend too)
+};
+
+// Status badges (§9.4e) worn on a combatant chip — the setup→capitalize layer, made legible.
+const STATUS_META: Record<CombatStatusKind, { icon: string; title: string }> = {
+  exposed: { icon: '🎯', title: 'Exposed — the party hits it harder' },
+  rattled: { icon: '💫', title: 'Rattled — its next attack goes wide' },
+  heartened: { icon: '💪', title: 'Heartened — its attacks hit harder' },
+  guarding: { icon: '🛡', title: 'Guarding — drawing the foe’s blows' },
 };
 
 function HpBar({ c, actor }: { c: CombatantView; actor: boolean }): ReactElement {
@@ -32,6 +53,19 @@ function HpBar({ c, actor }: { c: CombatantView; actor: boolean }): ReactElement
           {c.defending ? ' 🛡' : ''}
         </span>
       </div>
+      {c.statuses.length > 0 && (
+        <div className="combatant-statuses">
+          {c.statuses.map((s) => (
+            <span
+              key={s.kind}
+              className={`status-badge status-${s.kind}`}
+              title={STATUS_META[s.kind].title}
+            >
+              {STATUS_META[s.kind].icon} {pretty(s.kind)}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="hp-track">
         <span className={`hp-fill ${c.side}`} style={{ width: `${pct}%` }} />
       </div>
@@ -54,7 +88,9 @@ export function BattleArena({
 }): ReactElement {
   const { refresh } = useSession();
   const [battle, setBattle] = useState<BattleView>(initial);
-  const [picking, setPicking] = useState<'target' | 'mend' | 'item' | null>(null);
+  const [picking, setPicking] = useState<
+    'target' | 'mend' | 'item' | 'mark' | 'feint' | 'rally' | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,10 +168,38 @@ export function BattleArena({
                     ? `${CLASS_META[actor.class].icon} ${CLASS_META[actor.class].attack}`
                     : '⚔ Attack'}
                 </button>
-                {actor.class === 'cleric' && (
-                  <button disabled={busy} onClick={() => setPicking('mend')}>
-                    ✨ Mend
+                {actor.class && actor.class !== 'cleric' && (
+                  <button
+                    disabled={busy || (actor.class !== 'knight' && liveFoes.length === 0)}
+                    title={
+                      actor.class === 'knight'
+                        ? 'Draw the foe’s blows onto yourself this round'
+                        : actor.class === 'wizard'
+                          ? 'Expose a foe — the party hits it harder'
+                          : 'A light hit that leaves the foe reeling'
+                    }
+                    onClick={() => {
+                      const ab = ABILITY_META[actor.class!];
+                      if (ab.pick) setPicking(ab.pick);
+                      else void act({ type: 'bulwark' });
+                    }}
+                  >
+                    {ABILITY_META[actor.class].icon} {ABILITY_META[actor.class].label}
                   </button>
+                )}
+                {actor.class === 'cleric' && (
+                  <>
+                    <button disabled={busy} onClick={() => setPicking('mend')}>
+                      ✨ Mend
+                    </button>
+                    <button
+                      disabled={busy}
+                      title="Hearten an ally — its next attacks hit harder"
+                      onClick={() => setPicking('rally')}
+                    >
+                      📣 Rally
+                    </button>
+                  </>
                 )}
                 <button disabled={busy || battle.potions === 0} onClick={() => setPicking('item')}>
                   🧪 Item ({battle.potions})
@@ -204,6 +268,54 @@ export function BattleArena({
                     {h.ko ? ' (rouse)' : ` (${h.hp}/${h.maxHp})`}
                   </button>
                 ))}
+                <button className="ghost" onClick={() => setPicking(null)}>
+                  Back
+                </button>
+              </div>
+            </>
+          )}
+          {(picking === 'mark' || picking === 'feint') && (
+            <>
+              <p className="battle-turn">
+                {picking === 'mark' ? 'Mark which foe?' : 'Feint at which foe?'}
+              </p>
+              <div className="row-actions">
+                {liveFoes.map((f) => (
+                  <button
+                    key={f.id}
+                    disabled={busy}
+                    onClick={() =>
+                      void act(
+                        picking === 'mark'
+                          ? { type: 'mark', targetId: f.id }
+                          : { type: 'feint', targetId: f.id },
+                      )
+                    }
+                  >
+                    {f.name}
+                  </button>
+                ))}
+                <button className="ghost" onClick={() => setPicking(null)}>
+                  Back
+                </button>
+              </div>
+            </>
+          )}
+          {picking === 'rally' && (
+            <>
+              <p className="battle-turn">Rally which ally?</p>
+              <div className="row-actions">
+                {party
+                  .filter((h) => !h.ko)
+                  .map((h) => (
+                    <button
+                      key={h.id}
+                      disabled={busy}
+                      onClick={() => void act({ type: 'rally', targetId: h.id })}
+                    >
+                      {h.name} ({h.hp}/{h.maxHp})
+                    </button>
+                  ))}
                 <button className="ghost" onClick={() => setPicking(null)}>
                   Back
                 </button>
